@@ -3,6 +3,12 @@
 version = 3
 
 [[package]]
+name = "a1"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b8470e27ace1e4691e30b3c05a719397c10e799d3ed1814dad8d6797580d9ddd"
+
+[[package]]
 name = "allocator-api2"
 version = "0.2.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -425,6 +431,7 @@ checksum = "94143f37725109f92c262ed2cf5e59bce7498c01bcc1502d7b9afe439a4e9f49"
 name = "sheetui"
 version = "0.1.0"
 dependencies = [
+ "a1",
  "clap",
  "crossterm",
  "ratatui",
