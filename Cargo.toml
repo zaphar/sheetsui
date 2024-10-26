@@ -9,4 +9,6 @@ edition = "2021"
 a1 = "1.0.1"
 clap = { version = "4.5.20", features = ["derive"] }
 crossterm = "0.28.1"
+formula = "0.1.0"
 ratatui = "0.29.0"
+thiserror = "1.0.65"

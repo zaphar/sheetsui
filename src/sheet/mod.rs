@@ -10,6 +10,8 @@ use ratatui::widgets::{Cell, Row, Table};
 
 use std::collections::BTreeMap;
 
+mod formula;
+
 /// The Address in a [Tbl].
 #[derive(Default, Debug, PartialEq, PartialOrd, Ord, Eq)]
 pub struct Address {
@@ -20,6 +22,12 @@ pub struct Address {
 impl Address {
     pub fn new(row: usize, col: usize) -> Self {
         Self { row, col }
+    }
+}
+
+impl From<(usize, usize)> for Address {
+    fn from((row, col): (usize, usize)) -> Self {
+        Address::new(row, col)
     }
 }
 
