@@ -8,7 +8,6 @@
 
 use anyhow::{anyhow, Result};
 use csvx;
-use ratatui::widgets::{Cell, Row, Table};
 
 use std::borrow::Borrow;
 
@@ -16,7 +15,7 @@ pub enum CellValue {
     Text(String),
     Float(f64),
     Integer(i64),
-    Other(String),
+    Formula(String),
 }
 
 impl CellValue {
@@ -25,7 +24,7 @@ impl CellValue {
             CellValue::Text(v) => format!("\"{}\"", v),
             CellValue::Float(v) => format!("{}", v),
             CellValue::Integer(v) => format!("{}", v),
-            CellValue::Other(v) => format!("{}", v),
+            CellValue::Formula(v) => format!("{}", v),
         }
     }
 
@@ -33,8 +32,8 @@ impl CellValue {
         CellValue::Text(Into::<String>::into(value))
     }
 
-    pub fn other<S: Into<String>>(value: S) -> CellValue {
-        CellValue::Other(Into::<String>::into(value))
+    pub fn formula<S: Into<String>>(value: S) -> CellValue {
+        CellValue::Formula(Into::<String>::into(value))
     }
 
     pub fn float(value: f64) -> CellValue {
@@ -61,14 +60,12 @@ impl Address {
 
 /// A single table of addressable computable values.
 pub struct Tbl {
-    csv: csvx::Table,
+    pub csv: csvx::Table,
 }
 
 impl Tbl {
     pub fn new() -> Self {
-        Self {
-            csv: csvx::Table::new("").unwrap(),
-        }
+        Self::from_str("").unwrap()
     }
 
     pub fn dimensions(&self) -> (usize, usize) {
@@ -105,21 +102,6 @@ impl Tbl {
         Ok(self
             .csv
             .update(address.col, address.row, value.to_csv_value())?)
-    }
-}
-
-impl<'t> From<Tbl> for Table<'t> {
-    fn from(value: Tbl) -> Self {
-        let rows: Vec<Row> = value
-            .csv
-            .get_calculated_table()
-            .iter()
-            .map(|r| {
-                let cells = r.iter().map(|v| Cell::new(format!("{}", v)));
-                Row::new(cells)
-            })
-            .collect();
-        Table::default().rows(rows)
     }
 }
 
