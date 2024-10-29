@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 
+use anyhow::Context;
 use clap::Parser;
 use crossterm::event::{self, Event, KeyCode, KeyEventKind};
 use ratatui::{
@@ -8,7 +9,7 @@ use ratatui::{
     widgets::{Table, Tabs},
     Frame,
 };
-use sheet::{Address, Computable, Tbl};
+use sheet::{Address, CellValue, Tbl};
 
 mod sheet;
 
@@ -32,9 +33,15 @@ fn run(terminal: &mut ratatui::DefaultTerminal) -> std::io::Result<()> {
 
 fn generate_default_table<'a>() -> Table<'a> {
     let mut tbl = Tbl::new();
-    tbl.update_entry(Address::new(5, 5), Computable::Text("loc: 5, 5".to_owned()));
-    tbl.update_entry(Address::new(10, 10), Computable::Number(10.10));
-    tbl.update_entry(Address::new(0, 0), Computable::Formula("".to_owned()));
+    tbl.update_entry(Address::new(5, 5), CellValue::text("5,5"))
+        .context("Failed updating entry at 5,5")
+        .unwrap();
+    tbl.update_entry(Address::new(10, 10), CellValue::float(10.10))
+        .context("Failed updating entry at 10,10")
+        .unwrap();
+    tbl.update_entry(Address::new(0, 0), CellValue::other("0.0"))
+        .context("Failed updating entry at 0,0")
+        .unwrap();
     tbl.into()
 }
 

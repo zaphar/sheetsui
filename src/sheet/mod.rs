@@ -6,11 +6,45 @@
 //! associations. From this we can compute the dimensions of a Tbl as well as render
 //! them into a [Table] Widget.
 
+use anyhow::{anyhow, Result};
+use csvx;
 use ratatui::widgets::{Cell, Row, Table};
 
-use std::collections::BTreeMap;
+use std::borrow::Borrow;
 
-mod formula;
+pub enum CellValue {
+    Text(String),
+    Float(f64),
+    Integer(i64),
+    Other(String),
+}
+
+impl CellValue {
+    pub fn to_csv_value(&self) -> String {
+        match self {
+            CellValue::Text(v) => format!("\"{}\"", v),
+            CellValue::Float(v) => format!("{}", v),
+            CellValue::Integer(v) => format!("{}", v),
+            CellValue::Other(v) => format!("{}", v),
+        }
+    }
+
+    pub fn text<S: Into<String>>(value: S) -> CellValue {
+        CellValue::Text(Into::<String>::into(value))
+    }
+
+    pub fn other<S: Into<String>>(value: S) -> CellValue {
+        CellValue::Other(Into::<String>::into(value))
+    }
+
+    pub fn float(value: f64) -> CellValue {
+        CellValue::Float(value)
+    }
+
+    pub fn int(value: i64) -> CellValue {
+        CellValue::Integer(value)
+    }
+}
 
 /// The Address in a [Tbl].
 #[derive(Default, Debug, PartialEq, PartialOrd, Ord, Eq)]
@@ -25,75 +59,66 @@ impl Address {
     }
 }
 
-impl From<(usize, usize)> for Address {
-    fn from((row, col): (usize, usize)) -> Self {
-        Address::new(row, col)
-    }
-}
-
-/// The computable value located at an [Address].
-#[derive(Debug)]
-pub enum Computable {
-    Text(String),
-    Number(f64),
-    Formula(String),
-}
-
-impl Default for Computable {
-    fn default() -> Self {
-        Self::Text("".to_owned())
-    }
-}
-
 /// A single table of addressable computable values.
-#[derive(Default, Debug)]
 pub struct Tbl {
-    addresses: BTreeMap<Address, Computable>,
+    csv: csvx::Table,
 }
 
 impl Tbl {
     pub fn new() -> Self {
-        Self::default()
+        Self {
+            csv: csvx::Table::new("").unwrap(),
+        }
     }
 
     pub fn dimensions(&self) -> (usize, usize) {
-        let (mut row, mut col) = (0, 0);
-        for (addr, _) in &self.addresses {
-            row = std::cmp::max(row, addr.row);
-            col = std::cmp::max(col, addr.col);
+        let table = self.csv.get_raw_table();
+        let row_count = table.len();
+        if row_count > 0 {
+            let col_count = table.first().unwrap().len();
+            return (row_count, col_count);
         }
-        (row, col)
+        return (0, 0);
     }
 
-    pub fn get_computable(&self, row: usize, col: usize) -> Option<&Computable> {
-        self.addresses.get(&Address::new(row, col))
+    pub fn from_str<S: Borrow<str>>(input: S) -> Result<Self> {
+        Ok(Self {
+            csv: csvx::Table::new(input)
+                .map_err(|e| anyhow!("Error parsing table from csv text: {}", e))?,
+        })
     }
 
-    pub fn update_entry(&mut self, address: Address, computable: Computable) {
+    pub fn update_entry(&mut self, address: Address, value: CellValue) -> Result<()> {
         // TODO(zaphar): At some point we'll need to store the graph of computation
-        // dependencies
-        self.addresses.insert(address, computable);
+        let (row, col) = self.dimensions();
+        if address.row >= row {
+            // then we need to add rows.
+            for r in row..=address.row {
+                self.csv.insert_y(r);
+            }
+        }
+        if address.col >= col {
+            for c in col..=address.col {
+                self.csv.insert_x(c);
+            }
+        }
+        Ok(self
+            .csv
+            .update(address.col, address.row, value.to_csv_value())?)
     }
 }
 
 impl<'t> From<Tbl> for Table<'t> {
     fn from(value: Tbl) -> Self {
-        let (row, col) = value.dimensions();
-        let rows = (0..=row)
-            .map(|ri| {
-                (0..=col)
-                    .map(|ci| {
-                        match value.get_computable(ri, ci) {
-                            // TODO(zaphar): Style information
-                            Some(Computable::Text(s)) => Cell::new(format!(" {}", s)),
-                            Some(Computable::Number(f)) => Cell::new(format!(" {}", f)),
-                            Some(Computable::Formula(_expr)) => Cell::new(format!(" .formula. ")),
-                            None => Cell::new(format!(" {}:{} ", ri, ci)),
-                        }
-                    })
-                    .collect::<Row>()
+        let rows: Vec<Row> = value
+            .csv
+            .get_calculated_table()
+            .iter()
+            .map(|r| {
+                let cells = r.iter().map(|v| Cell::new(format!("{}", v)));
+                Row::new(cells)
             })
-            .collect::<Vec<Row>>();
+            .collect();
         Table::default().rows(rows)
     }
 }
