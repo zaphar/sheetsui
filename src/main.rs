@@ -1,8 +1,8 @@
-use std::path::PathBuf;
+use std::{path::PathBuf, process::ExitCode};
 
 use clap::Parser;
-use crossterm::event::{self, Event, KeyCode, KeyEventKind};
 use ratatui;
+use ui::Workspace;
 
 mod sheet;
 mod ui;
@@ -14,18 +14,17 @@ pub struct Args {
     workbook: PathBuf,
 }
 
-fn run(terminal: &mut ratatui::DefaultTerminal, name: PathBuf) -> std::io::Result<()> {
+fn run(terminal: &mut ratatui::DefaultTerminal, name: PathBuf) -> anyhow::Result<ExitCode> {
+    let mut ws = Workspace::load(&name)?;
     loop {
-        terminal.draw(|frame| ui::draw(frame, &name))?;
-        if let Event::Key(key) = event::read()? {
-            if key.kind == KeyEventKind::Press && key.code == KeyCode::Char('q') {
-                return Ok(());
-            }
+        terminal.draw(|frame| ui::draw(frame, &mut ws))?;
+        if let Some(code) = ws.handle_event()? {
+            return Ok(code);
         }
     }
 }
 
-fn main() -> std::io::Result<()> {
+fn main() -> anyhow::Result<ExitCode> {
     let args = Args::parse();
 
     let mut terminal = ratatui::init();

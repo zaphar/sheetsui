@@ -8,7 +8,8 @@ edition = "2021"
 [dependencies]
 anyhow = { version = "1.0.91", features = ["backtrace"] }
 clap = { version = "4.5.20", features = ["derive"] }
-crossterm = "0.28.1"
+crossterm = { version = "0.28.1", features = ["event-stream"] }
 csvx = "0.1.17"
+futures = "0.3.31"
 ratatui = "0.29.0"
 thiserror = "1.0.65"

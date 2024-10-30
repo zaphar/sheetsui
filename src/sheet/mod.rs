@@ -46,10 +46,10 @@ impl CellValue {
 }
 
 /// The Address in a [Tbl].
-#[derive(Default, Debug, PartialEq, PartialOrd, Ord, Eq)]
+#[derive(Default, Debug, PartialEq, PartialOrd, Ord, Eq, Clone)]
 pub struct Address {
-    row: usize,
-    col: usize,
+    pub row: usize,
+    pub col: usize,
 }
 
 impl Address {
@@ -61,6 +61,7 @@ impl Address {
 /// A single table of addressable computable values.
 pub struct Tbl {
     pub csv: csvx::Table,
+    pub location: Address,
 }
 
 impl Tbl {
@@ -82,7 +83,17 @@ impl Tbl {
         Ok(Self {
             csv: csvx::Table::new(input)
                 .map_err(|e| anyhow!("Error parsing table from csv text: {}", e))?,
+            location: Address::default(),
         })
+    }
+
+    pub fn move_to(&mut self, addr: Address) -> Result<()> {
+        let (row, col) = self.dimensions();
+        if addr.row >= row || addr.col >= col {
+            return Err(anyhow!("Invalid address to move to: {:?}", addr));
+        }
+        self.location = addr;
+        Ok(())
     }
 
     pub fn update_entry(&mut self, address: Address, value: CellValue) -> Result<()> {
