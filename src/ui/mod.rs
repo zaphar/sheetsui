@@ -2,7 +2,7 @@
 
 use std::{fs::File, io::Read, path::PathBuf};
 
-use super::sheet::{Address, CellValue, Tbl};
+use super::sheet::Tbl;
 
 use anyhow::{Context, Result};
 use ratatui::{
@@ -51,26 +51,6 @@ impl Widget for Workspace {
         tabs.render(rects[0], buf);
         table.render(rects[1], buf);
     }
-}
-
-fn generate_default_table<'a>() -> Tbl {
-    let mut tbl = Tbl::new();
-    tbl.update_entry(Address::new(3, 3), CellValue::text("3,3"))
-        .context("Failed updating entry at 5,5")
-        .expect("Unexpected fail to update entry");
-    tbl.update_entry(Address::new(6, 6), CellValue::float(6.6))
-        .context("Failed updating entry at 10,10")
-        .expect("Unexpected fail to update entry");
-    tbl.update_entry(Address::new(0, 0), CellValue::formula("0.0"))
-        .context("Failed updating entry at 0,0")
-        .expect("Unexpected fail to update entry");
-    tbl.update_entry(Address::new(1, 0), CellValue::formula("1.0"))
-        .context("Failed updating entry at 0,0")
-        .expect("Unexpected fail to update entry");
-    tbl.update_entry(Address::new(2, 0), CellValue::formula("2.0"))
-        .context("Failed updating entry at 0,0")
-        .expect("Unexpected fail to update entry");
-    tbl
 }
 
 const COLNAMES: [&'static str; 27] = [
@@ -124,7 +104,6 @@ impl<'t> From<&Tbl> for Table<'t> {
 }
 
 pub fn draw(frame: &mut Frame, name: &PathBuf) {
-    let table = generate_default_table();
     let ws = Workspace::load(name).unwrap();
 
     frame.render_widget(ws, frame.area());
