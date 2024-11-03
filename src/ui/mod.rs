@@ -8,12 +8,13 @@ use anyhow::{Context, Result};
 use crossterm::event::{self, Event, KeyCode, KeyEventKind};
 use ratatui::{
     self,
-    layout::{Constraint, Flex},
-    style::{Color, Stylize},
+    layout::{Constraint, Flex, Layout},
+    style::{Color, Modifier, Style, Stylize},
     text::{Line, Text},
     widgets::{Block, Cell, Row, Table, Widget},
     Frame,
 };
+use tui_textarea::TextArea;
 
 #[derive(Default, Debug, PartialEq)]
 pub enum Modality {
@@ -30,19 +31,25 @@ pub struct AppState {
 // Interaction Modalities
 // * Navigate
 // * Edit
-pub struct Workspace {
+pub struct Workspace<'ws> {
     name: String,
     tbl: Tbl,
     state: AppState,
+    text_area: TextArea<'ws>,
+    dirty: bool,
 }
 
-impl Workspace {
+impl<'ws> Workspace<'ws> {
     pub fn new<S: Into<String>>(tbl: Tbl, name: S) -> Self {
-        Self {
+        let mut ws = Self {
             tbl,
             name: name.into(),
             state: AppState::default(),
-        }
+            text_area: reset_text_area("".to_owned()),
+            dirty: false,
+        };
+        ws.handle_movement_change();
+        ws
     }
 
     pub fn load(path: &PathBuf) -> Result<Self> {
@@ -64,13 +71,13 @@ impl Workspace {
         // TODO(jwall): Add a row automatically if necessary?
         let mut loc = self.tbl.location.clone();
         let (row, _) = self.tbl.dimensions();
-        if loc.row < row-1 {
+        if loc.row < row - 1 {
             loc.row += 1;
             self.tbl.move_to(loc)?;
         }
         Ok(())
     }
-    
+
     pub fn move_up(&mut self) -> Result<()> {
         let mut loc = self.tbl.location.clone();
         if loc.row > 0 {
@@ -79,7 +86,7 @@ impl Workspace {
         }
         Ok(())
     }
-    
+
     pub fn move_left(&mut self) -> Result<()> {
         let mut loc = self.tbl.location.clone();
         if loc.col > 0 {
@@ -88,13 +95,13 @@ impl Workspace {
         }
         Ok(())
     }
-    
+
     pub fn move_right(&mut self) -> Result<()> {
         // TODO(jwall): Add a column automatically if necessary?
         let mut loc = self.tbl.location.clone();
         let (_, col) = self.tbl.dimensions();
-        if loc.col < col-1 {
-             loc.col += 1;
+        if loc.col < col - 1 {
+            loc.col += 1;
             self.tbl.move_to(loc)?;
         }
         Ok(())
@@ -112,26 +119,20 @@ impl Workspace {
 
     fn handle_edit_event(&mut self, key: event::KeyEvent) -> Result<Option<ExitCode>> {
         if key.kind == KeyEventKind::Press {
-            match key.code {
-                KeyCode::Esc => {
-                    self.state.modality = Modality::Navigate;
-                },
-                KeyCode::Char('j') => {
-                    self.move_down()?;
-                },
-                KeyCode::Char('k') => {
-                    self.move_up()?;
-                },
-                KeyCode::Char('h') => {
-                    self.move_left()?;
-                },
-                KeyCode::Char('l') => {
-                    self.move_right()?;
-                },
-                _ => {
-                    // noop
+            if let KeyCode::Esc = key.code {
+                self.state.modality = Modality::Navigate;
+                self.text_area.set_cursor_line_style(Style::default());
+                self.text_area.set_cursor_style(Style::default());
+                let contents = self.text_area.lines().join("\n");
+                if self.dirty {
+                    let loc = self.tbl.location.clone();
+                    self.tbl.update_entry(&loc, contents)?;
                 }
+                return Ok(None);
             }
+        }
+        if self.text_area.input(key) {
+            self.dirty = true;
         }
         Ok(None)
     }
@@ -139,27 +140,32 @@ impl Workspace {
     fn handle_navigation_event(&mut self, key: event::KeyEvent) -> Result<Option<ExitCode>> {
         if key.kind == KeyEventKind::Press {
             match key.code {
-                KeyCode::Esc => {
-                    self.state.modality = Modality::Navigate;
-                },
-                KeyCode::Char('q') => {
-                    return Ok(Some(ExitCode::SUCCESS));
-                },
-                KeyCode::Char('j') => {
-                    self.move_down()?;
-                },
-                KeyCode::Char('k') => {
-                    self.move_up()?;
-                },
-                KeyCode::Char('h') => {
-                    self.move_left()?;
-                },
-                KeyCode::Char('l') => {
-                    self.move_right()?;
-                },
                 KeyCode::Char('e') => {
                     self.state.modality = Modality::CellEdit;
-                },
+                    self.text_area
+                        .set_cursor_line_style(Style::default().add_modifier(Modifier::UNDERLINED));
+                    self.text_area
+                        .set_cursor_style(Style::default().add_modifier(Modifier::SLOW_BLINK));
+                }
+                KeyCode::Char('q') => {
+                    return Ok(Some(ExitCode::SUCCESS));
+                }
+                KeyCode::Char('j') => {
+                    self.move_down()?;
+                    self.handle_movement_change();
+                }
+                KeyCode::Char('k') => {
+                    self.move_up()?;
+                    self.handle_movement_change();
+                }
+                KeyCode::Char('h') => {
+                    self.move_left()?;
+                    self.handle_movement_change();
+                }
+                KeyCode::Char('l') => {
+                    self.move_right()?;
+                    self.handle_movement_change();
+                }
                 _ => {
                     // noop
                 }
@@ -168,23 +174,48 @@ impl Workspace {
         return Ok(None);
     }
 
-    // navigation methods left, right, up, down
+    fn handle_movement_change(&mut self) {
+        let contents = self.tbl.get_raw_value(&self.tbl.location);
+        self.text_area = reset_text_area(contents);
+    }
 }
 
-impl<'a> Widget for &'a Workspace {
+fn reset_text_area<'a>(content: String) -> TextArea<'a> {
+    let mut text_area = TextArea::from(content.lines());
+    text_area.set_cursor_line_style(Style::default());
+    text_area.set_cursor_style(Style::default());
+    text_area
+}
+
+impl<'widget, 'ws: 'widget> Widget for &'widget Workspace<'ws> {
     fn render(self, area: ratatui::prelude::Rect, buf: &mut ratatui::prelude::Buffer)
     where
         Self: Sized,
     {
-        let block = Block::bordered()
+        let outer_block = Block::bordered()
             .title(Line::from(self.name.as_str()))
             .title_bottom(match &self.state.modality {
                 Modality::Navigate => "navigate",
                 Modality::CellEdit => "edit",
             })
-            .title_bottom(Line::from(format!("{},{}", self.tbl.location.row, self.tbl.location.col)).right_aligned());
-        let table = Table::from(&self.tbl).block(block);
-        table.render(area, buf);
+            .title_bottom(
+                Line::from(format!(
+                    "{},{}",
+                    self.tbl.location.row, self.tbl.location.col
+                ))
+                .right_aligned(),
+            );
+        let [edit_rect, table_rect] =
+            Layout::vertical(&[Constraint::Fill(1), Constraint::Fill(20)])
+                .vertical_margin(2)
+                .horizontal_margin(2)
+                .flex(Flex::Legacy)
+                .areas(area.clone());
+        outer_block.render(area, buf);
+        self.text_area.render(edit_rect, buf);
+        let table_block = Block::bordered();
+        let table = Table::from(&self.tbl).block(table_block);
+        table.render(table_rect, buf);
     }
 }
 
@@ -209,11 +240,9 @@ impl<'t> From<&Tbl> for Table<'t> {
                             let content = format!("{}", v);
                             let cell = Cell::new(Text::raw(content));
                             match (value.location.row == ri, value.location.col == ci) {
-                                (true, true) => 
-                                    cell
-                                    .fg(Color::White).underlined(),
-                                _ => 
-                                    cell.bg(if ri % 2 == 0 {
+                                (true, true) => cell.fg(Color::White).underlined(),
+                                _ => cell
+                                    .bg(if ri % 2 == 0 {
                                         Color::Rgb(57, 61, 71)
                                     } else {
                                         Color::Rgb(165, 169, 160)
@@ -223,7 +252,8 @@ impl<'t> From<&Tbl> for Table<'t> {
                                     } else {
                                         Color::Rgb(31, 32, 34)
                                     }),
-                            }.bold()
+                            }
+                            .bold()
                         }));
                 Row::new(cells)
             })

@@ -11,40 +11,6 @@ use csvx;
 
 use std::borrow::Borrow;
 
-pub enum CellValue {
-    Text(String),
-    Float(f64),
-    Integer(i64),
-    Formula(String),
-}
-
-impl CellValue {
-    pub fn to_csv_value(&self) -> String {
-        match self {
-            CellValue::Text(v) => format!("\"{}\"", v),
-            CellValue::Float(v) => format!("{}", v),
-            CellValue::Integer(v) => format!("{}", v),
-            CellValue::Formula(v) => format!("{}", v),
-        }
-    }
-
-    pub fn text<S: Into<String>>(value: S) -> CellValue {
-        CellValue::Text(Into::<String>::into(value))
-    }
-
-    pub fn formula<S: Into<String>>(value: S) -> CellValue {
-        CellValue::Formula(Into::<String>::into(value))
-    }
-
-    pub fn float(value: f64) -> CellValue {
-        CellValue::Float(value)
-    }
-
-    pub fn int(value: i64) -> CellValue {
-        CellValue::Integer(value)
-    }
-}
-
 /// The Address in a [Tbl].
 #[derive(Default, Debug, PartialEq, PartialOrd, Ord, Eq, Clone)]
 pub struct Address {
@@ -87,6 +53,10 @@ impl Tbl {
         })
     }
 
+    pub fn get_raw_value(&self, Address {row, col}: &Address) -> String {
+        self.csv.get_raw_table()[*row][*col].clone()
+    }
+
     pub fn move_to(&mut self, addr: Address) -> Result<()> {
         let (row, col) = self.dimensions();
         if addr.row >= row || addr.col >= col {
@@ -96,8 +66,7 @@ impl Tbl {
         Ok(())
     }
 
-    pub fn update_entry(&mut self, address: Address, value: CellValue) -> Result<()> {
-        // TODO(zaphar): At some point we'll need to store the graph of computation
+    pub fn update_entry(&mut self, address: &Address, value: String) -> Result<()> {
         let (row, col) = self.dimensions();
         if address.row >= row {
             // then we need to add rows.
@@ -112,7 +81,7 @@ impl Tbl {
         }
         Ok(self
             .csv
-            .update(address.col, address.row, value.to_csv_value())?)
+            .update(address.col, address.row, value.trim())?)
     }
 }
 
