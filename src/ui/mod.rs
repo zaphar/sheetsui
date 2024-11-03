@@ -146,6 +146,8 @@ impl<'ws> Workspace<'ws> {
                         .set_cursor_line_style(Style::default().add_modifier(Modifier::UNDERLINED));
                     self.text_area
                         .set_cursor_style(Style::default().add_modifier(Modifier::SLOW_BLINK));
+                    self.text_area.move_cursor(CursorMove::Bottom);
+                    self.text_area.move_cursor(CursorMove::End);
                 }
                 KeyCode::Char('q') => {
                     return Ok(Some(ExitCode::SUCCESS));
