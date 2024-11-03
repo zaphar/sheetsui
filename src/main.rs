@@ -18,7 +18,7 @@ fn run(terminal: &mut ratatui::DefaultTerminal, name: PathBuf) -> anyhow::Result
     let mut ws = Workspace::load(&name)?;
     loop {
         terminal.draw(|frame| ui::draw(frame, &mut ws))?;
-        if let Some(code) = ws.handle_event()? {
+        if let Some(code) = ws.handle_input()? {
             return Ok(code);
         }
     }
