@@ -131,8 +131,17 @@ impl<'ws> Workspace<'ws> {
     fn render_help_text(&self) -> impl Widget {
         let info_block = Block::bordered().title("Help");
         Paragraph::new(match self.state.modality {
-            Modality::Navigate => "Navigate Mode:\n* e: Enter edit mode for current cell\n* h,j,k,l: vim style navigation\n* q exit\n* Ctrl-S Save sheet",
-            Modality::CellEdit => "Edit Mode:\n ESC: Exit edit mode\nOtherwise edit as normal",
+            Modality::Navigate => Text::from(vec![
+                "Navigate Mode:".into(),
+                "* e: Enter edit mode for current cell".into(),
+                "* h,j,k,l: vim style navigation".into(),
+                "* q exit\n* Ctrl-S Save sheet".into(),
+            ]),
+            Modality::CellEdit => Text::from(vec![
+                "Edit Mode:".into(),
+                "* ESC: Exit edit mode".into(),
+                "Otherwise edit as normal".into(),
+            ]),
         }).block(info_block)
     }
 
