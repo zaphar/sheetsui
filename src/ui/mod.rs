@@ -5,7 +5,6 @@ use std::{
     io::Read,
     path::PathBuf,
     process::ExitCode,
-    time::{Duration, Instant},
 };
 
 use super::sheet::{Address, Tbl};
@@ -17,12 +16,10 @@ use ratatui::{
     layout::{Constraint, Flex, Layout},
     style::{Color, Modifier, Style, Stylize},
     text::{Line, Text},
-    widgets::{Block, Cell, Row, Table, Widget},
+    widgets::{Block, Cell, Paragraph, Row, Table, Widget},
     Frame,
 };
 use tui_textarea::{CursorMove, TextArea};
-
-const DEFAULT_KEY_TIMEOUT: Duration = Duration::from_millis(30);
 
 #[derive(Default, Debug, PartialEq)]
 pub enum Modality {
@@ -129,6 +126,14 @@ impl<'ws> Workspace<'ws> {
             return Ok(result);
         }
         Ok(None)
+    }
+
+    fn render_help_text(&self) -> impl Widget {
+        let info_block = Block::bordered().title("Help");
+        Paragraph::new(match self.state.modality {
+            Modality::Navigate => "Navigate Mode:\n* e: Enter edit mode for current cell\n* h,j,k,l: vim style navigation\n* q exit\n* Ctrl-S Save sheet",
+            Modality::CellEdit => "Edit Mode:\n ESC: Exit edit mode\nOtherwise edit as normal",
+        }).block(info_block)
     }
 
     fn handle_edit_input(&mut self, key: event::KeyEvent) -> Result<Option<ExitCode>> {
@@ -242,8 +247,8 @@ impl<'widget, 'ws: 'widget> Widget for &'widget Workspace<'ws> {
                 ))
                 .right_aligned(),
             );
-        let [edit_rect, table_rect] =
-            Layout::vertical(&[Constraint::Fill(1), Constraint::Fill(20)])
+        let [edit_rect, table_rect, info_rect] =
+            Layout::vertical(&[Constraint::Fill(1), Constraint::Fill(20), Constraint::Fill(3)])
                 .vertical_margin(2)
                 .horizontal_margin(2)
                 .flex(Flex::Legacy)
@@ -253,6 +258,9 @@ impl<'widget, 'ws: 'widget> Widget for &'widget Workspace<'ws> {
         let table_block = Block::bordered();
         let table = Table::from(&self.tbl).block(table_block);
         table.render(table_rect, buf);
+        // TODO(jwall): render help text?
+        let info_para = self.render_help_text();
+        info_para.render(info_rect, buf);
     }
 }
 
