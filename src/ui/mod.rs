@@ -135,7 +135,10 @@ impl<'ws> Workspace<'ws> {
                 "Navigate Mode:".into(),
                 "* e: Enter edit mode for current cell".into(),
                 "* h,j,k,l: vim style navigation".into(),
-                "* q exit\n* Ctrl-S Save sheet".into(),
+                "* CTRl-r: Add a row".into(),
+                "* CTRl-c: Add a column".into(),
+                "* q exit".into(),
+                "* Ctrl-S Save sheet".into(),
             ]),
             Modality::CellEdit => Text::from(vec![
                 "Edit Mode:".into(),
@@ -183,6 +186,14 @@ impl<'ws> Workspace<'ws> {
                 }
                 KeyCode::Char('s') if key.modifiers == KeyModifiers::CONTROL => {
                     self.save_file()?;
+                }
+                KeyCode::Char('r') if key.modifiers == KeyModifiers::CONTROL => {
+                    let (row, _) = self.tbl.dimensions();
+                    self.tbl.csv.insert_y(row);
+                }
+                KeyCode::Char('c') if key.modifiers == KeyModifiers::CONTROL => {
+                    let (_, col) = self.tbl.dimensions();
+                    self.tbl.csv.insert_x(col);
                 }
                 KeyCode::Char('q') => {
                     return Ok(Some(ExitCode::SUCCESS));
@@ -257,7 +268,7 @@ impl<'widget, 'ws: 'widget> Widget for &'widget Workspace<'ws> {
                 .right_aligned(),
             );
         let [edit_rect, table_rect, info_rect] =
-            Layout::vertical(&[Constraint::Fill(1), Constraint::Fill(20), Constraint::Fill(3)])
+            Layout::vertical(&[Constraint::Fill(1), Constraint::Fill(30), Constraint::Fill(9)])
                 .vertical_margin(2)
                 .horizontal_margin(2)
                 .flex(Flex::Legacy)
@@ -267,7 +278,6 @@ impl<'widget, 'ws: 'widget> Widget for &'widget Workspace<'ws> {
         let table_block = Block::bordered();
         let table = Table::from(&self.tbl).block(table_block);
         table.render(table_rect, buf);
-        // TODO(jwall): render help text?
         let info_para = self.render_help_text();
         info_para.render(info_rect, buf);
     }
