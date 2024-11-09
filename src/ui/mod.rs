@@ -16,7 +16,7 @@ use ratatui::{
     layout::{Constraint, Flex, Layout},
     style::{Color, Modifier, Style, Stylize},
     text::{Line, Text},
-    widgets::{Block, Cell, Paragraph, Row, Table, Widget},
+    widgets::{Block, Cell, Paragraph, Row, Table, TableState, Widget},
     Frame,
 };
 use tui_textarea::{CursorMove, TextArea};
@@ -32,6 +32,7 @@ pub enum Modality {
 #[derive(Default, Debug)]
 pub struct AppState {
     pub modality: Modality,
+    pub table_state: TableState,
 }
 
 // Interaction Modalities
@@ -190,6 +191,13 @@ impl<'ws> Workspace<'ws> {
                 KeyCode::Char('r') if key.modifiers == KeyModifiers::CONTROL => {
                     let (row, _) = self.tbl.dimensions();
                     self.tbl.csv.insert_y(row);
+                    let (row, _) = self.tbl.dimensions();
+                    let mut loc = self.tbl.location.clone();
+                    if loc.row < row - 1 {
+                        loc.row = row - 1;
+                        self.tbl.move_to(loc)?;
+                    }
+                    self.handle_movement_change();
                 }
                 KeyCode::Char('c') if key.modifiers == KeyModifiers::CONTROL => {
                     let (_, col) = self.tbl.dimensions();
@@ -247,7 +255,7 @@ fn reset_text_area<'a>(content: String) -> TextArea<'a> {
     text_area
 }
 
-impl<'widget, 'ws: 'widget> Widget for &'widget Workspace<'ws> {
+impl<'widget, 'ws: 'widget> Widget for &'widget mut Workspace<'ws> {
     fn render(self, area: ratatui::prelude::Rect, buf: &mut ratatui::prelude::Buffer)
     where
         Self: Sized,
@@ -277,7 +285,14 @@ impl<'widget, 'ws: 'widget> Widget for &'widget Workspace<'ws> {
         self.text_area.render(edit_rect, buf);
         let table_block = Block::bordered();
         let table = Table::from(&self.tbl).block(table_block);
-        table.render(table_rect, buf);
+        // https://docs.rs/ratatui/latest/ratatui/widgets/struct.TableState.html
+        let Address { row, col } = self.tbl.location;
+        // TODO(zaphar): Apparently scrolling by columns doesn't work?
+        self.state.table_state.select_cell(Some((row, col)));
+        self.state.table_state.select_column(Some(col));
+        use ratatui::widgets::StatefulWidget;
+        StatefulWidget::render(table, table_rect, buf, &mut self.state.table_state);
+        //table.render_stateful(table_rect, buf);
         let info_para = self.render_help_text();
         info_para.render(info_rect, buf);
     }
@@ -337,6 +352,6 @@ impl<'t> From<&Tbl> for Table<'t> {
     }
 }
 
-pub fn draw(frame: &mut Frame, ws: &Workspace) {
+pub fn draw(frame: &mut Frame, ws: &mut Workspace) {
     frame.render_widget(ws, frame.area());
 }
