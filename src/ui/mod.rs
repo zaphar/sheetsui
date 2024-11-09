@@ -231,8 +231,7 @@ impl<'ws> Workspace<'ws> {
         // * Copy Cell reference
         // * Copy Cell Range reference
         // * Extend Cell {down,up}
-        // * Insert row
-        // * Insert column
+        // * Goto location. (Command modality?)
         return Ok(None);
     }
 
@@ -298,8 +297,8 @@ impl<'widget, 'ws: 'widget> Widget for &'widget mut Workspace<'ws> {
     }
 }
 
-const COLNAMES: [&'static str; 27] = [
-    "", "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R",
+const COLNAMES: [&'static str; 26] = [
+    "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R",
     "S", "T", "U", "V", "W", "X", "Y", "Z",
 ];
 
@@ -338,7 +337,12 @@ impl<'t> From<&Tbl> for Table<'t> {
             })
             .collect();
         // TODO(zaphar): Handle the double letter column names
-        let header: Vec<Cell> = (0..=cols).map(|i| Cell::new(COLNAMES[i % 26])).collect();
+        let mut header = Vec::with_capacity(cols+1);
+        header.push(Cell::new(""));
+        header.extend((0..cols).map(|i| {
+            let count = (i / 26) + 1;
+            Cell::new(COLNAMES[i % 26].repeat(count))
+        }));
         let mut constraints: Vec<Constraint> = Vec::new();
         constraints.push(Constraint::Max(5));
         for _ in 0..cols {
