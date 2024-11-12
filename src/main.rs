@@ -6,6 +6,7 @@ use ui::Workspace;
 
 mod sheet;
 mod ui;
+mod book;
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
