@@ -8,7 +8,6 @@
 
 use anyhow::{anyhow, Result};
 use csvx;
-use ironcalc::base::{Workbook, Table};
 
 use std::borrow::Borrow;
 

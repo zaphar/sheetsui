@@ -82,6 +82,7 @@ impl Book {
         false
     }
 
+    /// Get all sheet names
     pub fn get_sheet_names(&self) -> Vec<String> {
         self.model.workbook.get_worksheet_names()
     }
