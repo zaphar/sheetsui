@@ -1,7 +1,12 @@
+use std::path::PathBuf;
+
 use anyhow::{anyhow, Result};
-use ironcalc::base::{
-    types::{SheetData, Worksheet},
-    Model,
+use ironcalc::{
+    base::{
+        locale, types::{SheetData, Worksheet}, Model
+    },
+    export::save_to_xlsx,
+    import::load_from_xlsx,
 };
 
 /// A spreadsheet book with some internal state tracking.
@@ -12,6 +17,28 @@ pub struct Book {
 }
 
 impl Book {
+
+    /// Construct a new book from a Model
+    pub fn new(model: Model) -> Self {
+        Self {
+            model,
+            current_sheet: 0,
+            current_location: (0, 0),
+        }
+    }
+
+    // TODO(zaphar): Should I support ICalc?
+    /// Construct a new book from a path.
+    pub fn new_from_xlsx(path: &str, locale: &str, tz: &str) -> Result<Self> {
+        Ok(Self::new(load_from_xlsx(path, locale, tz)?))
+    }
+
+    /// Save book to an xlsx file.
+    pub fn save_to_xlsx(&self, path: &str) -> Result<()> {
+        save_to_xlsx(&self.model, path)?;
+        Ok(())
+    }
+
     /// Get the currently set sheets name.
     pub fn get_sheet_name(&self) -> Result<&str> {
         Ok(&self.get_sheet()?.name)
