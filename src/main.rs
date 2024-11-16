@@ -4,7 +4,6 @@ use clap::Parser;
 use ratatui;
 use ui::Workspace;
 
-mod sheet;
 mod ui;
 mod book;
 
@@ -13,10 +12,15 @@ mod book;
 pub struct Args {
     #[arg()]
     workbook: PathBuf,
+    #[arg(default_value_t=String::from("en"), short, long)]
+    locale_name: String,
+    #[arg(default_value_t=String::from("America/New_York"), short, long)]
+    timezone_name: String,
 }
 
-fn run(terminal: &mut ratatui::DefaultTerminal, name: PathBuf) -> anyhow::Result<ExitCode> {
-    let mut ws = Workspace::load(&name)?;
+fn run(terminal: &mut ratatui::DefaultTerminal, args: Args) -> anyhow::Result<ExitCode> {
+    let mut ws = Workspace::load(&args.workbook, &args.locale_name, &args.timezone_name)?;
+
     loop {
         terminal.draw(|frame| ui::draw(frame, &mut ws))?;
         if let Some(code) = ws.handle_input()? {
@@ -30,7 +34,7 @@ fn main() -> anyhow::Result<ExitCode> {
 
     let mut terminal = ratatui::init();
     terminal.clear()?;
-    let app_result = run(&mut terminal, args.workbook);
+    let app_result = run(&mut terminal, args);
     ratatui::restore();
     app_result
 }

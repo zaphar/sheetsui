@@ -1,35 +1,51 @@
-use std::path::PathBuf;
+use std::cmp::max;
 
 use anyhow::{anyhow, Result};
 use ironcalc::{
     base::{
-        locale, types::{SheetData, Worksheet}, Model
+        types::{SheetData, Worksheet},
+        worksheet::WorksheetDimension,
+        Model,
     },
     export::save_to_xlsx,
     import::load_from_xlsx,
 };
 
+use crate::ui::Address;
+
+#[cfg(test)]
+mod test;
+
 /// A spreadsheet book with some internal state tracking.
 pub struct Book {
-    model: Model,
-    current_sheet: u32,
-    current_location: (i32, i32),
+    pub(crate) model: Model,
+    pub current_sheet: u32,
+    pub location: crate::ui::Address,
+    // TODO(zaphar): Because the ironcalc model is sparse we need to track our render size
+    // separately
 }
 
 impl Book {
-
     /// Construct a new book from a Model
     pub fn new(model: Model) -> Self {
         Self {
             model,
             current_sheet: 0,
-            current_location: (0, 0),
+            location: Address::default(),
         }
+    }
+
+    pub fn new_from_xlsx(path: &str) -> Result<Self> {
+        Ok(Self::new(load_from_xlsx(path, "en", "America/New_York")?))
+    }
+
+    pub fn evaluate(&mut self) {
+        self.model.evaluate();
     }
 
     // TODO(zaphar): Should I support ICalc?
     /// Construct a new book from a path.
-    pub fn new_from_xlsx(path: &str, locale: &str, tz: &str) -> Result<Self> {
+    pub fn new_from_xlsx_with_locale(path: &str, locale: &str, tz: &str) -> Result<Self> {
         Ok(Self::new(load_from_xlsx(path, locale, tz)?))
     }
 
@@ -37,6 +53,15 @@ impl Book {
     pub fn save_to_xlsx(&self, path: &str) -> Result<()> {
         save_to_xlsx(&self.model, path)?;
         Ok(())
+    }
+
+    pub fn get_all_sheets_identifiers(&self) -> Vec<(String, u32)> {
+        self.model
+            .workbook
+            .worksheets
+            .iter()
+            .map(|sheet| (sheet.get_name(), sheet.get_sheet_id()))
+            .collect()
     }
 
     /// Get the currently set sheets name.
@@ -49,49 +74,90 @@ impl Book {
         Ok(&self.get_sheet()?.sheet_data)
     }
 
+    pub fn move_to(&mut self, loc: Address) -> Result<()> {
+        // FIXME(zaphar): Check that this is safe first.
+        self.location.row = loc.row;
+        self.location.col = loc.col;
+        Ok(())
+    }
+
     /// Get a cells formatted content.
-    pub fn get_cell_rendered(&self) -> Result<String> {
+    pub fn get_current_cell_rendered(&self) -> Result<String> {
+        Ok(self.get_cell_addr_rendered(self.location.row, self.location.col)?)
+    }
+
+    // TODO(zaphar): Use Address here too
+    pub fn get_cell_addr_rendered(&self, row: usize, col: usize) -> Result<String> {
         Ok(self
             .model
-            .get_formatted_cell_value(
-                self.current_sheet,
-                self.current_location.0,
-                self.current_location.1,
-            )
+            .get_formatted_cell_value(self.current_sheet, row as i32, col as i32)
             .map_err(|s| anyhow!("Unable to format cell {}", s))?)
     }
 
     /// Get a cells actual content as a string.
-    pub fn get_cell_contents(&self) -> Result<String> {
+    pub fn get_current_cell_contents(&self) -> Result<String> {
         Ok(self
             .model
             .get_cell_content(
                 self.current_sheet,
-                self.current_location.0,
-                self.current_location.1,
+                self.location.row as i32,
+                self.location.col as i32,
             )
             .map_err(|s| anyhow!("Unable to format cell {}", s))?)
     }
 
-    pub fn edit_cell(&mut self, value: String) -> Result<()> {
+    /// Update the current cell in a book.
+    /// This update won't be reflected until you call `Book::evaluate`.
+    pub fn edit_current_cell<S: Into<String>>(&mut self, value: S) -> Result<()> {
+        self.update_entry(&self.location.clone(), value)?;
+        Ok(())
+    }
+
+    /// Update an entry in the current sheet for a book.
+    /// This update won't be reflected until you call `Book::evaluate`.
+    pub fn update_entry<S: Into<String>>(&mut self, location: &Address, value: S) -> Result<()> {
         self.model
             .set_user_input(
                 self.current_sheet,
-                self.current_location.0,
-                self.current_location.1,
-                value,
+                location.row as i32,
+                location.col as i32,
+                value.into(),
             )
             .map_err(|e| anyhow!("Invalid cell contents: {}", e))?;
         Ok(())
     }
 
+    pub fn insert_rows(&mut self, row_idx: usize, count: usize) -> Result<()> {
+        Ok(self
+            .model
+            .insert_rows(self.current_sheet, row_idx as i32, count as i32)
+            .map_err(|e| anyhow!("Unable to insert row(s): {}", e))?)
+    }
+
+    pub fn insert_columns(&mut self, col_idx: usize, count: usize) -> Result<()> {
+        Ok(self
+            .model
+            .insert_columns(self.current_sheet, col_idx as i32, count as i32)
+            .map_err(|e| anyhow!("Unable to insert column(s): {}", e))?)
+    }
+
     /// Get the current sheets dimensions. This is a somewhat expensive calculation.
-    pub fn get_dimensions(&self) -> Result<(usize, usize)> {
-        let dimensions = self.get_sheet()?.dimension();
-        Ok((
-            dimensions.max_row.try_into()?,
-            dimensions.max_column.try_into()?,
-        ))
+    pub fn get_dimensions(&self) -> Result<WorksheetDimension> {
+        Ok(self.get_sheet()?.dimension())
+    }
+
+    // Get the size of the current sheet as a `(row_count, column_count)`
+    pub fn get_size(&self) -> Result<(usize, usize)> {
+        let sheet = &self.get_sheet()?.sheet_data;
+        let mut row_count = 0 as i32;
+        let mut col_count = 0 as i32;
+        for (ri, cols) in sheet.iter() {
+           row_count = max(*ri, row_count);
+            for (ci, _) in cols.iter() {
+               col_count = max(*ci, col_count);
+            }
+        }
+        Ok((row_count as usize, col_count as usize))
     }
 
     /// Select a sheet by name.
@@ -129,19 +195,17 @@ impl Book {
         false
     }
 
-    fn get_sheet(&self) -> Result<&Worksheet> {
+    pub(crate) fn get_sheet(&self) -> Result<&Worksheet> {
         Ok(self
             .model
             .workbook
             .worksheet(self.current_sheet)
             .map_err(|s| anyhow!("Invalid Worksheet: {}", s))?)
     }
+}
 
-    fn get_sheet_mut(&mut self) -> Result<&mut Worksheet> {
-        Ok(self
-            .model
-            .workbook
-            .worksheet_mut(self.current_sheet)
-            .map_err(|s| anyhow!("Invalid Worksheet: {}", s))?)
+impl Default for Book {
+    fn default() -> Self {
+        Book::new(Model::new_empty("default_name", "en", "America/New_York").unwrap())
     }
 }

@@ -1,16 +1,12 @@
 //! Ui rendering logic
 
-use std::{
-    fs::File,
-    io::Read,
-    path::PathBuf,
-    process::ExitCode,
-};
+use std::{path::PathBuf, process::ExitCode};
 
-use super::sheet::{Address, Tbl};
+use crate::book::Book;
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::Result;
 use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
+use ironcalc::base::worksheet::WorksheetDimension;
 use ratatui::{
     self,
     layout::{Constraint, Flex, Layout},
@@ -35,21 +31,41 @@ pub struct AppState {
     pub table_state: TableState,
 }
 
+// TODO(jwall): This should probably move to a different module.
+/// The Address in a Table.
+#[derive(Debug, PartialEq, PartialOrd, Ord, Eq, Clone)]
+pub struct Address {
+    pub row: usize,
+    pub col: usize,
+}
+
+impl Address {
+    pub fn new(row: usize, col: usize) -> Self {
+        Self { row, col }
+    }
+}
+
+impl Default for Address {
+    fn default() -> Self {
+        Address::new(1, 1)
+    }
+}
+
 // Interaction Modalities
 // * Navigate
 // * Edit
 pub struct Workspace<'ws> {
     name: PathBuf,
-    tbl: Tbl,
+    book: Book,
     state: AppState,
     text_area: TextArea<'ws>,
     dirty: bool,
 }
 
 impl<'ws> Workspace<'ws> {
-    pub fn new(tbl: Tbl, name: PathBuf) -> Self {
+    pub fn new(book: Book, name: PathBuf) -> Self {
         let mut ws = Self {
-            tbl,
+            book,
             name,
             state: AppState::default(),
             text_area: reset_text_area("".to_owned()),
@@ -59,61 +75,52 @@ impl<'ws> Workspace<'ws> {
         ws
     }
 
-    pub fn load(path: &PathBuf) -> Result<Self> {
-        let input = if path.exists() {
-            if path.is_file() {
-                let mut f = File::open(path)?;
-                let mut buf = Vec::new();
-                let _ = f.read_to_end(&mut buf)?;
-                String::from_utf8(buf).context(format!("Error reading file: {:?}", path))?
-            } else {
-                return Err(anyhow!("Not a valid path: {}", path.to_string_lossy().to_string()));
-            }
+    pub fn load(path: &PathBuf, locale: &str, tz: &str) -> Result<Self> {
+        let book = if path.exists() {
+            Book::new_from_xlsx_with_locale(&path.to_string_lossy().to_string(), locale, tz)?
         } else {
-            String::from(",,,\n,,,\n")
+            Book::default()
         };
-        let mut tbl = Tbl::from_str(input)?;
-        tbl.move_to(Address { row: 0, col: 0 })?;
-        Ok(Workspace::new(
-            tbl,
-            path.clone(),
-        ))
+        //book.move_to(Address { row: 0, col: 0 })?;
+        Ok(Workspace::new(book, path.clone()))
     }
 
     pub fn move_down(&mut self) -> Result<()> {
-        let mut loc = self.tbl.location.clone();
-        let (row, _) = self.tbl.dimensions();
-        if loc.row < row - 1 {
+        let mut loc = self.book.location.clone();
+        let WorksheetDimension { min_row: _, max_row, min_column: _, max_column: _ } = self.book.get_dimensions()?;
+        if loc.row <= max_row as usize {
             loc.row += 1;
-            self.tbl.move_to(loc)?;
+            self.book.move_to(loc)?;
         }
         Ok(())
     }
 
     pub fn move_up(&mut self) -> Result<()> {
-        let mut loc = self.tbl.location.clone();
-        if loc.row > 0 {
+        let mut loc = self.book.location.clone();
+        let WorksheetDimension { min_row, max_row: _, min_column: _, max_column: _ } = self.book.get_dimensions()?;
+        if loc.row > min_row as usize {
             loc.row -= 1;
-            self.tbl.move_to(loc)?;
+            self.book.move_to(loc)?;
         }
         Ok(())
     }
 
     pub fn move_left(&mut self) -> Result<()> {
-        let mut loc = self.tbl.location.clone();
-        if loc.col > 0 {
+        let mut loc = self.book.location.clone();
+        let WorksheetDimension { min_row: _, max_row: _, min_column, max_column: _ } = self.book.get_dimensions()?;
+        if loc.col > min_column as usize {
             loc.col -= 1;
-            self.tbl.move_to(loc)?;
+            self.book.move_to(loc)?;
         }
         Ok(())
     }
 
     pub fn move_right(&mut self) -> Result<()> {
-        let mut loc = self.tbl.location.clone();
-        let (_, col) = self.tbl.dimensions();
-        if loc.col < col - 1 {
+        let mut loc = self.book.location.clone();
+        let WorksheetDimension { min_row: _, max_row: _, min_column: _, max_column} = self.book.get_dimensions()?;
+        if loc.col < max_column as usize {
             loc.col += 1;
-            self.tbl.move_to(loc)?;
+            self.book.move_to(loc)?;
         }
         Ok(())
     }
@@ -146,7 +153,8 @@ impl<'ws> Workspace<'ws> {
                 "* ESC: Exit edit mode".into(),
                 "Otherwise edit as normal".into(),
             ]),
-        }).block(info_block)
+        })
+        .block(info_block)
     }
 
     fn handle_edit_input(&mut self, key: event::KeyEvent) -> Result<Option<ExitCode>> {
@@ -157,8 +165,7 @@ impl<'ws> Workspace<'ws> {
                 self.text_area.set_cursor_style(Style::default());
                 let contents = self.text_area.lines().join("\n");
                 if self.dirty {
-                    let loc = self.tbl.location.clone();
-                    self.tbl.update_entry(&loc, contents)?;
+                    self.book.edit_current_cell(contents)?;
                 }
                 return Ok(None);
             }
@@ -189,19 +196,19 @@ impl<'ws> Workspace<'ws> {
                     self.save_file()?;
                 }
                 KeyCode::Char('r') if key.modifiers == KeyModifiers::CONTROL => {
-                    let (row, _) = self.tbl.dimensions();
-                    self.tbl.csv.insert_y(row);
-                    let (row, _) = self.tbl.dimensions();
-                    let mut loc = self.tbl.location.clone();
-                    if loc.row < row - 1 {
-                        loc.row = row - 1;
-                        self.tbl.move_to(loc)?;
+                    let WorksheetDimension { min_row: _, max_row, min_column: _, max_column: _ } = self.book.get_dimensions()?;
+                    self.book.insert_rows(max_row as usize, 1)?;
+                    let WorksheetDimension { min_row: _, max_row, min_column: _, max_column: _ } = self.book.get_dimensions()?;
+                    let mut loc = self.book.location.clone();
+                    if loc.row < max_row as usize {
+                        loc.row = (max_row - 1) as usize;
+                        self.book.move_to(loc)?;
                     }
                     self.handle_movement_change();
                 }
                 KeyCode::Char('c') if key.modifiers == KeyModifiers::CONTROL => {
-                    let (_, col) = self.tbl.dimensions();
-                    self.tbl.csv.insert_x(col);
+                    let WorksheetDimension { min_row: _, max_row: _, min_column: _, max_column} = self.book.get_dimensions()?;
+                    self.book.insert_columns(max_column as usize, 1)?;
                 }
                 KeyCode::Char('q') => {
                     return Ok(Some(ExitCode::SUCCESS));
@@ -236,13 +243,15 @@ impl<'ws> Workspace<'ws> {
     }
 
     fn handle_movement_change(&mut self) {
-        let contents = self.tbl.get_raw_value(&self.tbl.location);
+        let contents = self
+            .book
+            .get_current_cell_contents()
+            .expect("Unexpected failure getting current cell contents");
         self.text_area = reset_text_area(contents);
     }
 
     fn save_file(&self) -> Result<()> {
-        let contents = self.tbl.csv.export_raw_table().map_err(|e| anyhow::anyhow!("Error serializing to csv: {:?}", e))?;
-        std::fs::write(&self.name, contents)?;
+        self.book.save_to_xlsx(&self.name.to_string_lossy().to_string())?;
         Ok(())
     }
 }
@@ -260,9 +269,12 @@ impl<'widget, 'ws: 'widget> Widget for &'widget mut Workspace<'ws> {
         Self: Sized,
     {
         let outer_block = Block::bordered()
-            .title(Line::from(self.name
-                .file_name().map(|p| p.to_string_lossy().to_string())
-                .unwrap_or_else(|| String::from("Unknown"))))
+            .title(Line::from(
+                self.name
+                    .file_name()
+                    .map(|p| p.to_string_lossy().to_string())
+                    .unwrap_or_else(|| String::from("Unknown")),
+            ))
             .title_bottom(match &self.state.modality {
                 Modality::Navigate => "navigate",
                 Modality::CellEdit => "edit",
@@ -270,22 +282,26 @@ impl<'widget, 'ws: 'widget> Widget for &'widget mut Workspace<'ws> {
             .title_bottom(
                 Line::from(format!(
                     "{},{}",
-                    self.tbl.location.row, self.tbl.location.col
+                    self.book.location.row, self.book.location.col
                 ))
                 .right_aligned(),
             );
-        let [edit_rect, table_rect, info_rect] =
-            Layout::vertical(&[Constraint::Fill(1), Constraint::Fill(30), Constraint::Fill(9)])
-                .vertical_margin(2)
-                .horizontal_margin(2)
-                .flex(Flex::Legacy)
-                .areas(area.clone());
+        let [edit_rect, table_rect, info_rect] = Layout::vertical(&[
+            Constraint::Fill(1),
+            Constraint::Fill(30),
+            Constraint::Fill(9),
+        ])
+        .vertical_margin(2)
+        .horizontal_margin(2)
+        .flex(Flex::Legacy)
+        .areas(area.clone());
         outer_block.render(area, buf);
         self.text_area.render(edit_rect, buf);
         let table_block = Block::bordered();
-        let table = Table::from(&self.tbl).block(table_block);
+        let table_inner: Table = TryFrom::try_from(&self.book).expect("");
+        let table = table_inner.block(table_block);
         // https://docs.rs/ratatui/latest/ratatui/widgets/struct.TableState.html
-        let Address { row, col } = self.tbl.location;
+        let Address { row, col } = self.book.location;
         // TODO(zaphar): Apparently scrolling by columns doesn't work?
         self.state.table_state.select_cell(Some((row, col)));
         self.state.table_state.select_column(Some(col));
@@ -298,62 +314,65 @@ impl<'widget, 'ws: 'widget> Widget for &'widget mut Workspace<'ws> {
 }
 
 const COLNAMES: [&'static str; 26] = [
-    "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R",
-    "S", "T", "U", "V", "W", "X", "Y", "Z",
+    "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R", "S",
+    "T", "U", "V", "W", "X", "Y", "Z",
 ];
 
-impl<'t> From<&Tbl> for Table<'t> {
-    fn from(value: &Tbl) -> Self {
-        let (_, cols) = value.dimensions();
-        let rows: Vec<Row> = value
-            .csv
-            .get_calculated_table()
-            .iter()
-            .enumerate()
-            .map(|(ri, r)| {
-                let cells =
-                    vec![Cell::new(format!("{}", ri))]
-                        .into_iter()
-                        .chain(r.iter().enumerate().map(|(ci, v)| {
-                            let content = format!("{}", v);
-                            let cell = Cell::new(Text::raw(content));
-                            match (value.location.row == ri, value.location.col == ci) {
-                                (true, true) => cell.fg(Color::White).underlined(),
-                                _ => cell
-                                    .bg(if ri % 2 == 0 {
-                                        Color::Rgb(57, 61, 71)
-                                    } else {
-                                        Color::Rgb(165, 169, 160)
-                                    })
-                                    .fg(if ri % 2 == 0 {
-                                        Color::White
-                                    } else {
-                                        Color::Rgb(31, 32, 34)
-                                    }),
-                            }
-                            .bold()
-                        }));
+// TODO(jwall): Maybe this should be TryFrom?
+impl<'t, 'book: 't> TryFrom<&'book Book> for Table<'t> {
+    fn try_from(value: &'book Book) -> std::result::Result<Self, Self::Error> {
+        // TODO(zaphar): This is apparently expensive. Maybe we can cache it somehow?
+        // We should do the correct thing here if this fails
+        let WorksheetDimension { min_row, max_row, min_column, max_column } = value.get_dimensions()?;
+        let (row_count, col_count) = ((max_row - min_row) as usize, (max_column - min_column) as usize);
+        let rows: Vec<Row> = (1..=row_count)
+            .into_iter()
+            .map(|ri| {
+                let cells: Vec<Cell> = (1..=col_count)
+                    .into_iter()
+                    .map(|ci| {
+                        // TODO(zaphar): Is this safe?
+                        let content = value.get_cell_addr_rendered(ri, ci).unwrap();
+                        let cell = Cell::new(Text::raw(content));
+                        match (value.location.row == ri, value.location.col == ci) {
+                            (true, true) => cell.fg(Color::White).underlined(),
+                            _ => cell
+                                .bg(if ri % 2 == 0 {
+                                    Color::Rgb(57, 61, 71)
+                                } else {
+                                    Color::Rgb(165, 169, 160)
+                                })
+                                .fg(if ri % 2 == 0 {
+                                    Color::White
+                                } else {
+                                    Color::Rgb(31, 32, 34)
+                                }),
+                        }
+                        .bold()
+                    })
+                    .collect();
                 Row::new(cells)
             })
             .collect();
-        // TODO(zaphar): Handle the double letter column names
-        let mut header = Vec::with_capacity(cols+1);
+        let mut constraints: Vec<Constraint> = Vec::new();
+        constraints.push(Constraint::Max(5));
+        for _ in 0..col_count {
+            constraints.push(Constraint::Min(5));
+        }
+        let mut header = Vec::with_capacity(col_count as usize);
         header.push(Cell::new(""));
-        header.extend((0..cols).map(|i| {
+        header.extend((0..(col_count as usize)).map(|i| {
             let count = (i / 26) + 1;
             Cell::new(COLNAMES[i % 26].repeat(count))
         }));
-        let mut constraints: Vec<Constraint> = Vec::new();
-        constraints.push(Constraint::Max(5));
-        for _ in 0..cols {
-            constraints.push(Constraint::Min(5));
-        }
-        Table::new(rows, constraints)
+        Ok(Table::new(rows, constraints)
             .block(Block::bordered())
             .header(Row::new(header).underlined())
             .column_spacing(1)
-            .flex(Flex::SpaceAround)
+            .flex(Flex::SpaceAround))
     }
+
+    type Error = anyhow::Error;
 }
 
 pub fn draw(frame: &mut Frame, ws: &mut Workspace) {
