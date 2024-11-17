@@ -128,17 +128,17 @@ impl Book {
     }
 
     pub fn insert_rows(&mut self, row_idx: usize, count: usize) -> Result<()> {
-        Ok(self
-            .model
+        self.model
             .insert_rows(self.current_sheet, row_idx as i32, count as i32)
-            .map_err(|e| anyhow!("Unable to insert row(s): {}", e))?)
+            .map_err(|e| anyhow!("Unable to insert row(s): {}", e))?;
+        Ok(())
     }
 
     pub fn insert_columns(&mut self, col_idx: usize, count: usize) -> Result<()> {
-        Ok(self
-            .model
+        self.model
             .insert_columns(self.current_sheet, col_idx as i32, count as i32)
-            .map_err(|e| anyhow!("Unable to insert column(s): {}", e))?)
+            .map_err(|e| anyhow!("Unable to insert column(s): {}", e))?;
+        Ok(())
     }
 
     /// Get the current sheets dimensions. This is a somewhat expensive calculation.
@@ -152,9 +152,9 @@ impl Book {
         let mut row_count = 0 as i32;
         let mut col_count = 0 as i32;
         for (ri, cols) in sheet.iter() {
-           row_count = max(*ri, row_count);
+            row_count = max(*ri, row_count);
             for (ci, _) in cols.iter() {
-               col_count = max(*ci, col_count);
+                col_count = max(*ci, col_count);
             }
         }
         Ok((row_count as usize, col_count as usize))
@@ -206,6 +206,8 @@ impl Book {
 
 impl Default for Book {
     fn default() -> Self {
-        Book::new(Model::new_empty("default_name", "en", "America/New_York").unwrap())
+        let mut book = Book::new(Model::new_empty("default_name", "en", "America/New_York").unwrap());
+        book.update_entry(&Address{row: 1, col: 1}, "").unwrap();
+        book
     }
 }

@@ -196,19 +196,19 @@ impl<'ws> Workspace<'ws> {
                     self.save_file()?;
                 }
                 KeyCode::Char('r') if key.modifiers == KeyModifiers::CONTROL => {
-                    let WorksheetDimension { min_row: _, max_row, min_column: _, max_column: _ } = self.book.get_dimensions()?;
-                    self.book.insert_rows(max_row as usize, 1)?;
-                    let WorksheetDimension { min_row: _, max_row, min_column: _, max_column: _ } = self.book.get_dimensions()?;
+                    let (row_count, _) = self.book.get_size()?;
+                    self.book.update_entry(&Address {row: row_count+1, col: 1 }, "")?;
+                    let (row, _) = self.book.get_size()?;
                     let mut loc = self.book.location.clone();
-                    if loc.row < max_row as usize {
-                        loc.row = (max_row - 1) as usize;
+                    if loc.row < row as usize {
+                        loc.row = row as usize;
                         self.book.move_to(loc)?;
                     }
                     self.handle_movement_change();
                 }
                 KeyCode::Char('c') if key.modifiers == KeyModifiers::CONTROL => {
-                    let WorksheetDimension { min_row: _, max_row: _, min_column: _, max_column} = self.book.get_dimensions()?;
-                    self.book.insert_columns(max_column as usize, 1)?;
+                    let (_, col_count) = self.book.get_size()?;
+                    self.book.update_entry(&Address {row: 1, col: col_count+1 }, "")?;
                 }
                 KeyCode::Char('q') => {
                     return Ok(Some(ExitCode::SUCCESS));
@@ -318,17 +318,16 @@ const COLNAMES: [&'static str; 26] = [
     "T", "U", "V", "W", "X", "Y", "Z",
 ];
 
-// TODO(jwall): Maybe this should be TryFrom?
 impl<'t, 'book: 't> TryFrom<&'book Book> for Table<'t> {
     fn try_from(value: &'book Book) -> std::result::Result<Self, Self::Error> {
         // TODO(zaphar): This is apparently expensive. Maybe we can cache it somehow?
         // We should do the correct thing here if this fails
-        let WorksheetDimension { min_row, max_row, min_column, max_column } = value.get_dimensions()?;
-        let (row_count, col_count) = ((max_row - min_row) as usize, (max_column - min_column) as usize);
+        let (row_count, col_count) = value.get_size()?;
         let rows: Vec<Row> = (1..=row_count)
             .into_iter()
             .map(|ri| {
-                let cells: Vec<Cell> = (1..=col_count)
+                let mut cells = vec![Cell::new(Text::from(ri.to_string()))];
+                cells.extend((1..=col_count)
                     .into_iter()
                     .map(|ci| {
                         // TODO(zaphar): Is this safe?
@@ -349,8 +348,7 @@ impl<'t, 'book: 't> TryFrom<&'book Book> for Table<'t> {
                                 }),
                         }
                         .bold()
-                    })
-                    .collect();
+                    }));
                 Row::new(cells)
             })
             .collect();
