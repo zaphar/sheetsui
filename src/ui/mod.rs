@@ -156,14 +156,9 @@ impl<'ws> Workspace<'ws> {
     fn handle_edit_input(&mut self, key: event::KeyEvent) -> Result<Option<ExitCode>> {
         if key.kind == KeyEventKind::Press {
             if let KeyCode::Esc = key.code {
-                self.state.modality = Modality::Navigate;
-                self.text_area.set_cursor_line_style(Style::default());
-                self.text_area.set_cursor_style(Style::default());
-                let contents = self.text_area.lines().join("\n");
-                if self.dirty {
-                    self.book.edit_current_cell(contents)?;
-                }
-                return Ok(None);
+                self.exit_edit_mode()?;
+            } else if let KeyCode::Enter  = key.code {
+                self.exit_edit_mode()?;
             }
         }
         // TODO(zaphar): Some specialized editing keybinds
@@ -174,6 +169,18 @@ impl<'ws> Workspace<'ws> {
             self.dirty = true;
         }
         Ok(None)
+    }
+
+    fn exit_edit_mode(&mut self) -> Result<(), anyhow::Error> {
+        self.state.modality = Modality::Navigate;
+        self.text_area.set_cursor_line_style(Style::default());
+        self.text_area.set_cursor_style(Style::default());
+        let contents = self.text_area.lines().join("\n");
+        if self.dirty {
+            self.book.edit_current_cell(contents)?;
+            self.book.evaluate();
+        }
+        Ok(())
     }
 
     fn handle_navigation_input(&mut self, key: event::KeyEvent) -> Result<Option<ExitCode>> {

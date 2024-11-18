@@ -7,7 +7,7 @@ use ironcalc::{
         worksheet::WorksheetDimension,
         Model,
     },
-    export::save_to_xlsx,
+    export::save_xlsx_to_writer,
     import::load_from_xlsx,
 };
 
@@ -51,7 +51,11 @@ impl Book {
 
     /// Save book to an xlsx file.
     pub fn save_to_xlsx(&self, path: &str) -> Result<()> {
-        save_to_xlsx(&self.model, path)?;
+        // TODO(zaphar): Currently overwrites. Should we prompty in this case?
+        let file_path = std::path::Path::new(path);
+        let file = std::fs::File::create(file_path)?;
+        let writer = std::io::BufWriter::new(file);
+        save_xlsx_to_writer(&self.model, writer)?;
         Ok(())
     }
 
