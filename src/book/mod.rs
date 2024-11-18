@@ -131,6 +131,12 @@ impl Book {
         self.model
             .insert_rows(self.current_sheet, row_idx as i32, count as i32)
             .map_err(|e| anyhow!("Unable to insert row(s): {}", e))?;
+        if self.location.row >= row_idx {
+            self.move_to(Address {
+                row: self.location.row + count,
+                col: self.location.col,
+            })?;
+        }
         Ok(())
     }
 
@@ -138,6 +144,12 @@ impl Book {
         self.model
             .insert_columns(self.current_sheet, col_idx as i32, count as i32)
             .map_err(|e| anyhow!("Unable to insert column(s): {}", e))?;
+        if self.location.col >= col_idx {
+            self.move_to(Address {
+                row: self.location.row,
+                col: self.location.col + count,
+            })?;
+        }
         Ok(())
     }
 
@@ -206,8 +218,9 @@ impl Book {
 
 impl Default for Book {
     fn default() -> Self {
-        let mut book = Book::new(Model::new_empty("default_name", "en", "America/New_York").unwrap());
-        book.update_entry(&Address{row: 1, col: 1}, "").unwrap();
+        let mut book =
+            Book::new(Model::new_empty("default_name", "en", "America/New_York").unwrap());
+        book.update_entry(&Address { row: 1, col: 1 }, "").unwrap();
         book
     }
 }

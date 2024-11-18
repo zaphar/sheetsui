@@ -6,7 +6,6 @@ use crate::book::Book;
 
 use anyhow::Result;
 use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
-use ironcalc::base::worksheet::WorksheetDimension;
 use ratatui::{
     self,
     layout::{Constraint, Flex, Layout},
@@ -81,14 +80,13 @@ impl<'ws> Workspace<'ws> {
         } else {
             Book::default()
         };
-        //book.move_to(Address { row: 0, col: 0 })?;
         Ok(Workspace::new(book, path.clone()))
     }
 
     pub fn move_down(&mut self) -> Result<()> {
         let mut loc = self.book.location.clone();
-        let WorksheetDimension { min_row: _, max_row, min_column: _, max_column: _ } = self.book.get_dimensions()?;
-        if loc.row <= max_row as usize {
+        let (row_count, _) = self.book.get_size()?;
+        if loc.row < row_count {
             loc.row += 1;
             self.book.move_to(loc)?;
         }
@@ -97,8 +95,7 @@ impl<'ws> Workspace<'ws> {
 
     pub fn move_up(&mut self) -> Result<()> {
         let mut loc = self.book.location.clone();
-        let WorksheetDimension { min_row, max_row: _, min_column: _, max_column: _ } = self.book.get_dimensions()?;
-        if loc.row > min_row as usize {
+        if loc.row > 1 {
             loc.row -= 1;
             self.book.move_to(loc)?;
         }
@@ -107,8 +104,7 @@ impl<'ws> Workspace<'ws> {
 
     pub fn move_left(&mut self) -> Result<()> {
         let mut loc = self.book.location.clone();
-        let WorksheetDimension { min_row: _, max_row: _, min_column, max_column: _ } = self.book.get_dimensions()?;
-        if loc.col > min_column as usize {
+        if loc.col > 1 {
             loc.col -= 1;
             self.book.move_to(loc)?;
         }
@@ -117,8 +113,8 @@ impl<'ws> Workspace<'ws> {
 
     pub fn move_right(&mut self) -> Result<()> {
         let mut loc = self.book.location.clone();
-        let WorksheetDimension { min_row: _, max_row: _, min_column: _, max_column} = self.book.get_dimensions()?;
-        if loc.col < max_column as usize {
+        let (_, col_count) = self.book.get_size()?;
+        if loc.col < col_count {
             loc.col += 1;
             self.book.move_to(loc)?;
         }
@@ -206,7 +202,7 @@ impl<'ws> Workspace<'ws> {
                     }
                     self.handle_movement_change();
                 }
-                KeyCode::Char('c') if key.modifiers == KeyModifiers::CONTROL => {
+                KeyCode::Char('t') if key.modifiers == KeyModifiers::CONTROL => {
                     let (_, col_count) = self.book.get_size()?;
                     self.book.update_entry(&Address {row: 1, col: col_count+1 }, "")?;
                 }
