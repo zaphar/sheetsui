@@ -263,6 +263,7 @@ fn reset_text_area<'a>(content: String) -> TextArea<'a> {
     let mut text_area = TextArea::from(content.lines());
     text_area.set_cursor_line_style(Style::default());
     text_area.set_cursor_style(Style::default());
+    text_area.set_block(Block::bordered());
     text_area
 }
 
@@ -290,7 +291,7 @@ impl<'widget, 'ws: 'widget> Widget for &'widget mut Workspace<'ws> {
                 .right_aligned(),
             );
         let [edit_rect, table_rect, info_rect] = Layout::vertical(&[
-            Constraint::Fill(1),
+            Constraint::Fill(4),
             Constraint::Fill(30),
             Constraint::Fill(9),
         ])
@@ -299,7 +300,11 @@ impl<'widget, 'ws: 'widget> Widget for &'widget mut Workspace<'ws> {
         .flex(Flex::Legacy)
         .areas(area.clone());
         outer_block.render(area, buf);
+
+        // Input widget display
         self.text_area.render(edit_rect, buf);
+
+        // Table widget display
         let table_block = Block::bordered();
         let table_inner: Table = TryFrom::try_from(&self.book).expect("");
         let table = table_inner.block(table_block);
@@ -310,7 +315,8 @@ impl<'widget, 'ws: 'widget> Widget for &'widget mut Workspace<'ws> {
         self.state.table_state.select_column(Some(col));
         use ratatui::widgets::StatefulWidget;
         StatefulWidget::render(table, table_rect, buf, &mut self.state.table_state);
-        //table.render_stateful(table_rect, buf);
+
+        // Help panel widget display
         let info_para = self.render_help_text();
         info_para.render(info_rect, buf);
     }
