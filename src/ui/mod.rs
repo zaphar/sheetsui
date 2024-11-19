@@ -59,6 +59,7 @@ pub struct Workspace<'ws> {
     state: AppState,
     text_area: TextArea<'ws>,
     dirty: bool,
+    show_help: bool,
 }
 
 impl<'ws> Workspace<'ws> {
@@ -69,6 +70,7 @@ impl<'ws> Workspace<'ws> {
             state: AppState::default(),
             text_area: reset_text_area("".to_owned()),
             dirty: false,
+            show_help: false,
         };
         ws.handle_movement_change();
         ws
@@ -155,10 +157,15 @@ impl<'ws> Workspace<'ws> {
 
     fn handle_edit_input(&mut self, key: event::KeyEvent) -> Result<Option<ExitCode>> {
         if key.kind == KeyEventKind::Press {
-            if let KeyCode::Esc = key.code {
-                self.exit_edit_mode()?;
-            } else if let KeyCode::Enter  = key.code {
-                self.exit_edit_mode()?;
+            match key.code {
+                KeyCode::Char('h') if key.modifiers == KeyModifiers::CONTROL => {
+                    self.show_help = !self.show_help;
+                }
+                KeyCode::Esc => self.exit_edit_mode()?,
+                KeyCode::Enter  => self.exit_edit_mode()?,
+                _ => {
+                    // NOOP
+                }
             }
         }
         // TODO(zaphar): Some specialized editing keybinds
@@ -194,6 +201,9 @@ impl<'ws> Workspace<'ws> {
                         .set_cursor_style(Style::default().add_modifier(Modifier::SLOW_BLINK));
                     self.text_area.move_cursor(CursorMove::Bottom);
                     self.text_area.move_cursor(CursorMove::End);
+                }
+                KeyCode::Char('h') if key.modifiers == KeyModifiers::CONTROL => {
+                    self.show_help = !self.show_help;
                 }
                 KeyCode::Char('s') if key.modifiers == KeyModifiers::CONTROL => {
                     self.save_file()?;
@@ -290,15 +300,33 @@ impl<'widget, 'ws: 'widget> Widget for &'widget mut Workspace<'ws> {
                 ))
                 .right_aligned(),
             );
-        let [edit_rect, table_rect, info_rect] = Layout::vertical(&[
-            Constraint::Fill(4),
-            Constraint::Fill(30),
-            Constraint::Fill(9),
-        ])
-        .vertical_margin(2)
-        .horizontal_margin(2)
-        .flex(Flex::Legacy)
-        .areas(area.clone());
+        let [edit_rect, table_rect] = if self.show_help {
+            let [edit_rect, table_rect, info_rect] = Layout::vertical(&[
+                Constraint::Fill(4),
+                Constraint::Fill(30),
+                Constraint::Fill(9),
+            ])
+            .vertical_margin(2)
+            .horizontal_margin(2)
+            .flex(Flex::Legacy)
+            .areas(area.clone());
+        
+            // Help panel widget display
+            let info_para = self.render_help_text();
+            info_para.render(info_rect, buf);
+            [edit_rect, table_rect]
+        } else {
+            let [edit_rect, table_rect] = Layout::vertical(&[
+                Constraint::Fill(4),
+                Constraint::Fill(30),
+            ])
+            .vertical_margin(2)
+            .horizontal_margin(2)
+            .flex(Flex::Legacy)
+            .areas(area.clone());
+            [edit_rect, table_rect]
+        };
+        
         outer_block.render(area, buf);
 
         // Input widget display
@@ -316,9 +344,6 @@ impl<'widget, 'ws: 'widget> Widget for &'widget mut Workspace<'ws> {
         use ratatui::widgets::StatefulWidget;
         StatefulWidget::render(table, table_rect, buf, &mut self.state.table_state);
 
-        // Help panel widget display
-        let info_para = self.render_help_text();
-        info_para.render(info_rect, buf);
     }
 }
 
