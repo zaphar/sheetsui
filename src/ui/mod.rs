@@ -7,12 +7,7 @@ use crate::book::Book;
 use anyhow::Result;
 use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
 use ratatui::{
-    self,
-    layout::{Constraint, Flex, Layout},
-    style::{Color, Modifier, Style, Stylize},
-    text::{Line, Text},
-    widgets::{Block, Cell, Paragraph, Row, Table, TableState, Widget},
-    Frame,
+    self, buffer::Buffer, layout::{Constraint, Flex, Layout, Rect}, style::{Color, Modifier, Style, Stylize}, text::{Line, Text}, widgets::{Block, Cell, Paragraph, Row, Table, TableState, Widget}, Frame
 };
 use tui_prompts::{State, Status, TextPrompt, TextState};
 use tui_textarea::{CursorMove, TextArea};
@@ -335,6 +330,52 @@ impl<'ws> Workspace<'ws> {
             .save_to_xlsx(&self.name.to_string_lossy().to_string())?;
         Ok(())
     }
+
+    fn get_render_parts(&mut self, area: Rect) -> Vec<(Rect, Box<dyn Fn(Rect, &mut Buffer, &mut Self)>)> {
+        use ratatui::widgets::StatefulWidget;
+        let mut cs = vec![
+                Constraint::Fill(4),
+                Constraint::Fill(30),
+        ];
+        let Address { row, col } = self.book.location;
+        let mut rs: Vec<Box<dyn Fn(Rect, &mut Buffer, &mut Self)>> = vec![
+            Box::new(|rect: Rect, buf: &mut Buffer, ws: &mut Self| ws.text_area.render(rect, buf)),
+            Box::new(move |rect: Rect, buf: &mut Buffer, ws: &mut Self| {
+                // Table widget display
+                let table_block = Block::bordered();
+                let table_inner: Table = TryFrom::try_from(&ws.book).expect("");
+                let table = table_inner.block(table_block);
+                // https://docs.rs/ratatui/latest/ratatui/widgets/struct.TableState.html
+                // TODO(zaphar): Apparently scrolling by columns doesn't work?
+                ws.state.table_state.select_cell(Some((row, col)));
+                ws.state.table_state.select_column(Some(col));
+                StatefulWidget::render(table, rect, buf, &mut ws.state.table_state);
+            }),
+        ];
+
+        if self.show_help {
+            cs.push(Constraint::Fill(9));
+            rs.push(Box::new(|rect: Rect, buf: &mut Buffer, ws: &mut Self| {
+                let info_para = ws.render_help_text();
+                info_para.render(rect, buf);
+            }));
+        }
+        if self.state.modality == Modality::Command {
+            cs.push(Constraint::Max(1));
+            rs.push(Box::new(|rect: Rect, buf: &mut Buffer, ws: &mut Self| StatefulWidget::render(
+                    TextPrompt::from("Command"),
+                    rect,
+                    buf,
+                    &mut ws.state.command_state)
+                ));
+        }
+        let rects: Vec<Rect> = Vec::from(Layout::vertical(cs)
+            .vertical_margin(2)
+            .horizontal_margin(2)
+            .flex(Flex::Legacy)
+            .split(area.clone()).as_ref());
+        rects.into_iter().zip(rs.into_iter()).map(|(rect, f)| (rect, f)).collect()
+    }
 }
 
 fn reset_text_area<'a>(content: String) -> TextArea<'a> {
@@ -346,11 +387,10 @@ fn reset_text_area<'a>(content: String) -> TextArea<'a> {
 }
 
 impl<'widget, 'ws: 'widget> Widget for &'widget mut Workspace<'ws> {
-    fn render(self, area: ratatui::prelude::Rect, buf: &mut ratatui::prelude::Buffer)
+    fn render(self, area: Rect, buf: &mut ratatui::prelude::Buffer)
     where
         Self: Sized,
     {
-        use ratatui::widgets::StatefulWidget;
         let outer_block = Block::bordered()
             .title(Line::from(
                 self.name
@@ -370,60 +410,13 @@ impl<'widget, 'ws: 'widget> Widget for &'widget mut Workspace<'ws> {
                 ))
                 .right_aligned(),
             );
-        let [edit_rect, table_rect] = if self.show_help || self.state.modality == Modality::Command
-        {
-            let [edit_rect, table_rect, info_rect] = Layout::vertical(&[
-                Constraint::Fill(4),
-                Constraint::Fill(30),
-                if self.state.modality == Modality::Command {
-                    Constraint::Max(1)
-                } else {
-                    Constraint::Fill(9)
-                },
-            ])
-            .vertical_margin(2)
-            .horizontal_margin(2)
-            .flex(Flex::Legacy)
-            .areas(area.clone());
-
-            // Help panel widget display
-            if self.state.modality == Modality::Command {
-                StatefulWidget::render(
-                    TextPrompt::from("Command"),
-                    info_rect,
-                    buf,
-                    &mut self.state.command_state,
-                );
-            } else if self.show_help {
-                let info_para = self.render_help_text();
-                info_para.render(info_rect, buf);
-            }
-            [edit_rect, table_rect]
-        } else {
-            let [edit_rect, table_rect] =
-                Layout::vertical(&[Constraint::Fill(4), Constraint::Fill(30)])
-                    .vertical_margin(2)
-                    .horizontal_margin(2)
-                    .flex(Flex::Legacy)
-                    .areas(area.clone());
-            [edit_rect, table_rect]
-        };
+        
+        for (rect, f) in self.get_render_parts(area.clone()) {
+           f(rect, buf, self); 
+        }
 
         outer_block.render(area, buf);
 
-        // Input widget display
-        self.text_area.render(edit_rect, buf);
-
-        // Table widget display
-        let table_block = Block::bordered();
-        let table_inner: Table = TryFrom::try_from(&self.book).expect("");
-        let table = table_inner.block(table_block);
-        // https://docs.rs/ratatui/latest/ratatui/widgets/struct.TableState.html
-        let Address { row, col } = self.book.location;
-        // TODO(zaphar): Apparently scrolling by columns doesn't work?
-        self.state.table_state.select_cell(Some((row, col)));
-        self.state.table_state.select_column(Some(col));
-        StatefulWidget::render(table, table_rect, buf, &mut self.state.table_state);
     }
 }
 
