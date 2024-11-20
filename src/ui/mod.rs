@@ -14,6 +14,7 @@ use ratatui::{
     widgets::{Block, Cell, Paragraph, Row, Table, TableState, Widget},
     Frame,
 };
+use tui_prompts::{State, Status, TextPrompt, TextState};
 use tui_textarea::{CursorMove, TextArea};
 
 #[derive(Default, Debug, PartialEq)]
@@ -21,13 +22,15 @@ pub enum Modality {
     #[default]
     Navigate,
     CellEdit,
+    Command,
     // TODO(zaphar): Command Mode?
 }
 
 #[derive(Default, Debug)]
-pub struct AppState {
+pub struct AppState<'ws> {
     pub modality: Modality,
     pub table_state: TableState,
+    pub command_state: TextState<'ws>,
 }
 
 // TODO(jwall): This should probably move to a different module.
@@ -56,7 +59,7 @@ impl Default for Address {
 pub struct Workspace<'ws> {
     name: PathBuf,
     book: Book,
-    state: AppState,
+    state: AppState<'ws>,
     text_area: TextArea<'ws>,
     dirty: bool,
     show_help: bool,
@@ -128,6 +131,7 @@ impl<'ws> Workspace<'ws> {
             let result = match self.state.modality {
                 Modality::Navigate => self.handle_navigation_input(key)?,
                 Modality::CellEdit => self.handle_edit_input(key)?,
+                Modality::Command => self.handle_command_input(key)?,
             };
             return Ok(result);
         }
@@ -151,8 +155,25 @@ impl<'ws> Workspace<'ws> {
                 "* ESC: Exit edit mode".into(),
                 "Otherwise edit as normal".into(),
             ]),
+            Modality::Command => Text::from(vec![
+                "Command Mode:".into(),
+                "* ESC: Exit command mode".into(),
+            ]),
         })
         .block(info_block)
+    }
+
+    fn handle_command_input(&mut self, key: event::KeyEvent) -> Result<Option<ExitCode>> {
+        if key.kind == KeyEventKind::Press {
+            match key.code {
+                KeyCode::Esc | KeyCode::Enter => self.exit_command_mode()?,
+                _ => {
+                    // NOOP
+                }
+            }
+        }
+        self.state.command_state.handle_key_event(key);
+        Ok(None)
     }
 
     fn handle_edit_input(&mut self, key: event::KeyEvent) -> Result<Option<ExitCode>> {
@@ -161,8 +182,7 @@ impl<'ws> Workspace<'ws> {
                 KeyCode::Char('h') if key.modifiers == KeyModifiers::CONTROL => {
                     self.show_help = !self.show_help;
                 }
-                KeyCode::Esc => self.exit_edit_mode()?,
-                KeyCode::Enter  => self.exit_edit_mode()?,
+                KeyCode::Esc | KeyCode::Enter => self.exit_edit_mode()?,
                 _ => {
                     // NOOP
                 }
@@ -178,29 +198,21 @@ impl<'ws> Workspace<'ws> {
         Ok(None)
     }
 
-    fn exit_edit_mode(&mut self) -> Result<(), anyhow::Error> {
-        self.state.modality = Modality::Navigate;
-        self.text_area.set_cursor_line_style(Style::default());
-        self.text_area.set_cursor_style(Style::default());
-        let contents = self.text_area.lines().join("\n");
-        if self.dirty {
-            self.book.edit_current_cell(contents)?;
-            self.book.evaluate();
+    fn handle_command(&mut self, cmd: String) -> Result<bool> {
+        if cmd.is_empty() {
+            return Ok(true);
         }
-        Ok(())
+        Ok(false)
     }
 
     fn handle_navigation_input(&mut self, key: event::KeyEvent) -> Result<Option<ExitCode>> {
         if key.kind == KeyEventKind::Press {
             match key.code {
                 KeyCode::Char('e') => {
-                    self.state.modality = Modality::CellEdit;
-                    self.text_area
-                        .set_cursor_line_style(Style::default().add_modifier(Modifier::UNDERLINED));
-                    self.text_area
-                        .set_cursor_style(Style::default().add_modifier(Modifier::SLOW_BLINK));
-                    self.text_area.move_cursor(CursorMove::Bottom);
-                    self.text_area.move_cursor(CursorMove::End);
+                    self.enter_edit_mode();
+                }
+                KeyCode::Char(':') => {
+                    self.enter_command_mode();
                 }
                 KeyCode::Char('h') if key.modifiers == KeyModifiers::CONTROL => {
                     self.show_help = !self.show_help;
@@ -210,7 +222,13 @@ impl<'ws> Workspace<'ws> {
                 }
                 KeyCode::Char('r') if key.modifiers == KeyModifiers::CONTROL => {
                     let (row_count, _) = self.book.get_size()?;
-                    self.book.update_entry(&Address {row: row_count+1, col: 1 }, "")?;
+                    self.book.update_entry(
+                        &Address {
+                            row: row_count + 1,
+                            col: 1,
+                        },
+                        "",
+                    )?;
                     let (row, _) = self.book.get_size()?;
                     let mut loc = self.book.location.clone();
                     if loc.row < row as usize {
@@ -221,7 +239,13 @@ impl<'ws> Workspace<'ws> {
                 }
                 KeyCode::Char('t') if key.modifiers == KeyModifiers::CONTROL => {
                     let (_, col_count) = self.book.get_size()?;
-                    self.book.update_entry(&Address {row: 1, col: col_count+1 }, "")?;
+                    self.book.update_entry(
+                        &Address {
+                            row: 1,
+                            col: col_count + 1,
+                        },
+                        "",
+                    )?;
                 }
                 KeyCode::Char('q') => {
                     return Ok(Some(ExitCode::SUCCESS));
@@ -255,6 +279,49 @@ impl<'ws> Workspace<'ws> {
         return Ok(None);
     }
 
+    fn enter_navigation_mode(&mut self) {
+        self.state.modality = Modality::Navigate;
+    }
+
+    fn enter_command_mode(&mut self) {
+        self.state.modality = Modality::Command;
+        self.state.command_state.truncate();
+        *self.state.command_state.status_mut() = Status::Pending;
+        self.state.command_state.focus();
+    }
+
+    fn enter_edit_mode(&mut self) {
+        self.state.modality = Modality::CellEdit;
+        self.text_area
+            .set_cursor_line_style(Style::default().add_modifier(Modifier::UNDERLINED));
+        self.text_area
+            .set_cursor_style(Style::default().add_modifier(Modifier::SLOW_BLINK));
+        self.text_area.move_cursor(CursorMove::Bottom);
+        self.text_area.move_cursor(CursorMove::End);
+    }
+
+    fn exit_command_mode(&mut self) -> Result<()> {
+        let cmd = self.state.command_state.value().to_owned();
+        self.state.command_state.blur();
+        *self.state.command_state.status_mut() = Status::Done;
+        self.handle_command(cmd)?;
+        self.enter_navigation_mode();
+        Ok(())
+    }
+
+    fn exit_edit_mode(&mut self) -> Result<()> {
+        self.text_area.set_cursor_line_style(Style::default());
+        self.text_area.set_cursor_style(Style::default());
+        let contents = self.text_area.lines().join("\n");
+        if self.dirty {
+            self.book.edit_current_cell(contents)?;
+            self.book.evaluate();
+            self.dirty = false;
+        }
+        self.enter_navigation_mode();
+        Ok(())
+    }
+
     fn handle_movement_change(&mut self) {
         let contents = self
             .book
@@ -264,7 +331,8 @@ impl<'ws> Workspace<'ws> {
     }
 
     fn save_file(&self) -> Result<()> {
-        self.book.save_to_xlsx(&self.name.to_string_lossy().to_string())?;
+        self.book
+            .save_to_xlsx(&self.name.to_string_lossy().to_string())?;
         Ok(())
     }
 }
@@ -282,6 +350,7 @@ impl<'widget, 'ws: 'widget> Widget for &'widget mut Workspace<'ws> {
     where
         Self: Sized,
     {
+        use ratatui::widgets::StatefulWidget;
         let outer_block = Block::bordered()
             .title(Line::from(
                 self.name
@@ -292,6 +361,7 @@ impl<'widget, 'ws: 'widget> Widget for &'widget mut Workspace<'ws> {
             .title_bottom(match &self.state.modality {
                 Modality::Navigate => "navigate",
                 Modality::CellEdit => "edit",
+                Modality::Command => "command",
             })
             .title_bottom(
                 Line::from(format!(
@@ -300,33 +370,45 @@ impl<'widget, 'ws: 'widget> Widget for &'widget mut Workspace<'ws> {
                 ))
                 .right_aligned(),
             );
-        let [edit_rect, table_rect] = if self.show_help {
+        let [edit_rect, table_rect] = if self.show_help || self.state.modality == Modality::Command
+        {
             let [edit_rect, table_rect, info_rect] = Layout::vertical(&[
                 Constraint::Fill(4),
                 Constraint::Fill(30),
-                Constraint::Fill(9),
+                if self.state.modality == Modality::Command {
+                    Constraint::Max(1)
+                } else {
+                    Constraint::Fill(9)
+                },
             ])
             .vertical_margin(2)
             .horizontal_margin(2)
             .flex(Flex::Legacy)
             .areas(area.clone());
-        
+
             // Help panel widget display
-            let info_para = self.render_help_text();
-            info_para.render(info_rect, buf);
+            if self.state.modality == Modality::Command {
+                StatefulWidget::render(
+                    TextPrompt::from("Command"),
+                    info_rect,
+                    buf,
+                    &mut self.state.command_state,
+                );
+            } else if self.show_help {
+                let info_para = self.render_help_text();
+                info_para.render(info_rect, buf);
+            }
             [edit_rect, table_rect]
         } else {
-            let [edit_rect, table_rect] = Layout::vertical(&[
-                Constraint::Fill(4),
-                Constraint::Fill(30),
-            ])
-            .vertical_margin(2)
-            .horizontal_margin(2)
-            .flex(Flex::Legacy)
-            .areas(area.clone());
+            let [edit_rect, table_rect] =
+                Layout::vertical(&[Constraint::Fill(4), Constraint::Fill(30)])
+                    .vertical_margin(2)
+                    .horizontal_margin(2)
+                    .flex(Flex::Legacy)
+                    .areas(area.clone());
             [edit_rect, table_rect]
         };
-        
+
         outer_block.render(area, buf);
 
         // Input widget display
@@ -341,9 +423,7 @@ impl<'widget, 'ws: 'widget> Widget for &'widget mut Workspace<'ws> {
         // TODO(zaphar): Apparently scrolling by columns doesn't work?
         self.state.table_state.select_cell(Some((row, col)));
         self.state.table_state.select_column(Some(col));
-        use ratatui::widgets::StatefulWidget;
         StatefulWidget::render(table, table_rect, buf, &mut self.state.table_state);
-
     }
 }
 
@@ -361,28 +441,26 @@ impl<'t, 'book: 't> TryFrom<&'book Book> for Table<'t> {
             .into_iter()
             .map(|ri| {
                 let mut cells = vec![Cell::new(Text::from(ri.to_string()))];
-                cells.extend((1..=col_count)
-                    .into_iter()
-                    .map(|ci| {
-                        // TODO(zaphar): Is this safe?
-                        let content = value.get_cell_addr_rendered(ri, ci).unwrap();
-                        let cell = Cell::new(Text::raw(content));
-                        match (value.location.row == ri, value.location.col == ci) {
-                            (true, true) => cell.fg(Color::White).underlined(),
-                            _ => cell
-                                .bg(if ri % 2 == 0 {
-                                    Color::Rgb(57, 61, 71)
-                                } else {
-                                    Color::Rgb(165, 169, 160)
-                                })
-                                .fg(if ri % 2 == 0 {
-                                    Color::White
-                                } else {
-                                    Color::Rgb(31, 32, 34)
-                                }),
-                        }
-                        .bold()
-                    }));
+                cells.extend((1..=col_count).into_iter().map(|ci| {
+                    // TODO(zaphar): Is this safe?
+                    let content = value.get_cell_addr_rendered(ri, ci).unwrap();
+                    let cell = Cell::new(Text::raw(content));
+                    match (value.location.row == ri, value.location.col == ci) {
+                        (true, true) => cell.fg(Color::White).underlined(),
+                        _ => cell
+                            .bg(if ri % 2 == 0 {
+                                Color::Rgb(57, 61, 71)
+                            } else {
+                                Color::Rgb(165, 169, 160)
+                            })
+                            .fg(if ri % 2 == 0 {
+                                Color::White
+                            } else {
+                                Color::Rgb(31, 32, 34)
+                            }),
+                    }
+                    .bold()
+                }));
                 Row::new(cells)
             })
             .collect();
