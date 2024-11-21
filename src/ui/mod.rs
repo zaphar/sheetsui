@@ -203,7 +203,7 @@ impl<'ws> Workspace<'ws> {
     fn handle_navigation_input(&mut self, key: event::KeyEvent) -> Result<Option<ExitCode>> {
         if key.kind == KeyEventKind::Press {
             match key.code {
-                KeyCode::Char('e') => {
+                KeyCode::Char('e') | KeyCode::Char('i') => {
                     self.enter_edit_mode();
                 }
                 KeyCode::Char(':') => {
