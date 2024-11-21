@@ -12,6 +12,10 @@ use ratatui::{
 use tui_prompts::{State, Status, TextPrompt, TextState};
 use tui_textarea::{CursorMove, TextArea};
 
+mod cmd;
+#[cfg(test)]
+mod test;
+
 #[derive(Default, Debug, PartialEq)]
 pub enum Modality {
     #[default]
@@ -196,6 +200,14 @@ impl<'ws> Workspace<'ws> {
     fn handle_command(&mut self, cmd: String) -> Result<bool> {
         if cmd.is_empty() {
             return Ok(true);
+        }
+        match cmd.as_str() {
+            "w" | "write" => {
+                self.save_file()?;
+            },
+            _ => {
+                // noop?
+            }
         }
         Ok(false)
     }

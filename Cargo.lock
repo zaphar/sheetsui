@@ -1399,6 +1399,7 @@ dependencies = [
  "futures",
  "ironcalc",
  "ratatui",
+ "slice-cursor",
  "thiserror",
  "tui-prompts",
  "tui-textarea",
@@ -1454,6 +1455,11 @@ checksum = "8f92a496fb766b417c996b9c5e57daf2f7ad3b0bebe1ccfca4856390e3d3bb67"
 dependencies = [
  "autocfg",
 ]
+
+[[package]]
+name = "slice-cursor"
+version = "0.1.0"
+source = "git+https://dev.zaphar.net/zaphar/slice-cursor-rs.git#562a78eb3f06ac2a9729af7aa211a070f8ed9c39"
 
 [[package]]
 name = "smallvec"
