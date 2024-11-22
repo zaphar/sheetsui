@@ -163,10 +163,10 @@ impl<'ws> Workspace<'ws> {
     }
 
     /// Handle input in our ui loop.
-    pub fn handle_input(&mut self) -> Result<Option<ExitCode>> {
+    pub fn handle_input(&mut self, evt: Event) -> Result<Option<ExitCode>> {
         // TODO(jwall): We probably want to separate this out into
         // a pure function so we can script various testing scenarios.
-        if let Event::Key(key) = event::read()? {
+        if let Event::Key(key) = evt {
             let result = match self.state.modality() {
                 Modality::Navigate => self.handle_navigation_input(key)?,
                 Modality::CellEdit => self.handle_edit_input(key)?,

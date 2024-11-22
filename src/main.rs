@@ -1,6 +1,7 @@
 use std::{path::PathBuf, process::ExitCode};
 
 use clap::Parser;
+use crossterm::event;
 use ratatui;
 use ui::Workspace;
 
@@ -23,7 +24,7 @@ fn run(terminal: &mut ratatui::DefaultTerminal, args: Args) -> anyhow::Result<Ex
 
     loop {
         terminal.draw(|frame| ui::render::draw(frame, &mut ws))?;
-        if let Some(code) = ws.handle_input()? {
+        if let Some(code) = ws.handle_input(event::read()?)? {
             return Ok(code);
         }
     }
