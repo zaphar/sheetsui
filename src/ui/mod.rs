@@ -5,7 +5,7 @@ use std::{path::PathBuf, process::ExitCode};
 use crate::book::Book;
 
 use anyhow::Result;
-use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
+use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use ratatui::{
     self,
     buffer::Buffer,
@@ -15,6 +15,7 @@ use ratatui::{
     widgets::{Block, Cell, Paragraph, Row, Table, TableState, Widget},
     Frame,
 };
+use tui_popup::Popup;
 use tui_prompts::{State, Status, TextPrompt, TextState};
 use tui_textarea::{CursorMove, TextArea};
 
@@ -24,20 +25,42 @@ mod test;
 
 use cmd::Cmd;
 
-#[derive(Default, Debug, PartialEq)]
+#[derive(Default, Debug, PartialEq, Clone)]
 pub enum Modality {
     #[default]
     Navigate,
     CellEdit,
     Command,
     // TODO(zaphar): Command Mode?
+    Dialog,
 }
 
-#[derive(Default, Debug)]
+#[derive(Debug)]
 pub struct AppState<'ws> {
-    pub modality: Modality,
+    pub modality_stack: Vec<Modality>,
     pub table_state: TableState,
     pub command_state: TextState<'ws>,
+}
+
+impl<'ws> Default for AppState<'ws> {
+    fn default() -> Self {
+        AppState {
+            modality_stack: vec![Modality::default()],
+            table_state: Default::default(),
+            command_state: Default::default()
+        }
+    }
+}
+impl<'ws> AppState<'ws> {
+    pub fn modality(&'ws self) -> &'ws Modality {
+        self.modality_stack.last().unwrap()
+    }
+
+    pub fn pop_modality(&mut self) {
+        if self.modality_stack.len() > 1 {
+            self.modality_stack.pop();
+        }
+    }
 }
 
 // TODO(jwall): This should probably move to a different module.
@@ -70,6 +93,7 @@ pub struct Workspace<'ws> {
     text_area: TextArea<'ws>,
     dirty: bool,
     show_help: bool,
+    popup: String
 }
 
 impl<'ws> Workspace<'ws> {
@@ -81,6 +105,7 @@ impl<'ws> Workspace<'ws> {
             text_area: reset_text_area("".to_owned()),
             dirty: false,
             show_help: false,
+            popup: String::new(),
         };
         ws.handle_movement_change();
         ws
@@ -140,10 +165,11 @@ impl<'ws> Workspace<'ws> {
 
     pub fn handle_input(&mut self) -> Result<Option<ExitCode>> {
         if let Event::Key(key) = event::read()? {
-            let result = match self.state.modality {
+            let result = match self.state.modality() {
                 Modality::Navigate => self.handle_navigation_input(key)?,
                 Modality::CellEdit => self.handle_edit_input(key)?,
                 Modality::Command => self.handle_command_input(key)?,
+                Modality::Dialog => self.handle_dialog_input(key)?,
             };
             return Ok(result);
         }
@@ -152,7 +178,7 @@ impl<'ws> Workspace<'ws> {
 
     fn render_help_text(&self) -> impl Widget {
         let info_block = Block::bordered().title("Help");
-        Paragraph::new(match self.state.modality {
+        Paragraph::new(match self.state.modality() {
             Modality::Navigate => Text::from(vec![
                 "Navigate Mode:".into(),
                 "* e: Enter edit mode for current cell".into(),
@@ -171,6 +197,10 @@ impl<'ws> Workspace<'ws> {
                 "Command Mode:".into(),
                 "* ESC: Exit command mode".into(),
             ]),
+            Modality::Dialog => Text::from(vec![
+                "Dialog Mode:".into(),
+                "* ESC: Exit dialog".into(),
+            ]),
         })
         .block(info_block)
     }
@@ -185,6 +215,18 @@ impl<'ws> Workspace<'ws> {
             }
         }
         self.state.command_state.handle_key_event(key);
+        Ok(None)
+    }
+
+    fn handle_dialog_input(&mut self, key: event::KeyEvent) -> Result<Option<ExitCode>> {
+        if key.kind == KeyEventKind::Press {
+            match key.code {
+                KeyCode::Esc | KeyCode::Enter | KeyCode::Char('q') => self.exit_dialog_mode()?,
+                _ => {
+                    // NOOP
+                }
+            }
+        }
         Ok(None)
     }
 
@@ -220,7 +262,7 @@ impl<'ws> Workspace<'ws> {
                 Ok(true)
             }
             Ok(Some(Cmd::Help(_maybe_topic))) => {
-                // TODO(jeremy): Modal dialogs?
+                self.enter_dialog_mode("TODO help topic".to_owned());
                 Ok(true)
             }
             Ok(Some(Cmd::Write(maybe_path))) => {
@@ -245,9 +287,12 @@ impl<'ws> Workspace<'ws> {
                 // TODO(zaphar): We probably need to do better than this
                 std::process::exit(0);
             },
-            Ok(None) => Ok(false),
-            Err(_msg) => {
-                // TODO(jeremy): Modal dialogs?
+            Ok(None) => {
+                self.enter_dialog_mode(format!("Unrecognized commmand {}", cmd_text));
+                Ok(false)
+            },
+            Err(msg) => {
+                self.enter_dialog_mode(msg.to_owned());
                 Ok(false)
             }
         }
@@ -328,18 +373,23 @@ impl<'ws> Workspace<'ws> {
     }
 
     fn enter_navigation_mode(&mut self) {
-        self.state.modality = Modality::Navigate;
+        self.state.modality_stack.push(Modality::Navigate);
     }
 
     fn enter_command_mode(&mut self) {
-        self.state.modality = Modality::Command;
+        self.state.modality_stack.push(Modality::Command);
         self.state.command_state.truncate();
         *self.state.command_state.status_mut() = Status::Pending;
         self.state.command_state.focus();
     }
 
+    fn enter_dialog_mode(&mut self, msg: String) {
+        self.popup = msg;
+        self.state.modality_stack.push(Modality::Dialog);
+    }
+
     fn enter_edit_mode(&mut self) {
-        self.state.modality = Modality::CellEdit;
+        self.state.modality_stack.push(Modality::CellEdit);
         self.text_area
             .set_cursor_line_style(Style::default().add_modifier(Modifier::UNDERLINED));
         self.text_area
@@ -352,11 +402,16 @@ impl<'ws> Workspace<'ws> {
         let cmd = self.state.command_state.value().to_owned();
         self.state.command_state.blur();
         *self.state.command_state.status_mut() = Status::Done;
+        self.state.pop_modality();
         self.handle_command(cmd)?;
-        self.enter_navigation_mode();
         Ok(())
     }
 
+    fn exit_dialog_mode(&mut self) -> Result<()> {
+        self.state.pop_modality();
+        Ok(())
+    }
+    
     fn exit_edit_mode(&mut self) -> Result<()> {
         self.text_area.set_cursor_line_style(Style::default());
         self.text_area.set_cursor_style(Style::default());
@@ -418,7 +473,7 @@ impl<'ws> Workspace<'ws> {
                 info_para.render(rect, buf);
             }));
         }
-        if self.state.modality == Modality::Command {
+        if self.state.modality() == &Modality::Command {
             cs.push(Constraint::Max(1));
             rs.push(Box::new(|rect: Rect, buf: &mut Buffer, ws: &mut Self| {
                 StatefulWidget::render(
@@ -474,10 +529,11 @@ impl<'widget, 'ws: 'widget> Widget for &'widget mut Workspace<'ws> {
                     .map(|p| p.to_string_lossy().to_string())
                     .unwrap_or_else(|| String::from("Unknown")),
             ))
-            .title_bottom(match &self.state.modality {
+            .title_bottom(match self.state.modality() {
                 Modality::Navigate => "navigate",
                 Modality::CellEdit => "edit",
                 Modality::Command => "command",
+                Modality::Dialog => "",
             })
             .title_bottom(
                 Line::from(format!(
@@ -492,6 +548,11 @@ impl<'widget, 'ws: 'widget> Widget for &'widget mut Workspace<'ws> {
         }
 
         outer_block.render(area, buf);
+        
+        if self.state.modality() == &Modality::Dialog {
+            let popup = Popup::new(Text::from(self.popup.clone()));
+            popup.render(area, buf);
+        }
     }
 }
 
