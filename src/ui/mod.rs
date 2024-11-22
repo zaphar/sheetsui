@@ -7,7 +7,13 @@ use crate::book::Book;
 use anyhow::Result;
 use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
 use ratatui::{
-    self, buffer::Buffer, layout::{Constraint, Flex, Layout, Rect}, style::{Color, Modifier, Style, Stylize}, text::{Line, Text}, widgets::{Block, Cell, Paragraph, Row, Table, TableState, Widget}, Frame
+    self,
+    buffer::Buffer,
+    layout::{Constraint, Flex, Layout, Rect},
+    style::{Color, Modifier, Style, Stylize},
+    text::{Line, Text},
+    widgets::{Block, Cell, Paragraph, Row, Table, TableState, Widget},
+    Frame,
 };
 use tui_prompts::{State, Status, TextPrompt, TextState};
 use tui_textarea::{CursorMove, TextArea};
@@ -15,6 +21,8 @@ use tui_textarea::{CursorMove, TextArea};
 mod cmd;
 #[cfg(test)]
 mod test;
+
+use cmd::Cmd;
 
 #[derive(Default, Debug, PartialEq)]
 pub enum Modality {
@@ -79,12 +87,17 @@ impl<'ws> Workspace<'ws> {
     }
 
     pub fn load(path: &PathBuf, locale: &str, tz: &str) -> Result<Self> {
-        let book = if path.exists() {
-            Book::new_from_xlsx_with_locale(&path.to_string_lossy().to_string(), locale, tz)?
-        } else {
-            Book::default()
-        };
+        let book = load_book(path, locale, tz)?;
         Ok(Workspace::new(book, path.clone()))
+    }
+
+    pub fn load_into<P: Into<PathBuf>>(&mut self, path: P) -> Result<()> {
+        let path: PathBuf = path.into();
+        // FIXME(zaphar): This should be managed better.
+        let book = load_book(&path, "en", "America/New_York")?;
+        self.book = book;
+        self.name = path;
+        Ok(())
     }
 
     pub fn move_down(&mut self) -> Result<()> {
@@ -197,19 +210,47 @@ impl<'ws> Workspace<'ws> {
         Ok(None)
     }
 
-    fn handle_command(&mut self, cmd: String) -> Result<bool> {
-        if cmd.is_empty() {
+    fn handle_command(&mut self, cmd_text: String) -> Result<bool> {
+        if cmd_text.is_empty() {
             return Ok(true);
         }
-        match cmd.as_str() {
-            "w" | "write" => {
-                self.save_file()?;
+        match cmd::parse(&cmd_text) {
+            Ok(Some(Cmd::Edit(path))) => {
+                self.load_into(path)?;
+                Ok(true)
+            }
+            Ok(Some(Cmd::Help(_maybe_topic))) => {
+                // TODO(jeremy): Modal dialogs?
+                Ok(true)
+            }
+            Ok(Some(Cmd::Write(maybe_path))) => {
+                if let Some(path) = maybe_path {
+                    self.save_to(path)?;
+                } else {
+                    self.save_file()?;
+                }
+                Ok(true)
+            }
+            Ok(Some(Cmd::InsertColumns(count))) => {
+                self.book.insert_columns(self.book.location.col, count)?;
+                self.book.evaluate();
+                Ok(true)
             },
-            _ => {
-                // noop?
+            Ok(Some(Cmd::InsertRow(count))) => {
+                self.book.insert_rows(self.book.location.row, count)?;
+                self.book.evaluate();
+                Ok(true)
+            },
+            Ok(Some(Cmd::Quit)) => {
+                // TODO(zaphar): We probably need to do better than this
+                std::process::exit(0);
+            },
+            Ok(None) => Ok(false),
+            Err(_msg) => {
+                // TODO(jeremy): Modal dialogs?
+                Ok(false)
             }
         }
-        Ok(false)
     }
 
     fn handle_navigation_input(&mut self, key: event::KeyEvent) -> Result<Option<ExitCode>> {
@@ -343,12 +384,17 @@ impl<'ws> Workspace<'ws> {
         Ok(())
     }
 
-    fn get_render_parts(&mut self, area: Rect) -> Vec<(Rect, Box<dyn Fn(Rect, &mut Buffer, &mut Self)>)> {
+    fn save_to<S: Into<String>>(&self, path: S) -> Result<()> {
+        self.book.save_to_xlsx(path.into().as_str())?;
+        Ok(())
+    }
+
+    fn get_render_parts(
+        &mut self,
+        area: Rect,
+    ) -> Vec<(Rect, Box<dyn Fn(Rect, &mut Buffer, &mut Self)>)> {
         use ratatui::widgets::StatefulWidget;
-        let mut cs = vec![
-                Constraint::Fill(4),
-                Constraint::Fill(30),
-        ];
+        let mut cs = vec![Constraint::Fill(4), Constraint::Fill(30)];
         let Address { row, col } = self.book.location;
         let mut rs: Vec<Box<dyn Fn(Rect, &mut Buffer, &mut Self)>> = vec![
             Box::new(|rect: Rect, buf: &mut Buffer, ws: &mut Self| ws.text_area.render(rect, buf)),
@@ -374,20 +420,38 @@ impl<'ws> Workspace<'ws> {
         }
         if self.state.modality == Modality::Command {
             cs.push(Constraint::Max(1));
-            rs.push(Box::new(|rect: Rect, buf: &mut Buffer, ws: &mut Self| StatefulWidget::render(
+            rs.push(Box::new(|rect: Rect, buf: &mut Buffer, ws: &mut Self| {
+                StatefulWidget::render(
                     TextPrompt::from("Command"),
                     rect,
                     buf,
-                    &mut ws.state.command_state)
-                ));
+                    &mut ws.state.command_state,
+                )
+            }));
         }
-        let rects: Vec<Rect> = Vec::from(Layout::vertical(cs)
-            .vertical_margin(2)
-            .horizontal_margin(2)
-            .flex(Flex::Legacy)
-            .split(area.clone()).as_ref());
-        rects.into_iter().zip(rs.into_iter()).map(|(rect, f)| (rect, f)).collect()
+        let rects: Vec<Rect> = Vec::from(
+            Layout::vertical(cs)
+                .vertical_margin(2)
+                .horizontal_margin(2)
+                .flex(Flex::Legacy)
+                .split(area.clone())
+                .as_ref(),
+        );
+        rects
+            .into_iter()
+            .zip(rs.into_iter())
+            .map(|(rect, f)| (rect, f))
+            .collect()
     }
+}
+
+fn load_book(path: &PathBuf, locale: &str, tz: &str) -> Result<Book, anyhow::Error> {
+    let book = if path.exists() {
+        Book::new_from_xlsx_with_locale(&path.to_string_lossy().to_string(), locale, tz)?
+    } else {
+        Book::default()
+    };
+    Ok(book)
 }
 
 fn reset_text_area<'a>(content: String) -> TextArea<'a> {
@@ -422,13 +486,12 @@ impl<'widget, 'ws: 'widget> Widget for &'widget mut Workspace<'ws> {
                 ))
                 .right_aligned(),
             );
-        
+
         for (rect, f) in self.get_render_parts(area.clone()) {
-           f(rect, buf, self); 
+            f(rect, buf, self);
         }
 
         outer_block.render(area, buf);
-
     }
 }
 
