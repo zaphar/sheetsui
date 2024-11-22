@@ -1,24 +1,21 @@
 //! Ui rendering logic
-
 use std::{path::PathBuf, process::ExitCode};
 
 use crate::book::Book;
 
 use anyhow::Result;
-use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
+use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
 use ratatui::{
     self,
     buffer::Buffer,
     layout::{Constraint, Flex, Layout, Rect},
-    style::{Color, Modifier, Style, Stylize},
-    text::{Line, Text},
-    widgets::{Block, Cell, Paragraph, Row, Table, TableState, Widget},
-    Frame,
+    style::{Modifier, Style},
+    widgets::{Block, Table, TableState, Widget},
 };
-use tui_popup::Popup;
 use tui_prompts::{State, Status, TextPrompt, TextState};
 use tui_textarea::{CursorMove, TextArea};
 
+pub mod render;
 mod cmd;
 #[cfg(test)]
 mod test;
@@ -31,7 +28,6 @@ pub enum Modality {
     Navigate,
     CellEdit,
     Command,
-    // TODO(zaphar): Command Mode?
     Dialog,
 }
 
@@ -40,6 +36,8 @@ pub struct AppState<'ws> {
     pub modality_stack: Vec<Modality>,
     pub table_state: TableState,
     pub command_state: TextState<'ws>,
+    dirty: bool,
+    popup: Vec<String>
 }
 
 impl<'ws> Default for AppState<'ws> {
@@ -47,7 +45,9 @@ impl<'ws> Default for AppState<'ws> {
         AppState {
             modality_stack: vec![Modality::default()],
             table_state: Default::default(),
-            command_state: Default::default()
+            command_state: Default::default(),
+            dirty: Default::default(),
+            popup: Default::default(),
         }
     }
 }
@@ -83,37 +83,34 @@ impl Default for Address {
     }
 }
 
-// Interaction Modalities
-// * Navigate
-// * Edit
+/// A workspace defining our UI state.
 pub struct Workspace<'ws> {
     name: PathBuf,
     book: Book,
     state: AppState<'ws>,
     text_area: TextArea<'ws>,
-    dirty: bool,
-    popup: Vec<String>
 }
 
 impl<'ws> Workspace<'ws> {
+    /// Constructs a new Workspace from an `Book` with a path for the name.
     pub fn new(book: Book, name: PathBuf) -> Self {
         let mut ws = Self {
             book,
             name,
             state: AppState::default(),
             text_area: reset_text_area("".to_owned()),
-            dirty: false,
-            popup: Vec::new(),
         };
         ws.handle_movement_change();
         ws
     }
 
+    /// Loads a workspace from a path.
     pub fn load(path: &PathBuf, locale: &str, tz: &str) -> Result<Self> {
         let book = load_book(path, locale, tz)?;
         Ok(Workspace::new(book, path.clone()))
     }
 
+    /// Loads a new `Book` into a `Workspace` from a path.
     pub fn load_into<P: Into<PathBuf>>(&mut self, path: P) -> Result<()> {
         let path: PathBuf = path.into();
         // FIXME(zaphar): This should be managed better.
@@ -123,45 +120,52 @@ impl<'ws> Workspace<'ws> {
         Ok(())
     }
 
+    /// Move a row down in the current sheet.
     pub fn move_down(&mut self) -> Result<()> {
         let mut loc = self.book.location.clone();
         let (row_count, _) = self.book.get_size()?;
         if loc.row < row_count {
             loc.row += 1;
-            self.book.move_to(loc)?;
+            self.book.move_to(&loc)?;
         }
         Ok(())
     }
 
+    /// Move a row up in the current sheet.
     pub fn move_up(&mut self) -> Result<()> {
         let mut loc = self.book.location.clone();
         if loc.row > 1 {
             loc.row -= 1;
-            self.book.move_to(loc)?;
+            self.book.move_to(&loc)?;
         }
         Ok(())
     }
 
+    /// Move a column to the left in the current sheet.
     pub fn move_left(&mut self) -> Result<()> {
         let mut loc = self.book.location.clone();
         if loc.col > 1 {
             loc.col -= 1;
-            self.book.move_to(loc)?;
+            self.book.move_to(&loc)?;
         }
         Ok(())
     }
 
+    /// Move a column to the left in the current sheet.
     pub fn move_right(&mut self) -> Result<()> {
         let mut loc = self.book.location.clone();
         let (_, col_count) = self.book.get_size()?;
         if loc.col < col_count {
             loc.col += 1;
-            self.book.move_to(loc)?;
+            self.book.move_to(&loc)?;
         }
         Ok(())
     }
 
+    /// Handle input in our ui loop.
     pub fn handle_input(&mut self) -> Result<Option<ExitCode>> {
+        // TODO(jwall): We probably want to separate this out into
+        // a pure function so we can script various testing scenarios.
         if let Event::Key(key) = event::read()? {
             let result = match self.state.modality() {
                 Modality::Navigate => self.handle_navigation_input(key)?,
@@ -242,7 +246,7 @@ impl<'ws> Workspace<'ws> {
         // * Copy
         // * Paste
         if self.text_area.input(key) {
-            self.dirty = true;
+            self.state.dirty = true;
         }
         Ok(None)
     }
@@ -321,7 +325,7 @@ impl<'ws> Workspace<'ws> {
                     let mut loc = self.book.location.clone();
                     if loc.row < row as usize {
                         loc.row = row as usize;
-                        self.book.move_to(loc)?;
+                        self.book.move_to(&loc)?;
                     }
                     self.handle_movement_change();
                 }
@@ -359,11 +363,6 @@ impl<'ws> Workspace<'ws> {
                 }
             }
         }
-        // TODO(jeremy): Handle some useful navigation operations.
-        // * Copy Cell reference
-        // * Copy Cell Range reference
-        // * Extend Cell {down,up}
-        // * Goto location. (Command modality?)
         return Ok(None);
     }
 
@@ -379,7 +378,7 @@ impl<'ws> Workspace<'ws> {
     }
 
     fn enter_dialog_mode(&mut self, msg: Vec<String>) {
-        self.popup = msg;
+        self.state.popup = msg;
         self.state.modality_stack.push(Modality::Dialog);
     }
 
@@ -411,10 +410,10 @@ impl<'ws> Workspace<'ws> {
         self.text_area.set_cursor_line_style(Style::default());
         self.text_area.set_cursor_style(Style::default());
         let contents = self.text_area.lines().join("\n");
-        if self.dirty {
+        if self.state.dirty {
             self.book.edit_current_cell(contents)?;
             self.book.evaluate();
-            self.dirty = false;
+            self.state.dirty = false;
         }
         self.enter_navigation_mode();
         Ok(())
@@ -503,106 +502,4 @@ fn reset_text_area<'a>(content: String) -> TextArea<'a> {
     text_area.set_cursor_style(Style::default());
     text_area.set_block(Block::bordered());
     text_area
-}
-
-impl<'widget, 'ws: 'widget> Widget for &'widget mut Workspace<'ws> {
-    fn render(self, area: Rect, buf: &mut ratatui::prelude::Buffer)
-    where
-        Self: Sized,
-    {
-        let outer_block = Block::bordered()
-            .title(Line::from(
-                self.name
-                    .file_name()
-                    .map(|p| p.to_string_lossy().to_string())
-                    .unwrap_or_else(|| String::from("Unknown")),
-            ))
-            .title_bottom(match self.state.modality() {
-                Modality::Navigate => "navigate",
-                Modality::CellEdit => "edit",
-                Modality::Command => "command",
-                Modality::Dialog => "",
-            })
-            .title_bottom(
-                Line::from(format!(
-                    "{},{}",
-                    self.book.location.row, self.book.location.col
-                ))
-                .right_aligned(),
-            );
-
-        for (rect, f) in self.get_render_parts(area.clone()) {
-            f(rect, buf, self);
-        }
-
-        outer_block.render(area, buf);
-        
-        if self.state.modality() == &Modality::Dialog {
-            let lines = Text::from_iter(self.popup.iter().cloned());
-            let popup = Popup::new(lines);
-            popup.render(area, buf);
-        }
-    }
-}
-
-const COLNAMES: [&'static str; 26] = [
-    "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R", "S",
-    "T", "U", "V", "W", "X", "Y", "Z",
-];
-
-impl<'t, 'book: 't> TryFrom<&'book Book> for Table<'t> {
-    fn try_from(value: &'book Book) -> std::result::Result<Self, Self::Error> {
-        // TODO(zaphar): This is apparently expensive. Maybe we can cache it somehow?
-        // We should do the correct thing here if this fails
-        let (row_count, col_count) = value.get_size()?;
-        let rows: Vec<Row> = (1..=row_count)
-            .into_iter()
-            .map(|ri| {
-                let mut cells = vec![Cell::new(Text::from(ri.to_string()))];
-                cells.extend((1..=col_count).into_iter().map(|ci| {
-                    // TODO(zaphar): Is this safe?
-                    let content = value.get_cell_addr_rendered(ri, ci).unwrap();
-                    let cell = Cell::new(Text::raw(content));
-                    match (value.location.row == ri, value.location.col == ci) {
-                        (true, true) => cell.fg(Color::White).underlined(),
-                        _ => cell
-                            .bg(if ri % 2 == 0 {
-                                Color::Rgb(57, 61, 71)
-                            } else {
-                                Color::Rgb(165, 169, 160)
-                            })
-                            .fg(if ri % 2 == 0 {
-                                Color::White
-                            } else {
-                                Color::Rgb(31, 32, 34)
-                            }),
-                    }
-                    .bold()
-                }));
-                Row::new(cells)
-            })
-            .collect();
-        let mut constraints: Vec<Constraint> = Vec::new();
-        constraints.push(Constraint::Max(5));
-        for _ in 0..col_count {
-            constraints.push(Constraint::Min(5));
-        }
-        let mut header = Vec::with_capacity(col_count as usize);
-        header.push(Cell::new(""));
-        header.extend((0..(col_count as usize)).map(|i| {
-            let count = (i / 26) + 1;
-            Cell::new(COLNAMES[i % 26].repeat(count))
-        }));
-        Ok(Table::new(rows, constraints)
-            .block(Block::bordered())
-            .header(Row::new(header).underlined())
-            .column_spacing(1)
-            .flex(Flex::SpaceAround))
-    }
-
-    type Error = anyhow::Error;
-}
-
-pub fn draw(frame: &mut Frame, ws: &mut Workspace) {
-    frame.render_widget(ws, frame.area());
 }

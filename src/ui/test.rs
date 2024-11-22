@@ -44,6 +44,7 @@ fn test_insert_rows_cmd_short() {
     assert_eq!(cmd, Cmd::InsertRow(1));
 }
 
+#[test]
 fn test_insert_cols_cmd() {
     let input = "insert-cols 1";
     let result = parse(input);

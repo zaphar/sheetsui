@@ -22,7 +22,7 @@ fn run(terminal: &mut ratatui::DefaultTerminal, args: Args) -> anyhow::Result<Ex
     let mut ws = Workspace::load(&args.workbook, &args.locale_name, &args.timezone_name)?;
 
     loop {
-        terminal.draw(|frame| ui::draw(frame, &mut ws))?;
+        terminal.draw(|frame| ui::render::draw(frame, &mut ws))?;
         if let Some(code) = ws.handle_input()? {
             return Ok(code);
         }

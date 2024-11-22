@@ -35,10 +35,13 @@ impl Book {
         }
     }
 
+    /// Construct a new book from an xlsx file.
     pub fn new_from_xlsx(path: &str) -> Result<Self> {
         Ok(Self::new(load_from_xlsx(path, "en", "America/New_York")?))
     }
 
+    /// Evaluate the spreadsheet calculating formulas and style changes.
+    /// This can be an expensive operation.
     pub fn evaluate(&mut self) {
         self.model.evaluate();
     }
@@ -59,6 +62,8 @@ impl Book {
         Ok(())
     }
 
+    /// Get all the sheet identiers a `Vec<(String, u32)>` where the string
+    /// is the sheet name and the u32 is the sheet index.
     pub fn get_all_sheets_identifiers(&self) -> Vec<(String, u32)> {
         self.model
             .workbook
@@ -68,7 +73,7 @@ impl Book {
             .collect()
     }
 
-    /// Get the currently set sheets name.
+    /// Get the current sheets name.
     pub fn get_sheet_name(&self) -> Result<&str> {
         Ok(&self.get_sheet()?.name)
     }
@@ -78,23 +83,24 @@ impl Book {
         Ok(&self.get_sheet()?.sheet_data)
     }
 
-    pub fn move_to(&mut self, loc: Address) -> Result<()> {
+    /// Move to a specific sheel location in the current sheet
+    pub fn move_to(&mut self, Address { row, col }: &Address) -> Result<()> {
         // FIXME(zaphar): Check that this is safe first.
-        self.location.row = loc.row;
-        self.location.col = loc.col;
+        self.location.row = *row;
+        self.location.col = *col;
         Ok(())
     }
 
     /// Get a cells formatted content.
     pub fn get_current_cell_rendered(&self) -> Result<String> {
-        Ok(self.get_cell_addr_rendered(self.location.row, self.location.col)?)
+        Ok(self.get_cell_addr_rendered(&self.location)?)
     }
 
-    // TODO(zaphar): Use Address here too
-    pub fn get_cell_addr_rendered(&self, row: usize, col: usize) -> Result<String> {
+    /// Get a cells rendered content for display.
+    pub fn get_cell_addr_rendered(&self, Address { row, col }: &Address) -> Result<String> {
         Ok(self
             .model
-            .get_formatted_cell_value(self.current_sheet, row as i32, col as i32)
+            .get_formatted_cell_value(self.current_sheet, *row as i32, *col as i32)
             .map_err(|s| anyhow!("Unable to format cell {}", s))?)
     }
 
@@ -131,12 +137,13 @@ impl Book {
         Ok(())
     }
 
+    /// Insert `count` rows at a `row_idx`.
     pub fn insert_rows(&mut self, row_idx: usize, count: usize) -> Result<()> {
         self.model
             .insert_rows(self.current_sheet, row_idx as i32, count as i32)
             .map_err(|e| anyhow!("Unable to insert row(s): {}", e))?;
         if self.location.row >= row_idx {
-            self.move_to(Address {
+            self.move_to(&Address {
                 row: self.location.row + count,
                 col: self.location.col,
             })?;
@@ -144,12 +151,13 @@ impl Book {
         Ok(())
     }
 
+    /// Insert `count` columns at a `col_idx`.
     pub fn insert_columns(&mut self, col_idx: usize, count: usize) -> Result<()> {
         self.model
             .insert_columns(self.current_sheet, col_idx as i32, count as i32)
             .map_err(|e| anyhow!("Unable to insert column(s): {}", e))?;
         if self.location.col >= col_idx {
-            self.move_to(Address {
+            self.move_to(&Address {
                 row: self.location.row,
                 col: self.location.col + count,
             })?;
@@ -211,6 +219,7 @@ impl Book {
         false
     }
 
+    /// Get the current `Worksheet`.
     pub(crate) fn get_sheet(&self) -> Result<&Worksheet> {
         Ok(self
             .model

@@ -69,7 +69,7 @@ fn test_book_insert_rows() {
     let mut book = Book::default();
     book.update_entry(&Address { row: 2, col: 2 }, "1")
         .expect("failed to edit cell");
-    book.move_to(Address { row: 2, col: 2 }).expect("Failed to move to location");
+    book.move_to(&Address { row: 2, col: 2 }).expect("Failed to move to location");
     assert_eq!((2, 2), book.get_size().expect("Failed to get size"));
     book.insert_rows(1, 5).expect("Failed to insert rows");
     assert_eq!((7, 2), book.get_size().expect("Failed to get size"));
@@ -82,7 +82,7 @@ fn test_book_insert_columns() {
     let mut book = Book::default();
     book.update_entry(&Address { row: 2, col: 2 }, "1")
         .expect("failed to edit cell");
-    book.move_to(Address { row: 2, col: 2 }).expect("Failed to move to location");
+    book.move_to(&Address { row: 2, col: 2 }).expect("Failed to move to location");
     assert_eq!((2, 2), book.get_size().expect("Failed to get size"));
     book.insert_columns(1, 5).expect("Failed to insert rows");
     assert_eq!((2, 7), book.get_size().expect("Failed to get size"));

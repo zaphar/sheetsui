@@ -1,6 +1,7 @@
 //! Command mode command parsers.
 use slice_utils::{Measured, Peekable, Seekable, Span, StrCursor};
 
+/// A parsed command entered in during command mode.
 #[derive(Debug, PartialEq, Eq)]
 pub enum Cmd<'a> {
     Write(Option<&'a str>),
@@ -11,6 +12,7 @@ pub enum Cmd<'a> {
     Quit,
 }
 
+/// Parse command text into a `Cmd`.
 pub fn parse<'cmd, 'i: 'cmd>(input: &'i str) -> Result<Option<Cmd<'cmd>>, &'static str> {
     let cursor = StrCursor::new(input);
     // try consume write command.
