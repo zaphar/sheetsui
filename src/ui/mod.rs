@@ -92,8 +92,7 @@ pub struct Workspace<'ws> {
     state: AppState<'ws>,
     text_area: TextArea<'ws>,
     dirty: bool,
-    show_help: bool,
-    popup: String
+    popup: Vec<String>
 }
 
 impl<'ws> Workspace<'ws> {
@@ -104,8 +103,7 @@ impl<'ws> Workspace<'ws> {
             state: AppState::default(),
             text_area: reset_text_area("".to_owned()),
             dirty: false,
-            show_help: false,
-            popup: String::new(),
+            popup: Vec::new(),
         };
         ws.handle_movement_change();
         ws
@@ -176,33 +174,30 @@ impl<'ws> Workspace<'ws> {
         Ok(None)
     }
 
-    fn render_help_text(&self) -> impl Widget {
-        let info_block = Block::bordered().title("Help");
-        Paragraph::new(match self.state.modality() {
-            Modality::Navigate => Text::from(vec![
-                "Navigate Mode:".into(),
-                "* e: Enter edit mode for current cell".into(),
-                "* h,j,k,l: vim style navigation".into(),
-                "* CTRl-r: Add a row".into(),
-                "* CTRl-c: Add a column".into(),
-                "* q exit".into(),
-                "* Ctrl-S Save sheet".into(),
-            ]),
-            Modality::CellEdit => Text::from(vec![
-                "Edit Mode:".into(),
-                "* ESC: Exit edit mode".into(),
-                "Otherwise edit as normal".into(),
-            ]),
-            Modality::Command => Text::from(vec![
-                "Command Mode:".into(),
-                "* ESC: Exit command mode".into(),
-            ]),
-            Modality::Dialog => Text::from(vec![
-                "Dialog Mode:".into(),
-                "* ESC: Exit dialog".into(),
-            ]),
-        })
-        .block(info_block)
+    fn render_help_text(&self) -> Vec<String> {
+        match self.state.modality() {
+            Modality::Navigate => vec![
+                "Navigate Mode:".to_string(),
+                "* e: Enter edit mode for current cell".to_string(),
+                "* h,j,k,l: vim style navigation".to_string(),
+                "* CTRl-r: Add a row".to_string(),
+                "* CTRl-c: Add a column".to_string(),
+                "* q exit".to_string(),
+                "* Ctrl-S Save sheet".to_string(),
+            ],
+            Modality::CellEdit => vec![
+                "Edit Mode:".to_string(),
+                "* ESC: Exit edit mode".to_string(),
+                "Otherwise edit as normal".to_string(),
+            ],
+            Modality::Command => vec![
+                "Command Mode:".to_string(),
+                "* ESC: Exit command mode".to_string(),
+            ],
+            _ => vec![
+                "General help".to_string(),
+            ],
+        }
     }
 
     fn handle_command_input(&mut self, key: event::KeyEvent) -> Result<Option<ExitCode>> {
@@ -234,7 +229,7 @@ impl<'ws> Workspace<'ws> {
         if key.kind == KeyEventKind::Press {
             match key.code {
                 KeyCode::Char('h') if key.modifiers == KeyModifiers::CONTROL => {
-                    self.show_help = !self.show_help;
+                    self.enter_dialog_mode(self.render_help_text());
                 }
                 KeyCode::Esc | KeyCode::Enter => self.exit_edit_mode()?,
                 _ => {
@@ -262,7 +257,7 @@ impl<'ws> Workspace<'ws> {
                 Ok(true)
             }
             Ok(Some(Cmd::Help(_maybe_topic))) => {
-                self.enter_dialog_mode("TODO help topic".to_owned());
+                self.enter_dialog_mode(vec!["TODO help topic".to_owned()]);
                 Ok(true)
             }
             Ok(Some(Cmd::Write(maybe_path))) => {
@@ -288,11 +283,11 @@ impl<'ws> Workspace<'ws> {
                 std::process::exit(0);
             },
             Ok(None) => {
-                self.enter_dialog_mode(format!("Unrecognized commmand {}", cmd_text));
+                self.enter_dialog_mode(vec![format!("Unrecognized commmand {}", cmd_text)]);
                 Ok(false)
             },
             Err(msg) => {
-                self.enter_dialog_mode(msg.to_owned());
+                self.enter_dialog_mode(vec![msg.to_owned()]);
                 Ok(false)
             }
         }
@@ -308,7 +303,7 @@ impl<'ws> Workspace<'ws> {
                     self.enter_command_mode();
                 }
                 KeyCode::Char('h') if key.modifiers == KeyModifiers::CONTROL => {
-                    self.show_help = !self.show_help;
+                    self.enter_dialog_mode(self.render_help_text());
                 }
                 KeyCode::Char('s') if key.modifiers == KeyModifiers::CONTROL => {
                     self.save_file()?;
@@ -383,7 +378,7 @@ impl<'ws> Workspace<'ws> {
         self.state.command_state.focus();
     }
 
-    fn enter_dialog_mode(&mut self, msg: String) {
+    fn enter_dialog_mode(&mut self, msg: Vec<String>) {
         self.popup = msg;
         self.state.modality_stack.push(Modality::Dialog);
     }
@@ -466,13 +461,6 @@ impl<'ws> Workspace<'ws> {
             }),
         ];
 
-        if self.show_help {
-            cs.push(Constraint::Fill(9));
-            rs.push(Box::new(|rect: Rect, buf: &mut Buffer, ws: &mut Self| {
-                let info_para = ws.render_help_text();
-                info_para.render(rect, buf);
-            }));
-        }
         if self.state.modality() == &Modality::Command {
             cs.push(Constraint::Max(1));
             rs.push(Box::new(|rect: Rect, buf: &mut Buffer, ws: &mut Self| {
@@ -550,7 +538,8 @@ impl<'widget, 'ws: 'widget> Widget for &'widget mut Workspace<'ws> {
         outer_block.render(area, buf);
         
         if self.state.modality() == &Modality::Dialog {
-            let popup = Popup::new(Text::from(self.popup.clone()));
+            let lines = Text::from_iter(self.popup.iter().cloned());
+            let popup = Popup::new(lines);
             popup.render(area, buf);
         }
     }
