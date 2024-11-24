@@ -89,3 +89,12 @@ fn test_book_insert_columns() {
     assert_eq!(Address {row: 2, col: 7, }, book.location);
     assert_eq!("1", book.get_current_cell_rendered().expect("Failed to get rendered content"));
 }
+
+#[test]
+fn test_book_col_size() {
+    let mut book = Book::default();
+    book.update_entry(&Address { row: 2, col: 2 }, "1")
+        .expect("failed to edit cell");
+    book.set_col_size(1, 20).expect("Failed to set column size");
+    assert_eq!(20, book.get_col_size(1).expect("Failed to get column size"));
+}

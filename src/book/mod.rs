@@ -16,6 +16,8 @@ use crate::ui::Address;
 #[cfg(test)]
 mod test;
 
+const COL_PIXELS: f64 = 10.0;
+
 /// A spreadsheet book with some internal state tracking.
 pub struct Book {
     pub(crate) model: Model,
@@ -170,6 +172,20 @@ impl Book {
         Ok(self.get_sheet()?.dimension())
     }
 
+    /// Get column size
+    pub fn get_col_size(&self, idx: usize) -> Result<usize> {
+        Ok((self
+            .get_sheet()?
+            .get_column_width(idx as i32)
+            .map_err(|e| anyhow!("Error getting column width: {:?}", e))? / COL_PIXELS) as usize)
+    }
+
+    pub fn set_col_size(&mut self, idx: usize, cols: usize) -> Result<()> {
+        self.get_sheet_mut()?.set_column_width(idx as i32, cols as f64 * COL_PIXELS)
+            .map_err(|e| anyhow!("Error setting column width: {:?}", e))?;
+        Ok(())
+    }
+
     // Get the size of the current sheet as a `(row_count, column_count)`
     pub fn get_size(&self) -> Result<(usize, usize)> {
         let sheet = &self.get_sheet()?.sheet_data;
@@ -225,6 +241,14 @@ impl Book {
             .model
             .workbook
             .worksheet(self.current_sheet)
+            .map_err(|s| anyhow!("Invalid Worksheet: {}", s))?)
+    }
+    
+    pub(crate) fn get_sheet_mut(&mut self) -> Result<&mut Worksheet> {
+        Ok(self
+            .model
+            .workbook
+            .worksheet_mut(self.current_sheet)
             .map_err(|s| anyhow!("Invalid Worksheet: {}", s))?)
     }
 }
