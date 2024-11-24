@@ -186,6 +186,8 @@ impl<'ws> Workspace<'ws> {
                 "* h,j,k,l: vim style navigation".to_string(),
                 "* CTRl-r: Add a row".to_string(),
                 "* CTRl-c: Add a column".to_string(),
+                "* CTRl-l: Grow column width by 1".to_string(),
+                "* CTRl-h: Shrink column width by 1".to_string(),
                 "* q exit".to_string(),
                 "* Ctrl-S Save sheet".to_string(),
             ],
