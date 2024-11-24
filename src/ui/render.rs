@@ -60,6 +60,7 @@ impl<'t, 'book: 't> TryFrom<&'book Book> for Table<'t> {
         // TODO(zaphar): This is apparently expensive. Maybe we can cache it somehow?
         // We should do the correct thing here if this fails
         let (row_count, col_count) = value.get_size()?;
+        let sheet_name = value.get_sheet_name()?;
         let rows: Vec<Row> = (1..=row_count)
             .into_iter()
             .map(|ri| {
@@ -99,7 +100,7 @@ impl<'t, 'book: 't> TryFrom<&'book Book> for Table<'t> {
             Cell::new(COLNAMES[i % 26].repeat(count))
         }));
         Ok(Table::new(rows, constraints)
-            .block(Block::bordered())
+            .block(Block::bordered().title_top(sheet_name))
             .header(Row::new(header).underlined())
             .column_spacing(1)
             .flex(Flex::SpaceAround))

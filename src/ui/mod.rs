@@ -448,8 +448,9 @@ impl<'ws> Workspace<'ws> {
         let mut rs: Vec<Box<dyn Fn(Rect, &mut Buffer, &mut Self)>> = vec![
             Box::new(|rect: Rect, buf: &mut Buffer, ws: &mut Self| ws.text_area.render(rect, buf)),
             Box::new(move |rect: Rect, buf: &mut Buffer, ws: &mut Self| {
+                let sheet_name = ws.book.get_sheet_name().unwrap_or("Unknown");
                 // Table widget display
-                let table_block = Block::bordered();
+                let table_block = Block::bordered().title_top(sheet_name);
                 let table_inner: Table = TryFrom::try_from(&ws.book).expect("");
                 let table = table_inner.block(table_block);
                 // https://docs.rs/ratatui/latest/ratatui/widgets/struct.TableState.html
