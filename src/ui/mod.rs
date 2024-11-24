@@ -15,8 +15,8 @@ use ratatui::{
 use tui_prompts::{State, Status, TextPrompt, TextState};
 use tui_textarea::{CursorMove, TextArea};
 
-pub mod render;
 mod cmd;
+pub mod render;
 #[cfg(test)]
 mod test;
 
@@ -37,7 +37,7 @@ pub struct AppState<'ws> {
     pub table_state: TableState,
     pub command_state: TextState<'ws>,
     dirty: bool,
-    popup: Vec<String>
+    popup: Vec<String>,
 }
 
 impl<'ws> Default for AppState<'ws> {
@@ -198,9 +198,7 @@ impl<'ws> Workspace<'ws> {
                 "Command Mode:".to_string(),
                 "* ESC: Exit command mode".to_string(),
             ],
-            _ => vec![
-                "General help".to_string(),
-            ],
+            _ => vec!["General help".to_string()],
         }
     }
 
@@ -276,20 +274,20 @@ impl<'ws> Workspace<'ws> {
                 self.book.insert_columns(self.book.location.col, count)?;
                 self.book.evaluate();
                 Ok(true)
-            },
+            }
             Ok(Some(Cmd::InsertRow(count))) => {
                 self.book.insert_rows(self.book.location.row, count)?;
                 self.book.evaluate();
                 Ok(true)
-            },
+            }
             Ok(Some(Cmd::Quit)) => {
                 // TODO(zaphar): We probably need to do better than this
                 std::process::exit(0);
-            },
+            }
             Ok(None) => {
                 self.enter_dialog_mode(vec![format!("Unrecognized commmand {}", cmd_text)]);
                 Ok(false)
-            },
+            }
             Err(msg) => {
                 self.enter_dialog_mode(vec![msg.to_owned()]);
                 Ok(false)
@@ -306,11 +304,26 @@ impl<'ws> Workspace<'ws> {
                 KeyCode::Char(':') => {
                     self.enter_command_mode();
                 }
-                KeyCode::Char('h') if key.modifiers == KeyModifiers::CONTROL => {
-                    self.enter_dialog_mode(self.render_help_text());
-                }
                 KeyCode::Char('s') if key.modifiers == KeyModifiers::CONTROL => {
                     self.save_file()?;
+                }
+                KeyCode::Char('s')
+                    if key.modifiers == KeyModifiers::HYPER
+                        || key.modifiers == KeyModifiers::SUPER =>
+                {
+                    self.save_file()?;
+                }
+                KeyCode::Char('l') if key.modifiers == KeyModifiers::CONTROL => {
+                    let Address { row: _, col } = &self.book.location;
+                    self.book
+                        .set_col_size(*col, self.book.get_col_size(*col)? + 1)?;
+                }
+                KeyCode::Char('h') if key.modifiers == KeyModifiers::CONTROL => {
+                    let Address { row: _, col } = &self.book.location;
+                    let curr_size = self.book.get_col_size(*col)?;
+                    if curr_size > 1 {
+                        self.book.set_col_size(*col, curr_size - 1)?;
+                    }
                 }
                 KeyCode::Char('r') if key.modifiers == KeyModifiers::CONTROL => {
                     let (row_count, _) = self.book.get_size()?;
@@ -342,19 +355,19 @@ impl<'ws> Workspace<'ws> {
                 KeyCode::Char('q') => {
                     return Ok(Some(ExitCode::SUCCESS));
                 }
-                KeyCode::Char('j') => {
+                KeyCode::Char('j') | KeyCode::Down if key.modifiers != KeyModifiers::CONTROL => {
                     self.move_down()?;
                     self.handle_movement_change();
                 }
-                KeyCode::Char('k') => {
+                KeyCode::Char('k') | KeyCode::Up if key.modifiers != KeyModifiers::CONTROL => {
                     self.move_up()?;
                     self.handle_movement_change();
                 }
-                KeyCode::Char('h') => {
+                KeyCode::Char('h') | KeyCode::Left if key.modifiers != KeyModifiers::CONTROL => {
                     self.move_left()?;
                     self.handle_movement_change();
                 }
-                KeyCode::Char('l') => {
+                KeyCode::Char('l') | KeyCode::Right if key.modifiers != KeyModifiers::CONTROL => {
                     self.move_right()?;
                     self.handle_movement_change();
                 }
@@ -405,7 +418,7 @@ impl<'ws> Workspace<'ws> {
         self.state.pop_modality();
         Ok(())
     }
-    
+
     fn exit_edit_mode(&mut self) -> Result<()> {
         self.text_area.set_cursor_line_style(Style::default());
         self.text_area.set_cursor_style(Style::default());

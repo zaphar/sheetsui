@@ -131,3 +131,5 @@ fn test_quit_cmd() {
     let cmd = output.unwrap();
     assert_eq!(cmd, Cmd::Quit);
 }
+
+// TODO(zaphar): Interaction testing for input.
