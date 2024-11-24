@@ -78,7 +78,11 @@ fn try_consume_write<'cmd, 'i: 'cmd>(
         return Err("Invalid command: Did you mean to type `write <arg>`?");
     }
     let arg = input.span(0..).trim();
-    return Ok(Some(Cmd::Write(if arg.is_empty() { None } else { Some(arg) })));
+    return Ok(Some(Cmd::Write(if arg.is_empty() {
+        None
+    } else {
+        Some(arg)
+    })));
 }
 
 fn try_consume_insert_row<'cmd, 'i: 'cmd>(
@@ -137,7 +141,9 @@ fn try_consume_insert_column<'cmd, 'i: 'cmd>(
     })));
 }
 
-fn try_consume_edit<'cmd, 'i: 'cmd>(mut input: StrCursor<'i>) -> Result<Option<Cmd<'cmd>>, &'static str> {
+fn try_consume_edit<'cmd, 'i: 'cmd>(
+    mut input: StrCursor<'i>,
+) -> Result<Option<Cmd<'cmd>>, &'static str> {
     const SHORT: &'static str = "e";
     const LONG: &'static str = "edit";
 
@@ -159,7 +165,9 @@ fn try_consume_edit<'cmd, 'i: 'cmd>(mut input: StrCursor<'i>) -> Result<Option<C
     })));
 }
 
-fn try_consume_help<'cmd, 'i: 'cmd>(mut input: StrCursor<'i>) -> Result<Option<Cmd<'cmd>>, &'static str> {
+fn try_consume_help<'cmd, 'i: 'cmd>(
+    mut input: StrCursor<'i>,
+) -> Result<Option<Cmd<'cmd>>, &'static str> {
     const SHORT: &'static str = "?";
     const LONG: &'static str = "help";
 
@@ -175,10 +183,16 @@ fn try_consume_help<'cmd, 'i: 'cmd>(mut input: StrCursor<'i>) -> Result<Option<C
         return Err("Invalid command: Did you mean to type `help <arg>`?");
     }
     let arg = input.span(0..).trim();
-    return Ok(Some(Cmd::Help(if arg.is_empty() { None } else { Some(arg) })));
+    return Ok(Some(Cmd::Help(if arg.is_empty() {
+        None
+    } else {
+        Some(arg)
+    })));
 }
 
-fn try_consume_quit<'cmd, 'i: 'cmd>(mut input: StrCursor<'i>) -> Result<Option<Cmd<'cmd>>, &'static str> {
+fn try_consume_quit<'cmd, 'i: 'cmd>(
+    mut input: StrCursor<'i>,
+) -> Result<Option<Cmd<'cmd>>, &'static str> {
     const SHORT: &'static str = "q";
     const LONG: &'static str = "quit";
 

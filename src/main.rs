@@ -5,8 +5,8 @@ use crossterm::event;
 use ratatui;
 use ui::Workspace;
 
-mod ui;
 mod book;
+mod ui;
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]

@@ -177,11 +177,13 @@ impl Book {
         Ok((self
             .get_sheet()?
             .get_column_width(idx as i32)
-            .map_err(|e| anyhow!("Error getting column width: {:?}", e))? / COL_PIXELS) as usize)
+            .map_err(|e| anyhow!("Error getting column width: {:?}", e))?
+            / COL_PIXELS) as usize)
     }
 
     pub fn set_col_size(&mut self, idx: usize, cols: usize) -> Result<()> {
-        self.get_sheet_mut()?.set_column_width(idx as i32, cols as f64 * COL_PIXELS)
+        self.get_sheet_mut()?
+            .set_column_width(idx as i32, cols as f64 * COL_PIXELS)
             .map_err(|e| anyhow!("Error setting column width: {:?}", e))?;
         Ok(())
     }
@@ -243,7 +245,7 @@ impl Book {
             .worksheet(self.current_sheet)
             .map_err(|s| anyhow!("Invalid Worksheet: {}", s))?)
     }
-    
+
     pub(crate) fn get_sheet_mut(&mut self) -> Result<&mut Worksheet> {
         Ok(self
             .model

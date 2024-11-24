@@ -41,7 +41,7 @@ impl<'widget, 'ws: 'widget> Widget for &'widget mut Workspace<'ws> {
         }
 
         outer_block.render(area, buf);
-        
+
         if self.state.modality() == &Modality::Dialog {
             let lines = Text::from_iter(self.state.popup.iter().cloned());
             let popup = Popup::new(lines);
@@ -66,7 +66,9 @@ impl<'t, 'book: 't> TryFrom<&'book Book> for Table<'t> {
                 let mut cells = vec![Cell::new(Text::from(ri.to_string()))];
                 cells.extend((1..=col_count).into_iter().map(|ci| {
                     // TODO(zaphar): Is this safe?
-                    let content = value.get_cell_addr_rendered(&Address{ row: ri, col: ci }).unwrap();
+                    let content = value
+                        .get_cell_addr_rendered(&Address { row: ri, col: ci })
+                        .unwrap();
                     let cell = Cell::new(Text::raw(content));
                     match (value.location.row == ri, value.location.col == ci) {
                         (true, true) => cell.fg(Color::White).underlined(),
@@ -90,7 +92,7 @@ impl<'t, 'book: 't> TryFrom<&'book Book> for Table<'t> {
         let mut constraints: Vec<Constraint> = Vec::new();
         constraints.push(Constraint::Max(5));
         for col_idx in 0..col_count {
-            let size = value.get_col_size(col_idx+1)?;
+            let size = value.get_col_size(col_idx + 1)?;
             constraints.push(Constraint::Length(size as u16));
         }
         let mut header = Vec::with_capacity(col_count as usize);
