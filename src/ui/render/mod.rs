@@ -13,6 +13,9 @@ use super::*;
 pub mod viewport;
 pub use viewport::Viewport;
 
+#[cfg(test)]
+mod test;
+
 impl<'widget, 'ws: 'widget> Widget for &'widget mut Workspace<'ws> {
     fn render(self, area: Rect, buf: &mut ratatui::prelude::Buffer)
     where

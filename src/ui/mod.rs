@@ -21,7 +21,7 @@ pub mod render;
 mod test;
 
 use cmd::Cmd;
-use render::Viewport;
+use render::{viewport::ViewportState, Viewport};
 
 #[derive(Default, Debug, PartialEq, Clone)]
 pub enum Modality {
@@ -35,6 +35,7 @@ pub enum Modality {
 #[derive(Debug)]
 pub struct AppState<'ws> {
     pub modality_stack: Vec<Modality>,
+    pub viewport_state: ViewportState,
     pub table_state: TableState,
     pub command_state: TextState<'ws>,
     dirty: bool,
@@ -46,6 +47,7 @@ impl<'ws> Default for AppState<'ws> {
         AppState {
             modality_stack: vec![Modality::default()],
             table_state: Default::default(),
+            viewport_state: Default::default(),
             command_state: Default::default(),
             dirty: Default::default(),
             popup: Default::default(),
@@ -124,8 +126,7 @@ impl<'ws> Workspace<'ws> {
     /// Move a row down in the current sheet.
     pub fn move_down(&mut self) -> Result<()> {
         let mut loc = self.book.location.clone();
-        let (row_count, _) = self.book.get_size()?;
-        if loc.row < row_count {
+        if loc.row < render::viewport::LAST_ROW {
             loc.row += 1;
             self.book.move_to(&loc)?;
         }
@@ -155,8 +156,7 @@ impl<'ws> Workspace<'ws> {
     /// Move a column to the left in the current sheet.
     pub fn move_right(&mut self) -> Result<()> {
         let mut loc = self.book.location.clone();
-        let (_, col_count) = self.book.get_size()?;
-        if loc.col < col_count {
+        if loc.col < render::viewport::LAST_COLUMN {
             loc.col += 1;
             self.book.move_to(&loc)?;
         }
@@ -468,8 +468,8 @@ impl<'ws> Workspace<'ws> {
                 let table_block = Block::bordered().title_top(sheet_name);
                 // TODO(zaphar): We should be smarter about calculating the location properly
                 // Might require viewport state to do properly
-                let viewport = Viewport::new(&ws.book).with_corner(ws.book.location.clone()).block(table_block);
-                viewport.render(rect, buf);
+                let viewport = Viewport::new(&ws.book).with_selected(ws.book.location.clone()).block(table_block);
+                StatefulWidget::render(viewport, rect, buf, &mut ws.state.viewport_state);
             }),
         ];
 
