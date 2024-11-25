@@ -10,7 +10,7 @@ use ratatui::{
     buffer::Buffer,
     layout::{Constraint, Flex, Layout, Rect},
     style::{Modifier, Style},
-    widgets::{Block, Table, TableState, Widget},
+    widgets::{Block, Table, TableState, Widget, WidgetRef},
 };
 use tui_prompts::{State, Status, TextPrompt, TextState};
 use tui_textarea::{CursorMove, TextArea};
@@ -21,6 +21,7 @@ pub mod render;
 mod test;
 
 use cmd::Cmd;
+use render::Viewport;
 
 #[derive(Default, Debug, PartialEq, Clone)]
 pub enum Modality {
@@ -459,20 +460,16 @@ impl<'ws> Workspace<'ws> {
     ) -> Vec<(Rect, Box<dyn Fn(Rect, &mut Buffer, &mut Self)>)> {
         use ratatui::widgets::StatefulWidget;
         let mut cs = vec![Constraint::Fill(4), Constraint::Fill(30)];
-        let Address { row, col } = self.book.location;
         let mut rs: Vec<Box<dyn Fn(Rect, &mut Buffer, &mut Self)>> = vec![
             Box::new(|rect: Rect, buf: &mut Buffer, ws: &mut Self| ws.text_area.render(rect, buf)),
             Box::new(move |rect: Rect, buf: &mut Buffer, ws: &mut Self| {
                 let sheet_name = ws.book.get_sheet_name().unwrap_or("Unknown");
                 // Table widget display
                 let table_block = Block::bordered().title_top(sheet_name);
-                let table_inner: Table = TryFrom::try_from(&ws.book).expect("");
-                let table = table_inner.block(table_block);
-                // https://docs.rs/ratatui/latest/ratatui/widgets/struct.TableState.html
-                // TODO(zaphar): Apparently scrolling by columns doesn't work?
-                ws.state.table_state.select_cell(Some((row, col)));
-                ws.state.table_state.select_column(Some(col));
-                StatefulWidget::render(table, rect, buf, &mut ws.state.table_state);
+                // TODO(zaphar): We should be smarter about calculating the location properly
+                // Might require viewport state to do properly
+                let viewport = Viewport::new(&ws.book).with_corner(ws.book.location.clone()).block(table_block);
+                viewport.render(rect, buf);
             }),
         ];
 

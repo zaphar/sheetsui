@@ -10,6 +10,9 @@ use tui_popup::Popup;
 
 use super::*;
 
+pub mod viewport;
+pub use viewport::Viewport;
+
 impl<'widget, 'ws: 'widget> Widget for &'widget mut Workspace<'ws> {
     fn render(self, area: Rect, buf: &mut ratatui::prelude::Buffer)
     where
@@ -54,6 +57,10 @@ const COLNAMES: [&'static str; 26] = [
     "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R", "S",
     "T", "U", "V", "W", "X", "Y", "Z",
 ];
+
+// TODO(jwall): A Viewport widget where we assume lengths for column
+// sizes would probably help us to manage column scrolling.
+// Could use a ViewportState and stateful rendering.
 
 impl<'t, 'book: 't> TryFrom<&'book Book> for Table<'t> {
     fn try_from(value: &'book Book) -> std::result::Result<Self, Self::Error> {
