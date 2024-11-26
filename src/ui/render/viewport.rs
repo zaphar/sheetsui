@@ -77,7 +77,7 @@ impl<'book> Viewport<'book> {
     ) -> Result<Vec<VisibleColumn>> {
         let mut visible = Vec::new();
         // TODO(zaphar): This should be a shared constant with our first column.
-        // We start out with a length of 5 already researved
+        // We start out with a length of 5 already reserved
         let mut length = 5;
         let start_idx = std::cmp::min(self.selected.col, state.prev_corner.col);
         for idx in start_idx..=LAST_COLUMN {
