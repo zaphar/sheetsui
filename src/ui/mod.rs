@@ -6,11 +6,10 @@ use crate::book::Book;
 use anyhow::Result;
 use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
 use ratatui::{
-    self,
     buffer::Buffer,
     layout::{Constraint, Flex, Layout, Rect},
     style::{Modifier, Style},
-    widgets::{Block, Table, TableState, Widget, WidgetRef},
+    widgets::{Block, Widget},
 };
 use tui_prompts::{State, Status, TextPrompt, TextState};
 use tui_textarea::{CursorMove, TextArea};
@@ -36,7 +35,6 @@ pub enum Modality {
 pub struct AppState<'ws> {
     pub modality_stack: Vec<Modality>,
     pub viewport_state: ViewportState,
-    pub table_state: TableState,
     pub command_state: TextState<'ws>,
     dirty: bool,
     popup: Vec<String>,
@@ -46,7 +44,6 @@ impl<'ws> Default for AppState<'ws> {
     fn default() -> Self {
         AppState {
             modality_stack: vec![Modality::default()],
-            table_state: Default::default(),
             viewport_state: Default::default(),
             command_state: Default::default(),
             dirty: Default::default(),
@@ -464,10 +461,7 @@ impl<'ws> Workspace<'ws> {
             Box::new(|rect: Rect, buf: &mut Buffer, ws: &mut Self| ws.text_area.render(rect, buf)),
             Box::new(move |rect: Rect, buf: &mut Buffer, ws: &mut Self| {
                 let sheet_name = ws.book.get_sheet_name().unwrap_or("Unknown");
-                // Table widget display
                 let table_block = Block::bordered().title_top(sheet_name);
-                // TODO(zaphar): We should be smarter about calculating the location properly
-                // Might require viewport state to do properly
                 let viewport = Viewport::new(&ws.book).with_selected(ws.book.location.clone()).block(table_block);
                 StatefulWidget::render(viewport, rect, buf, &mut ws.state.viewport_state);
             }),

@@ -1,9 +1,8 @@
 use ratatui::{
     self,
-    layout::{Constraint, Flex, Rect},
-    style::{Color, Stylize},
+    layout::Rect,
     text::{Line, Text},
-    widgets::{Block, Cell, Row, Table, Widget},
+    widgets::{Block, Widget},
     Frame,
 };
 use tui_popup::Popup;
@@ -54,71 +53,6 @@ impl<'widget, 'ws: 'widget> Widget for &'widget mut Workspace<'ws> {
             popup.render(area, buf);
         }
     }
-}
-
-const COLNAMES: [&'static str; 26] = [
-    "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R", "S",
-    "T", "U", "V", "W", "X", "Y", "Z",
-];
-
-// TODO(jwall): A Viewport widget where we assume lengths for column
-// sizes would probably help us to manage column scrolling.
-// Could use a ViewportState and stateful rendering.
-
-impl<'t, 'book: 't> TryFrom<&'book Book> for Table<'t> {
-    fn try_from(value: &'book Book) -> std::result::Result<Self, Self::Error> {
-        // TODO(zaphar): This is apparently expensive. Maybe we can cache it somehow?
-        // We should do the correct thing here if this fails
-        let (row_count, col_count) = value.get_size()?;
-        let rows: Vec<Row> = (1..=row_count)
-            .into_iter()
-            .map(|ri| {
-                let mut cells = vec![Cell::new(Text::from(ri.to_string()))];
-                cells.extend((1..=col_count).into_iter().map(|ci| {
-                    // TODO(zaphar): Is this safe?
-                    let content = value
-                        .get_cell_addr_rendered(&Address { row: ri, col: ci })
-                        .unwrap();
-                    let cell = Cell::new(Text::raw(content));
-                    match (value.location.row == ri, value.location.col == ci) {
-                        (true, true) => cell.fg(Color::White).underlined(),
-                        _ => cell
-                            .bg(if ri % 2 == 0 {
-                                Color::Rgb(57, 61, 71)
-                            } else {
-                                Color::Rgb(165, 169, 160)
-                            })
-                            .fg(if ri % 2 == 0 {
-                                Color::White
-                            } else {
-                                Color::Rgb(31, 32, 34)
-                            }),
-                    }
-                    .bold()
-                }));
-                Row::new(cells)
-            })
-            .collect();
-        let mut constraints: Vec<Constraint> = Vec::new();
-        constraints.push(Constraint::Max(5));
-        for col_idx in 0..col_count {
-            let size = value.get_col_size(col_idx + 1)?;
-            constraints.push(Constraint::Length(size as u16));
-        }
-        let mut header = Vec::with_capacity(col_count as usize);
-
-        header.push(Cell::new(""));
-        header.extend((0..(col_count as usize)).map(|i| {
-            let count = (i / 26) + 1;
-            Cell::new(COLNAMES[i % 26].repeat(count))
-        }));
-        Ok(Table::new(rows, constraints)
-            .header(Row::new(header).underlined())
-            .column_spacing(1)
-            .flex(Flex::Start))
-    }
-
-    type Error = anyhow::Error;
 }
 
 pub fn draw(frame: &mut Frame, ws: &mut Workspace) {

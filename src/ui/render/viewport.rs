@@ -1,5 +1,3 @@
-use std::cmp::min;
-
 use anyhow::Result;
 use ratatui::{
     buffer::Buffer,
@@ -33,15 +31,6 @@ impl<'a> From<&'a VisibleColumn> for Constraint {
 #[derive(Debug, Default)]
 pub struct ViewportState {
     prev_corner: Address,
-
-}
-
-impl ViewportState {
-    pub fn new(location: Address) -> Self {
-        Self {
-            prev_corner: location,
-        }
-    }
 }
 
 /// A renderable viewport over a book.
@@ -68,6 +57,30 @@ impl<'book> Viewport<'book> {
     pub fn with_selected(mut self, location: Address) -> Self {
         self.selected = location;
         self
+    }
+
+    pub(crate) fn get_visible_rows(&self, height: u16, state: &ViewportState) -> Vec<usize> {
+        // TODO(jeremy): For now the row default height is 1. We'll have
+        // to adjust that if this changes.
+        let mut length = 1;
+        let start_row = std::cmp::min(self.selected.row, state.prev_corner.row);
+        let mut start = start_row;
+        let mut end = start_row;
+        for row_idx in start_row..=LAST_ROW {
+            let updated_length = length + 1;
+            if updated_length <= height {
+                length = updated_length;
+                end = row_idx;
+            } else if self.selected.row >= row_idx {
+                start = start + 1;
+                end = row_idx;
+            } else {
+                //dbg!(&start);
+                //dbg!(&end);
+                break;
+            }
+        }
+        return (start..=end).collect();
     }
 
     pub(crate) fn get_visible_columns(
@@ -125,12 +138,15 @@ impl<'book> Viewport<'book> {
         state: &mut ViewportState,
     ) -> Result<Table<'widget>> {
         let visible_columns = self.get_visible_columns(width, state)?;
+        let visible_rows = self.get_visible_rows(height, state);
         if let Some(vc) = visible_columns.first() {
             state.prev_corner.col = vc.idx
         }
-        let max_row = min(state.prev_corner.row + height as usize, LAST_COLUMN);
+        if let Some(vr) = visible_rows.first() {
+            state.prev_corner.row = *vr;
+        }
         let rows: Vec<Row> =
-            (state.prev_corner.row..=max_row)
+            visible_rows
                 .into_iter()
                 .map(|ri| {
                     let mut cells = vec![Cell::new(Text::from(ri.to_string()))];
@@ -189,7 +205,7 @@ impl<'book> StatefulWidget for Viewport<'book> {
 
     fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
         let mut table = self
-            .to_table(area.width, area.height, state)
+            .to_table(area.width - 2, area.height - 2, state)
             .expect("Failed to turn viewport into a table.");
         if let Some(block) = self.block {
             table = table.block(block);
