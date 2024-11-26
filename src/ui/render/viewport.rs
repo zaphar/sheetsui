@@ -186,7 +186,7 @@ impl<'book> Viewport<'book> {
         let mut header = Vec::with_capacity(constraints.len());
         header.push(Cell::new(""));
         header.extend((state.prev_corner.col..end_idx).map(|i| {
-            let count = (i / 26) + 1;
+            let count = if i == 26 { 1 } else { (i / 26) + 1 };
             Cell::new(COLNAMES[(i - 1) % 26].repeat(count))
         }));
         // TODO(zaphar): We should calculate the length from the length of the stringified version of the
@@ -204,6 +204,8 @@ impl<'book> StatefulWidget for Viewport<'book> {
     type State = ViewportState;
 
     fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
+        // The block surrounding this table adds 2 additional rows and columns
+        // to the available rect for rendering this table.
         let mut table = self
             .to_table(area.width - 2, area.height - 2, state)
             .expect("Failed to turn viewport into a table.");
