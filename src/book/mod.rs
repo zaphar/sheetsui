@@ -23,8 +23,6 @@ pub struct Book {
     pub(crate) model: Model,
     pub current_sheet: u32,
     pub location: crate::ui::Address,
-    // TODO(zaphar): Because the ironcalc model is sparse we need to track our render size
-    // separately
 }
 
 impl Book {

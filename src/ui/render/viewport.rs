@@ -60,7 +60,7 @@ impl<'book> Viewport<'book> {
     }
 
     pub(crate) fn get_visible_rows(&self, height: u16, state: &ViewportState) -> Vec<usize> {
-        // TODO(jeremy): For now the row default height is 1. We'll have
+        // NOTE(jeremy): For now the row default height is 1. We'll have
         // to adjust that if this changes.
         let mut length = 1;
         let start_row = std::cmp::min(self.selected.row, state.prev_corner.row);
@@ -189,8 +189,6 @@ impl<'book> Viewport<'book> {
             let count = if i == 26 { 1 } else { (i / 26) + 1 };
             Cell::new(COLNAMES[(i - 1) % 26].repeat(count))
         }));
-        // TODO(zaphar): We should calculate the length from the length of the stringified version of the
-        // row indexes.
         let mut col_constraints = vec![Constraint::Length(5)];
         col_constraints.extend(constraints.into_iter());
         Ok(Table::new(rows, col_constraints)
