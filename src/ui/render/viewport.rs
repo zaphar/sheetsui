@@ -160,18 +160,8 @@ impl<'book> Viewport<'book> {
                                 .unwrap();
                             let cell = Cell::new(Text::raw(content));
                             match (self.book.location.row == ri, self.book.location.col == *ci) {
-                                (true, true) => cell.fg(Color::White).underlined(),
-                                _ => cell
-                                    .bg(if ri % 2 == 0 {
-                                        Color::Rgb(57, 61, 71)
-                                    } else {
-                                        Color::Rgb(165, 169, 160)
-                                    })
-                                    .fg(if ri % 2 == 0 {
-                                        Color::White
-                                    } else {
-                                        Color::Rgb(31, 32, 34)
-                                    }),
+                                (true, true) => cell.fg(Color::White).bg(Color::Rgb(57, 61, 71)),
+                                _ => cell,
                             }
                             .bold()
                         },
@@ -186,9 +176,16 @@ impl<'book> Viewport<'book> {
         let end_idx = visible_columns.last().unwrap().idx;
         let mut header = Vec::with_capacity(constraints.len());
         header.push(Cell::new(""));
-        header.extend((state.prev_corner.col..end_idx).map(|i| {
+        header.extend((state.prev_corner.col..=end_idx).map(|i| {
             let count = if i == 26 { 1 } else { (i / 26) + 1 };
+            let even = i % 2 == 0;
             Cell::new(COLNAMES[(i - 1) % 26].repeat(count))
+                .bg(if even {
+                    Color::Rgb(57, 61, 71)
+                } else {
+                    Color::Rgb(165, 169, 160)
+                })
+                .fg(if even { Color::White } else { Color::Black }).bold()
         }));
         let mut col_constraints = vec![Constraint::Length(5)];
         col_constraints.extend(constraints.into_iter());
