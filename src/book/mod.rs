@@ -16,7 +16,7 @@ use crate::ui::Address;
 #[cfg(test)]
 mod test;
 
-const COL_PIXELS: f64 = 10.0;
+const COL_PIXELS: f64 = 5.0;
 
 /// A spreadsheet book with some internal state tracking.
 pub struct Book {

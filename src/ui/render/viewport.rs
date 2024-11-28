@@ -106,6 +106,7 @@ impl<'book> Viewport<'book> {
                     // subtract the first columns size.
                     length = length - first.length;
                     // remove the first column.
+                    // TODO(jwall): This is a bit inefficient. Can we do better?
                     visible = visible.into_iter().skip(1).collect();
                 }
                 // Add this col to the visible.
@@ -193,7 +194,7 @@ impl<'book> Viewport<'book> {
         col_constraints.extend(constraints.into_iter());
         Ok(Table::new(rows, col_constraints)
             .header(Row::new(header).underlined())
-            .column_spacing(1)
+            .column_spacing(0)
             .flex(Flex::Start))
     }
 }
