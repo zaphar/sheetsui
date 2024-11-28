@@ -6,11 +6,10 @@ use crate::book::Book;
 use anyhow::Result;
 use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
 use ratatui::{
-    self,
     buffer::Buffer,
     layout::{Constraint, Flex, Layout, Rect},
     style::{Modifier, Style},
-    widgets::{Block, Table, TableState, Widget},
+    widgets::{Block, Widget},
 };
 use tui_prompts::{State, Status, TextPrompt, TextState};
 use tui_textarea::{CursorMove, TextArea};
@@ -21,6 +20,7 @@ pub mod render;
 mod test;
 
 use cmd::Cmd;
+use render::{viewport::ViewportState, Viewport};
 
 #[derive(Default, Debug, PartialEq, Clone)]
 pub enum Modality {
@@ -34,7 +34,7 @@ pub enum Modality {
 #[derive(Debug)]
 pub struct AppState<'ws> {
     pub modality_stack: Vec<Modality>,
-    pub table_state: TableState,
+    pub viewport_state: ViewportState,
     pub command_state: TextState<'ws>,
     dirty: bool,
     popup: Vec<String>,
@@ -44,7 +44,7 @@ impl<'ws> Default for AppState<'ws> {
     fn default() -> Self {
         AppState {
             modality_stack: vec![Modality::default()],
-            table_state: Default::default(),
+            viewport_state: Default::default(),
             command_state: Default::default(),
             dirty: Default::default(),
             popup: Default::default(),
@@ -123,8 +123,7 @@ impl<'ws> Workspace<'ws> {
     /// Move a row down in the current sheet.
     pub fn move_down(&mut self) -> Result<()> {
         let mut loc = self.book.location.clone();
-        let (row_count, _) = self.book.get_size()?;
-        if loc.row < row_count {
+        if loc.row < render::viewport::LAST_ROW {
             loc.row += 1;
             self.book.move_to(&loc)?;
         }
@@ -154,8 +153,7 @@ impl<'ws> Workspace<'ws> {
     /// Move a column to the left in the current sheet.
     pub fn move_right(&mut self) -> Result<()> {
         let mut loc = self.book.location.clone();
-        let (_, col_count) = self.book.get_size()?;
-        if loc.col < col_count {
+        if loc.col < render::viewport::LAST_COLUMN {
             loc.col += 1;
             self.book.move_to(&loc)?;
         }
@@ -164,8 +162,6 @@ impl<'ws> Workspace<'ws> {
 
     /// Handle input in our ui loop.
     pub fn handle_input(&mut self, evt: Event) -> Result<Option<ExitCode>> {
-        // TODO(jwall): We probably want to separate this out into
-        // a pure function so we can script various testing scenarios.
         if let Event::Key(key) = evt {
             let result = match self.state.modality() {
                 Modality::Navigate => self.handle_navigation_input(key)?,
@@ -459,20 +455,13 @@ impl<'ws> Workspace<'ws> {
     ) -> Vec<(Rect, Box<dyn Fn(Rect, &mut Buffer, &mut Self)>)> {
         use ratatui::widgets::StatefulWidget;
         let mut cs = vec![Constraint::Fill(4), Constraint::Fill(30)];
-        let Address { row, col } = self.book.location;
         let mut rs: Vec<Box<dyn Fn(Rect, &mut Buffer, &mut Self)>> = vec![
             Box::new(|rect: Rect, buf: &mut Buffer, ws: &mut Self| ws.text_area.render(rect, buf)),
             Box::new(move |rect: Rect, buf: &mut Buffer, ws: &mut Self| {
                 let sheet_name = ws.book.get_sheet_name().unwrap_or("Unknown");
-                // Table widget display
                 let table_block = Block::bordered().title_top(sheet_name);
-                let table_inner: Table = TryFrom::try_from(&ws.book).expect("");
-                let table = table_inner.block(table_block);
-                // https://docs.rs/ratatui/latest/ratatui/widgets/struct.TableState.html
-                // TODO(zaphar): Apparently scrolling by columns doesn't work?
-                ws.state.table_state.select_cell(Some((row, col)));
-                ws.state.table_state.select_column(Some(col));
-                StatefulWidget::render(table, rect, buf, &mut ws.state.table_state);
+                let viewport = Viewport::new(&ws.book).with_selected(ws.book.location.clone()).block(table_block);
+                StatefulWidget::render(viewport, rect, buf, &mut ws.state.viewport_state);
             }),
         ];
 
