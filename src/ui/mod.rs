@@ -228,7 +228,7 @@ impl<'ws> Workspace<'ws> {
     fn handle_edit_input(&mut self, key: event::KeyEvent) -> Result<Option<ExitCode>> {
         if key.kind == KeyEventKind::Press {
             match key.code {
-                KeyCode::Char('h') if key.modifiers == KeyModifiers::CONTROL => {
+                KeyCode::Char('?') => {
                     self.enter_dialog_mode(self.render_help_text());
                 }
                 KeyCode::Esc | KeyCode::Enter => self.exit_edit_mode()?,
@@ -304,6 +304,9 @@ impl<'ws> Workspace<'ws> {
                 }
                 KeyCode::Char('s') if key.modifiers == KeyModifiers::CONTROL => {
                     self.save_file()?;
+                }
+                KeyCode::Char('?') => {
+                    self.enter_dialog_mode(self.render_help_text());
                 }
                 KeyCode::Char('s')
                     if key.modifiers == KeyModifiers::HYPER
