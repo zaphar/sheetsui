@@ -7,6 +7,7 @@ pub enum Cmd<'a> {
     Write(Option<&'a str>),
     InsertRow(usize),
     InsertColumns(usize),
+    RenameSheet(Option<usize>, &'a str),
     Edit(&'a str),
     Help(Option<&'a str>),
     Quit,
@@ -37,6 +38,9 @@ pub fn parse<'cmd, 'i: 'cmd>(input: &'i str) -> Result<Option<Cmd<'cmd>>, &'stat
     }
     // try consume quit command.
     if let Some(cmd) = try_consume_quit(cursor.clone())? {
+        return Ok(Some(cmd));
+    }
+    if let Some(cmd) = try_consume_rename_sheet(cursor.clone())? {
         return Ok(Some(cmd));
     }
     Ok(None)
@@ -208,4 +212,38 @@ fn try_consume_quit<'cmd, 'i: 'cmd>(
         return Err("Invalid command: Quit does not take an argument");
     }
     return Ok(Some(Cmd::Quit));
+}
+
+fn try_consume_rename_sheet<'cmd, 'i: 'cmd>(
+    mut input: StrCursor<'i>,
+) -> Result<Option<Cmd<'cmd>>, &'static str> {
+    const LONG: &'static str = "rename-sheet";
+    if compare(input.clone(), LONG) {
+        input.seek(LONG.len());
+    } else {
+        return Ok(None);
+    }
+    if input.remaining() > 0 && !is_ws(&mut input) {
+        return Err("Invalid command: Did you mean to type `rename-sheet [idx] <new-name>`?");
+    }
+    let (idx, rest) = try_consume_usize(input.clone());
+    let arg = rest.span(0..).trim();
+    if arg.is_empty() {
+        return Err("Invalid command: `rename-sheet` requires a sheet name argument?");
+    }
+    return Ok(Some(Cmd::RenameSheet(idx, arg)));
+}
+
+fn try_consume_usize<'cmd, 'i: 'cmd>(
+    mut input: StrCursor<'i>,
+) -> (Option<usize>, StrCursor<'i>) {
+    let mut out = String::new();
+    let original_input = input.clone();
+    while input.peek_next().map(|c| (*c as char).is_ascii_digit()).unwrap_or(false) {
+        out.push(*input.next().unwrap() as char);
+    }
+    if out.len() > 0 {
+        return (Some(out.parse().unwrap()), input.clone());
+    }
+    (None, original_input)
 }

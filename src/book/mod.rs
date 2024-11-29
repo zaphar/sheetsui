@@ -78,6 +78,11 @@ impl Book {
         Ok(&self.get_sheet()?.name)
     }
 
+    pub fn set_sheet_name(&mut self, idx: usize, sheet_name: &str) -> Result<()> {
+        self.get_sheet_by_idx_mut(idx)?.set_name(sheet_name);
+        Ok(())
+    }
+
     /// Get the sheet data for the current worksheet.
     pub fn get_sheet_data(&self) -> Result<&SheetData> {
         Ok(&self.get_sheet()?.sheet_data)
@@ -249,6 +254,14 @@ impl Book {
             .model
             .workbook
             .worksheet_mut(self.current_sheet)
+            .map_err(|s| anyhow!("Invalid Worksheet: {}", s))?)
+    }
+    
+    pub(crate) fn get_sheet_by_idx_mut(&mut self, idx: usize) -> Result<&mut Worksheet> {
+        Ok(self
+            .model
+            .workbook
+            .worksheet_mut(idx as u32)
             .map_err(|s| anyhow!("Invalid Worksheet: {}", s))?)
     }
 }

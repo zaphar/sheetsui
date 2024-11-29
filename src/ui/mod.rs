@@ -278,6 +278,17 @@ impl<'ws> Workspace<'ws> {
                 self.book.evaluate();
                 Ok(true)
             }
+            Ok(Some(Cmd::RenameSheet(idx, name))) => {
+                match idx {
+                    Some(idx) => {
+                        self.book.set_sheet_name(idx, name)?;
+                    }
+                    _ => {
+                        self.book.set_sheet_name(self.book.current_sheet as usize, name)?;
+                    }
+                }
+                Ok(true)
+            }
             Ok(Some(Cmd::Quit)) => {
                 // TODO(zaphar): We probably need to do better than this
                 std::process::exit(0);
