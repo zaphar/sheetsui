@@ -293,6 +293,10 @@ impl<'ws> Workspace<'ws> {
                 self.book.new_sheet(name)?;
                 Ok(true)
             }
+            Ok(Some(Cmd::SelectSheet(name))) => {
+                self.book.select_sheet_by_name(name);
+                Ok(true)
+            }
             Ok(Some(Cmd::Quit)) => {
                 // TODO(zaphar): We probably need to do better than this
                 std::process::exit(0);
@@ -322,6 +326,12 @@ impl<'ws> Workspace<'ws> {
                 }
                 KeyCode::Char('?') => {
                     self.enter_dialog_mode(self.render_help_text());
+                }
+                KeyCode::Char('n') if key.modifiers == KeyModifiers::CONTROL => {
+                    self.book.select_next_sheet();
+                }
+                KeyCode::Char('p') if key.modifiers == KeyModifiers::CONTROL => {
+                    self.book.select_prev_sheet();
                 }
                 KeyCode::Char('s')
                     if key.modifiers == KeyModifiers::HYPER
@@ -467,47 +477,6 @@ impl<'ws> Workspace<'ws> {
         Ok(())
     }
 
-    fn get_render_parts(
-        &mut self,
-        area: Rect,
-    ) -> Vec<(Rect, Box<dyn Fn(Rect, &mut Buffer, &mut Self)>)> {
-        use ratatui::widgets::StatefulWidget;
-        let mut cs = vec![Constraint::Fill(4), Constraint::Fill(30)];
-        let mut rs: Vec<Box<dyn Fn(Rect, &mut Buffer, &mut Self)>> = vec![
-            Box::new(|rect: Rect, buf: &mut Buffer, ws: &mut Self| ws.text_area.render(rect, buf)),
-            Box::new(move |rect: Rect, buf: &mut Buffer, ws: &mut Self| {
-                let sheet_name = ws.book.get_sheet_name().unwrap_or("Unknown");
-                let table_block = Block::bordered().title_top(sheet_name);
-                let viewport = Viewport::new(&ws.book).with_selected(ws.book.location.clone()).block(table_block);
-                StatefulWidget::render(viewport, rect, buf, &mut ws.state.viewport_state);
-            }),
-        ];
-
-        if self.state.modality() == &Modality::Command {
-            cs.push(Constraint::Max(1));
-            rs.push(Box::new(|rect: Rect, buf: &mut Buffer, ws: &mut Self| {
-                StatefulWidget::render(
-                    TextPrompt::from("Command"),
-                    rect,
-                    buf,
-                    &mut ws.state.command_state,
-                )
-            }));
-        }
-        let rects: Vec<Rect> = Vec::from(
-            Layout::vertical(cs)
-                .vertical_margin(2)
-                .horizontal_margin(2)
-                .flex(Flex::Legacy)
-                .split(area.clone())
-                .as_ref(),
-        );
-        rects
-            .into_iter()
-            .zip(rs.into_iter())
-            .map(|(rect, f)| (rect, f))
-            .collect()
-    }
 }
 
 fn load_book(path: &PathBuf, locale: &str, tz: &str) -> Result<Book, anyhow::Error> {

@@ -9,6 +9,7 @@ pub enum Cmd<'a> {
     InsertColumns(usize),
     RenameSheet(Option<usize>, &'a str),
     NewSheet(Option<&'a str>),
+    SelectSheet(&'a str),
     Edit(&'a str),
     Help(Option<&'a str>),
     Quit,
@@ -22,6 +23,9 @@ pub fn parse<'cmd, 'i: 'cmd>(input: &'i str) -> Result<Option<Cmd<'cmd>>, &'stat
         return Ok(Some(cmd));
     }
     if let Some(cmd) = try_consume_new_sheet(cursor.clone())? {
+        return Ok(Some(cmd));
+    }
+    if let Some(cmd) = try_consume_select_sheet(cursor.clone())? {
         return Ok(Some(cmd));
     }
     // try consume insert-row command.
@@ -114,6 +118,25 @@ fn try_consume_new_sheet<'cmd, 'i: 'cmd>(
     })));
 }
 
+fn try_consume_select_sheet<'cmd, 'i: 'cmd>(
+    mut input: StrCursor<'i>,
+) -> Result<Option<Cmd<'cmd>>, &'static str> {
+    const LONG: &'static str = "select-sheet";
+
+    if compare(input.clone(), LONG) {
+        input.seek(LONG.len());
+    } else {
+        return Ok(None);
+    }
+    if input.remaining() > 0 && !is_ws(&mut input) {
+        return Err("Invalid command: Did you mean to type `write <sheet-name>`?");
+    }
+    let arg = input.span(0..).trim();
+    if arg.is_empty() {
+        return Err("Invalid command: Did you forget the sheet name? `write <sheet-name>`?");
+    }
+    return Ok(Some(Cmd::SelectSheet(arg)));
+}
 
 fn try_consume_insert_row<'cmd, 'i: 'cmd>(
     mut input: StrCursor<'i>,

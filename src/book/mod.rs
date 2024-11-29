@@ -215,14 +215,15 @@ impl Book {
 
     /// Select a sheet by name.
     pub fn select_sheet_by_name(&mut self, name: &str) -> bool {
-        if let Some(sheet) = self
+        if let Some((idx, _sheet)) = self
             .model
             .workbook
             .worksheets
             .iter()
-            .find(|sheet| sheet.name == name)
+            .enumerate()
+            .find(|(_idx, sheet)| sheet.name == name)
         {
-            self.current_sheet = sheet.sheet_id;
+            self.current_sheet =idx as u32;
             return true;
         }
         false
@@ -233,16 +234,37 @@ impl Book {
         self.model.workbook.get_worksheet_names()
     }
 
+    pub fn select_next_sheet(&mut self) {
+        let len = self.model.workbook.worksheets.len() as u32;
+        let mut next = self.current_sheet + 1;
+        if next == len {
+            next = 0;
+        }
+        self.current_sheet = next;
+    }
+    
+    pub fn select_prev_sheet(&mut self) {
+        let len = self.model.workbook.worksheets.len() as u32;
+        let next = if self.current_sheet == 0 {
+            len - 1
+        } else {
+            self.current_sheet - 1
+        };
+        self.current_sheet = next;
+    }
+
+
     /// Select a sheet by id.
     pub fn select_sheet_by_id(&mut self, id: u32) -> bool {
-        if let Some(sheet) = self
+        if let Some((idx, _sheet)) = self
             .model
             .workbook
             .worksheets
             .iter()
-            .find(|sheet| sheet.sheet_id == id)
+            .enumerate()
+            .find(|(_idx, sheet)| sheet.sheet_id == id)
         {
-            self.current_sheet = sheet.sheet_id;
+            self.current_sheet = idx as u32;
             return true;
         }
         false
@@ -254,7 +276,7 @@ impl Book {
             .model
             .workbook
             .worksheet(self.current_sheet)
-            .map_err(|s| anyhow!("Invalid Worksheet: {}", s))?)
+            .map_err(|s| anyhow!("Invalid Worksheet id: {}: error: {}", self.current_sheet, s))?)
     }
 
     pub(crate) fn get_sheet_mut(&mut self) -> Result<&mut Worksheet> {

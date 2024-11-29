@@ -2,7 +2,7 @@ use ratatui::{
     self,
     layout::Rect,
     text::{Line, Text},
-    widgets::{Block, Widget},
+    widgets::{Block, Tabs, Widget},
     Frame,
 };
 use tui_popup::Popup;
@@ -14,6 +14,61 @@ pub use viewport::Viewport;
 
 #[cfg(test)]
 mod test;
+
+impl<'ws> Workspace<'ws> {
+    fn get_render_parts(
+        &mut self,
+        area: Rect,
+    ) -> Vec<(Rect, Box<dyn Fn(Rect, &mut Buffer, &mut Self)>)> {
+        use ratatui::widgets::StatefulWidget;
+        let mut cs = vec![
+            Constraint::Length(2),
+            Constraint::Length(3),
+            Constraint::Fill(1),
+        ];
+        let mut rs: Vec<Box<dyn Fn(Rect, &mut Buffer, &mut Self)>> = vec![
+            Box::new(|rect: Rect, buf: &mut Buffer, ws: &mut Self| {
+                let tabs = Tabs::new(ws.book.get_sheet_names())
+                    .select(Some(ws.book.current_sheet as usize));
+                tabs.render(rect, buf);
+            }),
+            Box::new(|rect: Rect, buf: &mut Buffer, ws: &mut Self| ws.text_area.render(rect, buf)),
+            Box::new(move |rect: Rect, buf: &mut Buffer, ws: &mut Self| {
+                let sheet_name = ws.book.get_sheet_name().unwrap_or("Unknown");
+                let table_block = Block::bordered().title_top(sheet_name);
+                let viewport = Viewport::new(&ws.book)
+                    .with_selected(ws.book.location.clone())
+                    .block(table_block);
+                StatefulWidget::render(viewport, rect, buf, &mut ws.state.viewport_state);
+            }),
+        ];
+
+        if self.state.modality() == &Modality::Command {
+            cs.push(Constraint::Max(1));
+            rs.push(Box::new(|rect: Rect, buf: &mut Buffer, ws: &mut Self| {
+                StatefulWidget::render(
+                    TextPrompt::from("Command"),
+                    rect,
+                    buf,
+                    &mut ws.state.command_state,
+                )
+            }));
+        }
+        let rects: Vec<Rect> = Vec::from(
+            Layout::vertical(cs)
+                .vertical_margin(2)
+                .horizontal_margin(2)
+                .flex(Flex::Legacy)
+                .split(area.clone())
+                .as_ref(),
+        );
+        rects
+            .into_iter()
+            .zip(rs.into_iter())
+            .map(|(rect, f)| (rect, f))
+            .collect()
+    }
+}
 
 impl<'widget, 'ws: 'widget> Widget for &'widget mut Workspace<'ws> {
     fn render(self, area: Rect, buf: &mut ratatui::prelude::Buffer)
