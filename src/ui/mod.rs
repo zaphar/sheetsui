@@ -289,6 +289,10 @@ impl<'ws> Workspace<'ws> {
                 }
                 Ok(true)
             }
+            Ok(Some(Cmd::NewSheet(name))) => {
+                self.book.new_sheet(name)?;
+                Ok(true)
+            }
             Ok(Some(Cmd::Quit)) => {
                 // TODO(zaphar): We probably need to do better than this
                 std::process::exit(0);

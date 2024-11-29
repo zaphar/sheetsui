@@ -83,6 +83,14 @@ impl Book {
         Ok(())
     }
 
+    pub fn new_sheet(&mut self, sheet_name: Option<&str>) -> Result<()> {
+        let (_, idx) = self.model.new_sheet();
+        if let Some(name) = sheet_name {
+            self.set_sheet_name(idx as usize, name)?;
+        }
+        Ok(())
+    }
+
     /// Get the sheet data for the current worksheet.
     pub fn get_sheet_data(&self) -> Result<&SheetData> {
         Ok(&self.get_sheet()?.sheet_data)

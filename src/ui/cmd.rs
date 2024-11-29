@@ -8,6 +8,7 @@ pub enum Cmd<'a> {
     InsertRow(usize),
     InsertColumns(usize),
     RenameSheet(Option<usize>, &'a str),
+    NewSheet(Option<&'a str>),
     Edit(&'a str),
     Help(Option<&'a str>),
     Quit,
@@ -18,6 +19,9 @@ pub fn parse<'cmd, 'i: 'cmd>(input: &'i str) -> Result<Option<Cmd<'cmd>>, &'stat
     let cursor = StrCursor::new(input);
     // try consume write command.
     if let Some(cmd) = try_consume_write(cursor.clone())? {
+        return Ok(Some(cmd));
+    }
+    if let Some(cmd) = try_consume_new_sheet(cursor.clone())? {
         return Ok(Some(cmd));
     }
     // try consume insert-row command.
@@ -88,6 +92,28 @@ fn try_consume_write<'cmd, 'i: 'cmd>(
         Some(arg)
     })));
 }
+
+fn try_consume_new_sheet<'cmd, 'i: 'cmd>(
+    mut input: StrCursor<'i>,
+) -> Result<Option<Cmd<'cmd>>, &'static str> {
+    const LONG: &'static str = "new-sheet";
+
+    if compare(input.clone(), LONG) {
+        input.seek(LONG.len());
+    } else {
+        return Ok(None);
+    }
+    if input.remaining() > 0 && !is_ws(&mut input) {
+        return Err("Invalid command: Did you mean to type `write <arg>`?");
+    }
+    let arg = input.span(0..).trim();
+    return Ok(Some(Cmd::NewSheet(if arg.is_empty() {
+        None
+    } else {
+        Some(arg)
+    })));
+}
+
 
 fn try_consume_insert_row<'cmd, 'i: 'cmd>(
     mut input: StrCursor<'i>,
