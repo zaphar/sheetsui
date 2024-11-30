@@ -3,8 +3,9 @@ use std::{path::PathBuf, process::ExitCode};
 
 use crate::book::Book;
 
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
+use ironcalc::base::Model;
 use ratatui::{
     buffer::Buffer,
     layout::{Constraint, Flex, Layout},
@@ -87,7 +88,7 @@ impl Default for Address {
 pub struct Workspace<'ws> {
     name: PathBuf,
     book: Book,
-    state: AppState<'ws>,
+    pub(crate) state: AppState<'ws>,
     text_area: TextArea<'ws>,
 }
 
@@ -102,6 +103,13 @@ impl<'ws> Workspace<'ws> {
         };
         ws.handle_movement_change();
         ws
+    }
+
+    pub fn new_empty(locale: &str, tz: &str) -> Result<Self> {
+        Ok(Self::new(
+            Book::new(Model::new_empty("", locale, tz).map_err(|e| anyhow!("{}", e))?),
+            PathBuf::default(),
+        ))
     }
 
     /// Loads a workspace from a path.
@@ -178,23 +186,28 @@ impl<'ws> Workspace<'ws> {
         match self.state.modality() {
             Modality::Navigate => vec![
                 "Navigate Mode:".to_string(),
-                "* e: Enter edit mode for current cell".to_string(),
+                "* e,i: Enter edit mode for current cell".to_string(),
+                "* ENTER/RETURN: Go down one cell".to_string(),
+                "* TAB: Go over one cell".to_string(),
                 "* h,j,k,l: vim style navigation".to_string(),
                 "* CTRl-r: Add a row".to_string(),
                 "* CTRl-c: Add a column".to_string(),
                 "* CTRl-l: Grow column width by 1".to_string(),
                 "* CTRl-h: Shrink column width by 1".to_string(),
+                "* CTRl-n: Next sheet. Starts over at beginning if at end.".to_string(),
+                "* CTRl-p: Previous sheet. Starts over at end if at beginning.".to_string(),
                 "* q exit".to_string(),
                 "* Ctrl-S Save sheet".to_string(),
             ],
             Modality::CellEdit => vec![
                 "Edit Mode:".to_string(),
-                "* ESC: Exit edit mode".to_string(),
+                "* ESC, ENTER/RETURN: Exit edit mode".to_string(),
                 "Otherwise edit as normal".to_string(),
             ],
             Modality::Command => vec![
                 "Command Mode:".to_string(),
                 "* ESC: Exit command mode".to_string(),
+                "* ENTER/RETURN: run command and exit command mode".to_string(),
             ],
             _ => vec!["General help".to_string()],
         }
@@ -284,7 +297,8 @@ impl<'ws> Workspace<'ws> {
                         self.book.set_sheet_name(idx, name)?;
                     }
                     _ => {
-                        self.book.set_sheet_name(self.book.current_sheet as usize, name)?;
+                        self.book
+                            .set_sheet_name(self.book.current_sheet as usize, name)?;
                     }
                 }
                 Ok(true)
@@ -381,8 +395,22 @@ impl<'ws> Workspace<'ws> {
                 KeyCode::Char('q') => {
                     return Ok(Some(ExitCode::SUCCESS));
                 }
-                KeyCode::Char('j') | KeyCode::Down if key.modifiers != KeyModifiers::CONTROL => {
+                KeyCode::Char('j') | KeyCode::Down
+                    if key.modifiers != KeyModifiers::CONTROL =>
+                {
                     self.move_down()?;
+                    self.handle_movement_change();
+                }
+                KeyCode::Enter
+                    if key.modifiers != KeyModifiers::SHIFT =>
+                {
+                    self.move_down()?;
+                    self.handle_movement_change();
+                }
+                KeyCode::Enter
+                    if key.modifiers == KeyModifiers::SHIFT =>
+                {
+                    self.move_up()?;
                     self.handle_movement_change();
                 }
                 KeyCode::Char('k') | KeyCode::Up if key.modifiers != KeyModifiers::CONTROL => {
@@ -393,8 +421,22 @@ impl<'ws> Workspace<'ws> {
                     self.move_left()?;
                     self.handle_movement_change();
                 }
-                KeyCode::Char('l') | KeyCode::Right if key.modifiers != KeyModifiers::CONTROL => {
+                KeyCode::Char('l') | KeyCode::Right
+                    if key.modifiers != KeyModifiers::CONTROL =>
+                {
                     self.move_right()?;
+                    self.handle_movement_change();
+                }
+                KeyCode::Tab
+                    if key.modifiers != KeyModifiers::SHIFT =>
+                {
+                    self.move_right()?;
+                    self.handle_movement_change();
+                }
+                KeyCode::Tab
+                    if key.modifiers == KeyModifiers::SHIFT =>
+                {
+                    self.move_left()?;
                     self.handle_movement_change();
                 }
                 _ => {
@@ -476,7 +518,6 @@ impl<'ws> Workspace<'ws> {
         self.book.save_to_xlsx(path.into().as_str())?;
         Ok(())
     }
-
 }
 
 fn load_book(path: &PathBuf, locale: &str, tz: &str) -> Result<Book, anyhow::Error> {

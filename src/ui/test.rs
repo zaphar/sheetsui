@@ -1,4 +1,9 @@
+use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
+
+use crate::ui::Modality;
+
 use super::cmd::{parse, Cmd};
+use super::Workspace;
 
 #[test]
 fn test_write_cmd() {
@@ -187,4 +192,61 @@ fn test_cmd_rename_sheet_with_idx_and_name() {
     assert_eq!(cmd, Cmd::RenameSheet(Some(0), "test"));
 }
 
+fn construct_key_event(code: KeyCode) -> Event {
+    construct_modified_key_event(code, KeyModifiers::empty())
+}
+
+fn construct_modified_key_event(code: KeyCode, mods: KeyModifiers) -> Event {
+    Event::Key(KeyEvent::new(code, mods))
+}
+
 // TODO(zaphar): Interaction testing for input.
+#[test]
+fn test_input_navitation_enter_key() {
+    let mut ws =
+        Workspace::new_empty("en", "America/New_York").expect("Failed to get empty workbook");
+    let row = ws.book.location.row;
+    assert_eq!(Some(&Modality::Navigate), ws.state.modality_stack.last());
+    ws.handle_input(construct_key_event(KeyCode::Enter))
+    .expect("Failed to handle enter key");
+    assert_eq!(row + 1, ws.book.location.row);
+}
+
+#[test]
+fn test_input_navitation_tab_key() {
+    let mut ws =
+        Workspace::new_empty("en", "America/New_York").expect("Failed to get empty workbook");
+    let col = dbg!(ws.book.location.col);
+    assert_eq!(Some(&Modality::Navigate), ws.state.modality_stack.last());
+    ws.handle_input(construct_key_event(KeyCode::Tab))
+    .expect("Failed to handle enter key");
+    assert_eq!(col + 1, ws.book.location.col);
+}
+
+#[test]
+fn test_input_navitation_shift_enter_key() {
+    let mut ws =
+        Workspace::new_empty("en", "America/New_York").expect("Failed to get empty workbook");
+    let row = ws.book.location.row;
+    assert_eq!(Some(&Modality::Navigate), ws.state.modality_stack.last());
+    ws.handle_input(construct_key_event(KeyCode::Enter))
+    .expect("Failed to handle enter key");
+    assert_eq!(row + 1, ws.book.location.row);
+    ws.handle_input(construct_modified_key_event(KeyCode::Enter, KeyModifiers::SHIFT))
+    .expect("Failed to handle enter key");
+    assert_eq!(row, ws.book.location.row);
+}
+
+#[test]
+fn test_input_navitation_shift_tab_key() {
+    let mut ws =
+        Workspace::new_empty("en", "America/New_York").expect("Failed to get empty workbook");
+    let col = dbg!(ws.book.location.col);
+    assert_eq!(Some(&Modality::Navigate), ws.state.modality_stack.last());
+    ws.handle_input(construct_key_event(KeyCode::Tab))
+    .expect("Failed to handle enter key");
+    assert_eq!(col + 1, ws.book.location.col);
+    ws.handle_input(construct_modified_key_event(KeyCode::Tab, KeyModifiers::SHIFT))
+    .expect("Failed to handle enter key");
+    assert_eq!(col, ws.book.location.col);
+}
