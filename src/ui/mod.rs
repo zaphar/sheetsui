@@ -7,9 +7,9 @@ use anyhow::Result;
 use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
 use ratatui::{
     buffer::Buffer,
-    layout::{Constraint, Flex, Layout, Rect},
+    layout::{Constraint, Flex, Layout},
     style::{Modifier, Style},
-    widgets::{Block, Widget},
+    widgets::Block,
 };
 use tui_prompts::{State, Status, TextPrompt, TextState};
 use tui_textarea::{CursorMove, TextArea};
@@ -20,7 +20,7 @@ pub mod render;
 mod test;
 
 use cmd::Cmd;
-use render::{viewport::ViewportState, Viewport};
+use render::viewport::ViewportState;
 
 #[derive(Default, Debug, PartialEq, Clone)]
 pub enum Modality {
