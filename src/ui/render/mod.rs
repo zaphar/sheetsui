@@ -28,7 +28,7 @@ impl<'ws> Workspace<'ws> {
         ];
         let mut rs: Vec<Box<dyn Fn(Rect, &mut Buffer, &mut Self)>> = vec![
             Box::new(|rect: Rect, buf: &mut Buffer, ws: &mut Self| {
-                let tabs = Tabs::new(ws.book.get_sheet_names())
+                let tabs = Tabs::new(ws.book.get_sheet_names().iter().enumerate().map(|(idx, name)| format!("{} {}", name, idx)).collect::<Vec<String>>())
                     .select(Some(ws.book.current_sheet as usize));
                 tabs.render(rect, buf);
             }),
