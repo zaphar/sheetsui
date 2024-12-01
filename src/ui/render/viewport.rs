@@ -3,7 +3,7 @@ use ratatui::{
     buffer::Buffer,
     layout::{Constraint, Flex, Rect},
     style::{Color, Stylize},
-    text::Text,
+    text::{Line, Text},
     widgets::{Block, Cell, Row, StatefulWidget, Table, Widget},
 };
 
@@ -179,13 +179,14 @@ impl<'book> Viewport<'book> {
         header.extend((state.prev_corner.col..=end_idx).map(|i| {
             let count = if i == 26 { 1 } else { (i / 26) + 1 };
             let even = i % 2 == 0;
-            Cell::new(COLNAMES[(i - 1) % 26].repeat(count))
+            Cell::new(Line::raw(COLNAMES[(i - 1) % 26].repeat(count)).centered())
                 .bg(if even {
                     Color::Rgb(57, 61, 71)
                 } else {
                     Color::Rgb(165, 169, 160)
                 })
-                .fg(if even { Color::White } else { Color::Black }).bold()
+                .fg(if even { Color::White } else { Color::Black })
+                .bold()
         }));
         let mut col_constraints = vec![Constraint::Length(5)];
         col_constraints.extend(constraints.into_iter());
