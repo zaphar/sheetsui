@@ -266,7 +266,34 @@ fn test_edit_mode_help_keycode() {
         .expect("Failed to handle 'i' key");
     assert_eq!(Some(&Modality::CellEdit), ws.state.modality_stack.last());
     let edit_help = ws.render_help_text();
-    ws.handle_input(construct_modified_key_event(KeyCode::Char('?'), KeyModifiers::CONTROL))
+    ws.handle_input(construct_modified_key_event(KeyCode::Char('h'), KeyModifiers::ALT))
+        .expect("Failed to handle 'ctrl-?' key event");
+    assert_eq!(Some(&Modality::Dialog), ws.state.modality_stack.last());
+    assert_eq!(edit_help, ws.state.popup);
+}
+
+#[test]
+fn test_navigation_mode_help_keycode() {
+    let mut ws =
+        Workspace::new_empty("en", "America/New_York").expect("Failed to get empty workbook");
+    assert_eq!(Some(&Modality::Navigate), ws.state.modality_stack.last());
+    let help_text = ws.render_help_text();
+    ws.handle_input(construct_modified_key_event(KeyCode::Char('h'), KeyModifiers::ALT))
+        .expect("Failed to handle 'ctrl-?' key event");
+    assert_eq!(Some(&Modality::Dialog), ws.state.modality_stack.last());
+    assert_eq!(help_text, ws.state.popup);
+}
+
+#[test]
+fn test_command_mode_help_keycode() {
+    let mut ws =
+        Workspace::new_empty("en", "America/New_York").expect("Failed to get empty workbook");
+    assert_eq!(Some(&Modality::Navigate), ws.state.modality_stack.last());
+    ws.handle_input(construct_key_event(KeyCode::Char(':')))
+        .expect("Failed to handle ':' key");
+    assert_eq!(Some(&Modality::Command), ws.state.modality_stack.last());
+    let edit_help = ws.render_help_text();
+    ws.handle_input(construct_modified_key_event(KeyCode::Char('h'), KeyModifiers::ALT))
         .expect("Failed to handle 'ctrl-?' key event");
     assert_eq!(Some(&Modality::Dialog), ws.state.modality_stack.last());
     assert_eq!(edit_help, ws.state.popup);

@@ -2,7 +2,7 @@ use ratatui::{
     self,
     layout::Rect,
     text::{Line, Text},
-    widgets::{Block, Tabs, Widget},
+    widgets::{Block, Paragraph, Tabs, Widget},
     Frame,
 };
 use tui_popup::Popup;
@@ -33,8 +33,11 @@ impl<'ws> Workspace<'ws> {
                 tabs.render(rect, buf);
             }),
             Box::new(|rect: Rect, buf: &mut Buffer, ws: &mut Self| {
-                // TODO(zaphar): Show a small help text?
-                ws.text_area.render(rect, buf)
+                let [text_rect, info_rect] = Layout::horizontal(vec![Constraint::Fill(1),Constraint::Fill(1)]).areas(rect);
+                ws.text_area.render(text_rect, buf);
+                let hint = Paragraph::new(vec![Line::from(""),Line::from("ALT-h to toggle help dialog").centered()]);
+                // TODO(zaphar): Show a small getting-started text?
+                hint.render(info_rect, buf);
             }),
             Box::new(move |rect: Rect, buf: &mut Buffer, ws: &mut Self| {
                 let sheet_name = ws.book.get_sheet_name().unwrap_or("Unknown");

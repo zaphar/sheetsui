@@ -196,6 +196,7 @@ impl<'ws> Workspace<'ws> {
                 "* CTRl-h: Shrink column width by 1".to_string(),
                 "* CTRl-n: Next sheet. Starts over at beginning if at end.".to_string(),
                 "* CTRl-p: Previous sheet. Starts over at end if at beginning.".to_string(),
+                "* CTRl-?: Previous sheet. Starts over at end if at beginning.".to_string(),
                 "* q exit".to_string(),
                 "* Ctrl-S Save sheet".to_string(),
             ],
@@ -207,6 +208,7 @@ impl<'ws> Workspace<'ws> {
             Modality::Command => vec![
                 "Command Mode:".to_string(),
                 "* ESC: Exit command mode".to_string(),
+                "* CTRL-?: Exit command mode".to_string(),
                 "* ENTER/RETURN: run command and exit command mode".to_string(),
             ],
             _ => vec!["General help".to_string()],
@@ -217,6 +219,10 @@ impl<'ws> Workspace<'ws> {
         if key.kind == KeyEventKind::Press {
             match key.code {
                 KeyCode::Esc | KeyCode::Enter => self.exit_command_mode()?,
+                KeyCode::Char('h') if key.modifiers == KeyModifiers::ALT => {
+                    self.enter_dialog_mode(self.render_help_text());
+                    return Ok(None);
+                }
                 _ => {
                     // NOOP
                 }
@@ -230,6 +236,7 @@ impl<'ws> Workspace<'ws> {
         if key.kind == KeyEventKind::Press {
             match key.code {
                 KeyCode::Esc | KeyCode::Enter | KeyCode::Char('q') => self.exit_dialog_mode()?,
+                KeyCode::Char('h') if key.modifiers == KeyModifiers::ALT => self.exit_dialog_mode()?,
                 _ => {
                     // NOOP
                 }
@@ -241,7 +248,7 @@ impl<'ws> Workspace<'ws> {
     fn handle_edit_input(&mut self, key: event::KeyEvent) -> Result<Option<ExitCode>> {
         if key.kind == KeyEventKind::Press {
             match key.code {
-                KeyCode::Char('?') if key.modifiers == KeyModifiers::CONTROL => {
+                KeyCode::Char('h') if key.modifiers == KeyModifiers::ALT => {
                     self.enter_dialog_mode(self.render_help_text());
                     return Ok(None);
                 }
@@ -339,7 +346,7 @@ impl<'ws> Workspace<'ws> {
                 KeyCode::Char('s') if key.modifiers == KeyModifiers::CONTROL => {
                     self.save_file()?;
                 }
-                KeyCode::Char('?') => {
+                KeyCode::Char('h') if key.modifiers == KeyModifiers::ALT => {
                     self.enter_dialog_mode(self.render_help_text());
                 }
                 KeyCode::Char('n') if key.modifiers == KeyModifiers::CONTROL => {
