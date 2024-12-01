@@ -298,3 +298,20 @@ fn test_command_mode_help_keycode() {
     assert_eq!(Some(&Modality::Dialog), ws.state.modality_stack.last());
     assert_eq!(edit_help, ws.state.popup);
 }
+
+#[test]
+fn test_edit_mode_esc_keycode() {
+    let mut ws =
+        Workspace::new_empty("en", "America/New_York").expect("Failed to get empty workbook");
+    assert_eq!(Some(&Modality::Navigate), ws.state.modality_stack.last());
+    ws.handle_input(construct_key_event(KeyCode::Char('i')))
+        .expect("Failed to handle 'i' key");
+    assert_eq!(Some(&Modality::CellEdit), ws.state.modality_stack.last());
+    ws.handle_input(construct_key_event(KeyCode::Char('a')))
+        .expect("Failed to handle 'a' key event");
+    ws.handle_input(construct_key_event(KeyCode::Esc))
+        .expect("Failed to handle 'esc' key event");
+    assert_eq!("", ws.book.get_current_cell_contents().expect("Failed to get current cell contents"));
+    assert_eq!("", ws.text_area.lines().join("\n"));
+}
+

@@ -202,7 +202,8 @@ impl<'ws> Workspace<'ws> {
             ],
             Modality::CellEdit => vec![
                 "Edit Mode:".to_string(),
-                "* ESC, ENTER/RETURN: Exit edit mode".to_string(),
+                "* ENTER/RETURN: Exit edit mode and save changes".to_string(),
+                "* ESC: Exit edit mode and discard changes".to_string(),
                 "Otherwise edit as normal".to_string(),
             ],
             Modality::Command => vec![
@@ -252,7 +253,8 @@ impl<'ws> Workspace<'ws> {
                     self.enter_dialog_mode(self.render_help_text());
                     return Ok(None);
                 }
-                KeyCode::Esc | KeyCode::Enter => self.exit_edit_mode()?,
+                KeyCode::Enter => self.exit_edit_mode(true)?,
+                KeyCode::Esc => self.exit_edit_mode(false)?,
                 _ => {
                     // NOOP
                 }
@@ -495,15 +497,17 @@ impl<'ws> Workspace<'ws> {
         Ok(())
     }
 
-    fn exit_edit_mode(&mut self) -> Result<()> {
+    fn exit_edit_mode(&mut self, keep: bool) -> Result<()> {
         self.text_area.set_cursor_line_style(Style::default());
         self.text_area.set_cursor_style(Style::default());
         let contents = self.text_area.lines().join("\n");
-        if self.state.dirty {
+        if self.state.dirty && keep{
             self.book.edit_current_cell(contents)?;
             self.book.evaluate();
-            self.state.dirty = false;
+        } else {
+            self.text_area = reset_text_area(self.book.get_current_cell_contents()?);
         }
+        self.state.dirty = false;
         self.enter_navigation_mode();
         Ok(())
     }
