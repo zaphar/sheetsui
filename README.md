@@ -34,3 +34,5 @@ Options:
 ```sh
 sheetui path/to/file.xlsx # edit/view a spreadsheet
 ```
+
+<img src="./assets/screenshot.png" />
