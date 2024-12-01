@@ -208,7 +208,7 @@ fn test_input_navitation_enter_key() {
     let row = ws.book.location.row;
     assert_eq!(Some(&Modality::Navigate), ws.state.modality_stack.last());
     ws.handle_input(construct_key_event(KeyCode::Enter))
-    .expect("Failed to handle enter key");
+        .expect("Failed to handle enter key");
     assert_eq!(row + 1, ws.book.location.row);
 }
 
@@ -219,7 +219,7 @@ fn test_input_navitation_tab_key() {
     let col = dbg!(ws.book.location.col);
     assert_eq!(Some(&Modality::Navigate), ws.state.modality_stack.last());
     ws.handle_input(construct_key_event(KeyCode::Tab))
-    .expect("Failed to handle enter key");
+        .expect("Failed to handle enter key");
     assert_eq!(col + 1, ws.book.location.col);
 }
 
@@ -230,9 +230,12 @@ fn test_input_navitation_shift_enter_key() {
     let row = ws.book.location.row;
     assert_eq!(Some(&Modality::Navigate), ws.state.modality_stack.last());
     ws.handle_input(construct_key_event(KeyCode::Enter))
-    .expect("Failed to handle enter key");
+        .expect("Failed to handle enter key");
     assert_eq!(row + 1, ws.book.location.row);
-    ws.handle_input(construct_modified_key_event(KeyCode::Enter, KeyModifiers::SHIFT))
+    ws.handle_input(construct_modified_key_event(
+        KeyCode::Enter,
+        KeyModifiers::SHIFT,
+    ))
     .expect("Failed to handle enter key");
     assert_eq!(row, ws.book.location.row);
 }
@@ -244,9 +247,27 @@ fn test_input_navitation_shift_tab_key() {
     let col = dbg!(ws.book.location.col);
     assert_eq!(Some(&Modality::Navigate), ws.state.modality_stack.last());
     ws.handle_input(construct_key_event(KeyCode::Tab))
-    .expect("Failed to handle enter key");
+        .expect("Failed to handle enter key");
     assert_eq!(col + 1, ws.book.location.col);
-    ws.handle_input(construct_modified_key_event(KeyCode::Tab, KeyModifiers::SHIFT))
+    ws.handle_input(construct_modified_key_event(
+        KeyCode::Tab,
+        KeyModifiers::SHIFT,
+    ))
     .expect("Failed to handle enter key");
     assert_eq!(col, ws.book.location.col);
+}
+
+#[test]
+fn test_edit_mode_help_keycode() {
+    let mut ws =
+        Workspace::new_empty("en", "America/New_York").expect("Failed to get empty workbook");
+    assert_eq!(Some(&Modality::Navigate), ws.state.modality_stack.last());
+    ws.handle_input(construct_key_event(KeyCode::Char('i')))
+        .expect("Failed to handle 'i' key");
+    assert_eq!(Some(&Modality::CellEdit), ws.state.modality_stack.last());
+    let edit_help = ws.render_help_text();
+    ws.handle_input(construct_modified_key_event(KeyCode::Char('?'), KeyModifiers::CONTROL))
+        .expect("Failed to handle 'ctrl-?' key event");
+    assert_eq!(Some(&Modality::Dialog), ws.state.modality_stack.last());
+    assert_eq!(edit_help, ws.state.popup);
 }

@@ -32,7 +32,10 @@ impl<'ws> Workspace<'ws> {
                     .select(Some(ws.book.current_sheet as usize));
                 tabs.render(rect, buf);
             }),
-            Box::new(|rect: Rect, buf: &mut Buffer, ws: &mut Self| ws.text_area.render(rect, buf)),
+            Box::new(|rect: Rect, buf: &mut Buffer, ws: &mut Self| {
+                // TODO(zaphar): Show a small help text?
+                ws.text_area.render(rect, buf)
+            }),
             Box::new(move |rect: Rect, buf: &mut Buffer, ws: &mut Self| {
                 let sheet_name = ws.book.get_sheet_name().unwrap_or("Unknown");
                 let table_block = Block::bordered().title_top(sheet_name);
