@@ -315,3 +315,39 @@ fn test_edit_mode_esc_keycode() {
     assert_eq!("", ws.text_area.lines().join("\n"));
 }
 
+#[test]
+fn test_navigation_numeric_prefix()
+{
+    let mut ws =
+        Workspace::new_empty("en", "America/New_York").expect("Failed to get empty workbook");
+    assert_eq!(Some(&Modality::Navigate), ws.state.modality_stack.last());
+    ws.book.new_sheet(Some("Sheet2")).expect("failed to create sheet2");
+    ws.book.new_sheet(Some("Sheet3")).expect("failed to create sheet3");
+    ws.handle_input(construct_key_event(KeyCode::Char('2')))
+        .expect("Failed to handle '3' key event");
+    ws.handle_input(construct_key_event(KeyCode::Char('3')))
+        .expect("Failed to handle '3' key event");
+    ws.handle_input(construct_key_event(KeyCode::Char('9')))
+        .expect("Failed to handle '3' key event");
+    assert_eq!(239, ws.state.get_n_prefix());
+}
+
+#[test]
+fn test_navigation_tab_next_numeric_prefix()
+{
+    let mut ws =
+        Workspace::new_empty("en", "America/New_York").expect("Failed to get empty workbook");
+    assert_eq!(Some(&Modality::Navigate), ws.state.modality_stack.last());
+    ws.book.new_sheet(Some("Sheet2")).expect("failed to create sheet2");
+    ws.book.new_sheet(Some("Sheet3")).expect("failed to create sheet3");
+    ws.handle_input(construct_key_event(KeyCode::Char('2')))
+        .expect("Failed to handle '3' key event");
+    assert_eq!(2, ws.state.get_n_prefix());
+    ws.handle_input(construct_modified_key_event(KeyCode::Char('n'), KeyModifiers::CONTROL))
+        .expect("Failed to handle 'Ctrl-n' key event");
+    assert_eq!("Sheet3", ws.book.get_sheet_name().expect("Failed to get sheet name"));
+    assert_eq!(1, ws.state.get_n_prefix());
+    ws.handle_input(construct_modified_key_event(KeyCode::Char('n'), KeyModifiers::CONTROL))
+        .expect("Failed to handle 'Ctrl-n' key event");
+    assert_eq!("Sheet1", ws.book.get_sheet_name().expect("Failed to get sheet name"));
+}

@@ -37,6 +37,7 @@ pub struct AppState<'ws> {
     pub modality_stack: Vec<Modality>,
     pub viewport_state: ViewportState,
     pub command_state: TextState<'ws>,
+    pub numeric_prefix: Vec<char>,
     dirty: bool,
     popup: Vec<String>,
 }
@@ -47,6 +48,7 @@ impl<'ws> Default for AppState<'ws> {
             modality_stack: vec![Modality::default()],
             viewport_state: Default::default(),
             command_state: Default::default(),
+            numeric_prefix: Default::default(),
             dirty: Default::default(),
             popup: Default::default(),
         }
@@ -61,6 +63,25 @@ impl<'ws> AppState<'ws> {
         if self.modality_stack.len() > 1 {
             self.modality_stack.pop();
         }
+    }
+
+    pub fn get_n_prefix(&self) -> usize {
+        let prefix = self
+            .numeric_prefix
+            .iter()
+            .map(|c| c.to_digit(10).unwrap())
+            .fold(Some(0 as usize), |acc, n| {
+                acc?.checked_mul(10)?.checked_add(n as usize)
+            })
+            .unwrap_or(1);
+        if prefix == 0 {
+            return 1;
+        }
+        prefix
+    }
+
+    pub fn reset_n_prefix(&mut self) {
+        self.numeric_prefix.clear();
     }
 }
 
@@ -237,7 +258,9 @@ impl<'ws> Workspace<'ws> {
         if key.kind == KeyEventKind::Press {
             match key.code {
                 KeyCode::Esc | KeyCode::Enter | KeyCode::Char('q') => self.exit_dialog_mode()?,
-                KeyCode::Char('h') if key.modifiers == KeyModifiers::ALT => self.exit_dialog_mode()?,
+                KeyCode::Char('h') if key.modifiers == KeyModifiers::ALT => {
+                    self.exit_dialog_mode()?
+                }
                 _ => {
                     // NOOP
                 }
@@ -336,9 +359,16 @@ impl<'ws> Workspace<'ws> {
         }
     }
 
+    fn handle_numeric_prefix(&mut self, digit: char) {
+        self.state.numeric_prefix.push(digit);
+    }
+
     fn handle_navigation_input(&mut self, key: event::KeyEvent) -> Result<Option<ExitCode>> {
         if key.kind == KeyEventKind::Press {
             match key.code {
+                KeyCode::Char(d) if d.is_ascii_digit() => {
+                    self.handle_numeric_prefix(d);
+                }
                 KeyCode::Char('e') | KeyCode::Char('i') => {
                     self.enter_edit_mode();
                 }
@@ -352,10 +382,16 @@ impl<'ws> Workspace<'ws> {
                     self.enter_dialog_mode(self.render_help_text());
                 }
                 KeyCode::Char('n') if key.modifiers == KeyModifiers::CONTROL => {
-                    self.book.select_next_sheet();
+                    for _ in 1..=self.state.get_n_prefix() {
+                        self.book.select_next_sheet();
+                    }
+                    self.state.reset_n_prefix();
                 }
                 KeyCode::Char('p') if key.modifiers == KeyModifiers::CONTROL => {
-                    self.book.select_prev_sheet();
+                    for _ in 1..=self.state.get_n_prefix() {
+                        self.book.select_prev_sheet();
+                    }
+                    self.state.reset_n_prefix();
                 }
                 KeyCode::Char('s')
                     if key.modifiers == KeyModifiers::HYPER
@@ -364,90 +400,101 @@ impl<'ws> Workspace<'ws> {
                     self.save_file()?;
                 }
                 KeyCode::Char('l') if key.modifiers == KeyModifiers::CONTROL => {
-                    let Address { row: _, col } = &self.book.location;
-                    self.book
-                        .set_col_size(*col, self.book.get_col_size(*col)? + 1)?;
+                    for _ in 1..=self.state.get_n_prefix() {
+                        let Address { row: _, col } = &self.book.location;
+                        self.book
+                            .set_col_size(*col, self.book.get_col_size(*col)? + 1)?;
+                    }
+                    self.state.reset_n_prefix();
                 }
                 KeyCode::Char('h') if key.modifiers == KeyModifiers::CONTROL => {
-                    let Address { row: _, col } = &self.book.location;
-                    let curr_size = self.book.get_col_size(*col)?;
-                    if curr_size > 1 {
-                        self.book.set_col_size(*col, curr_size - 1)?;
+                    for _ in 1..=self.state.get_n_prefix() {
+                        let Address { row: _, col } = &self.book.location;
+                        let curr_size = self.book.get_col_size(*col)?;
+                        if curr_size > 1 {
+                            self.book.set_col_size(*col, curr_size - 1)?;
+                        }
                     }
+                    self.state.reset_n_prefix();
                 }
                 KeyCode::Char('r') if key.modifiers == KeyModifiers::CONTROL => {
-                    let (row_count, _) = self.book.get_size()?;
-                    self.book.update_entry(
-                        &Address {
-                            row: row_count + 1,
-                            col: 1,
-                        },
-                        "",
-                    )?;
-                    let (row, _) = self.book.get_size()?;
-                    let mut loc = self.book.location.clone();
-                    if loc.row < row as usize {
-                        loc.row = row as usize;
-                        self.book.move_to(&loc)?;
+                    for _ in 1..=self.state.get_n_prefix() {
+                        let (row_count, _) = self.book.get_size()?;
+                        self.book.update_entry(
+                            &Address {
+                                row: row_count + 1,
+                                col: 1,
+                            },
+                            "",
+                        )?;
+                        let (row, _) = self.book.get_size()?;
+                        let mut loc = self.book.location.clone();
+                        if loc.row < row as usize {
+                            loc.row = row as usize;
+                            self.book.move_to(&loc)?;
+                        }
+                        self.handle_movement_change();
                     }
-                    self.handle_movement_change();
-                }
-                KeyCode::Char('t') if key.modifiers == KeyModifiers::CONTROL => {
-                    let (_, col_count) = self.book.get_size()?;
-                    self.book.update_entry(
-                        &Address {
-                            row: 1,
-                            col: col_count + 1,
-                        },
-                        "",
-                    )?;
+                    self.state.reset_n_prefix();
                 }
                 KeyCode::Char('q') => {
                     return Ok(Some(ExitCode::SUCCESS));
                 }
-                KeyCode::Char('j') | KeyCode::Down
-                    if key.modifiers != KeyModifiers::CONTROL =>
-                {
-                    self.move_down()?;
-                    self.handle_movement_change();
+                KeyCode::Char('j') | KeyCode::Down if key.modifiers != KeyModifiers::CONTROL => {
+                    self.run_with_prefix(|ws: &mut Workspace<'_>| -> Result<()> {
+                        ws.move_down()?;
+                        ws.handle_movement_change();
+                        Ok(())
+                    })?;
                 }
-                KeyCode::Enter
-                    if key.modifiers != KeyModifiers::SHIFT =>
-                {
-                    self.move_down()?;
-                    self.handle_movement_change();
+                KeyCode::Enter if key.modifiers != KeyModifiers::SHIFT => {
+                    self.run_with_prefix(|ws: &mut Workspace<'_>| -> Result<()> {
+                        ws.move_down()?;
+                        ws.handle_movement_change();
+                        Ok(())
+                    })?;
                 }
-                KeyCode::Enter
-                    if key.modifiers == KeyModifiers::SHIFT =>
-                {
-                    self.move_up()?;
-                    self.handle_movement_change();
+                KeyCode::Enter if key.modifiers == KeyModifiers::SHIFT => {
+                    self.run_with_prefix(|ws: &mut Workspace<'_>| -> Result<()> {
+                        ws.move_up()?;
+                        ws.handle_movement_change();
+                        Ok(())
+                    })?;
                 }
                 KeyCode::Char('k') | KeyCode::Up if key.modifiers != KeyModifiers::CONTROL => {
-                    self.move_up()?;
-                    self.handle_movement_change();
+                    self.run_with_prefix(|ws: &mut Workspace<'_>| -> Result<()> {
+                        ws.move_up()?;
+                        ws.handle_movement_change();
+                        Ok(())
+                    })?;
                 }
                 KeyCode::Char('h') | KeyCode::Left if key.modifiers != KeyModifiers::CONTROL => {
-                    self.move_left()?;
-                    self.handle_movement_change();
+                    self.run_with_prefix(|ws: &mut Workspace<'_>| -> Result<()> {
+                        ws.move_left()?;
+                        ws.handle_movement_change();
+                        Ok(())
+                    })?;
                 }
-                KeyCode::Char('l') | KeyCode::Right
-                    if key.modifiers != KeyModifiers::CONTROL =>
-                {
-                    self.move_right()?;
-                    self.handle_movement_change();
+                KeyCode::Char('l') | KeyCode::Right if key.modifiers != KeyModifiers::CONTROL => {
+                    self.run_with_prefix(|ws: &mut Workspace<'_>| -> Result<()> {
+                        ws.move_right()?;
+                        ws.handle_movement_change();
+                        Ok(())
+                    })?;
                 }
-                KeyCode::Tab
-                    if key.modifiers != KeyModifiers::SHIFT =>
-                {
-                    self.move_right()?;
-                    self.handle_movement_change();
+                KeyCode::Tab if key.modifiers != KeyModifiers::SHIFT => {
+                    self.run_with_prefix(|ws: &mut Workspace<'_>| -> Result<()> {
+                        ws.move_right()?;
+                        ws.handle_movement_change();
+                        Ok(())
+                    })?;
                 }
-                KeyCode::Tab
-                    if key.modifiers == KeyModifiers::SHIFT =>
-                {
-                    self.move_left()?;
-                    self.handle_movement_change();
+                KeyCode::Tab if key.modifiers == KeyModifiers::SHIFT => {
+                    self.run_with_prefix(|ws: &mut Workspace<'_>| -> Result<()> {
+                        ws.move_left()?;
+                        ws.handle_movement_change();
+                        Ok(())
+                    })?;
                 }
                 _ => {
                     // noop
@@ -455,6 +502,14 @@ impl<'ws> Workspace<'ws> {
             }
         }
         return Ok(None);
+    }
+
+    fn run_with_prefix(&mut self, action: impl Fn(&mut Workspace<'_>) -> std::result::Result<(), anyhow::Error>) -> Result<(), anyhow::Error> {
+        for _ in 1..=self.state.get_n_prefix() {
+            action(self)?;
+        }
+        self.state.reset_n_prefix();
+        Ok(())
     }
 
     fn enter_navigation_mode(&mut self) {
@@ -501,7 +556,7 @@ impl<'ws> Workspace<'ws> {
         self.text_area.set_cursor_line_style(Style::default());
         self.text_area.set_cursor_style(Style::default());
         let contents = self.text_area.lines().join("\n");
-        if self.state.dirty && keep{
+        if self.state.dirty && keep {
             self.book.edit_current_cell(contents)?;
             self.book.evaluate();
         } else {
