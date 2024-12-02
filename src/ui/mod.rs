@@ -366,6 +366,9 @@ impl<'ws> Workspace<'ws> {
     fn handle_navigation_input(&mut self, key: event::KeyEvent) -> Result<Option<ExitCode>> {
         if key.kind == KeyEventKind::Press {
             match key.code {
+                KeyCode::Esc => {
+                    self.state.reset_n_prefix();
+                }
                 KeyCode::Char(d) if d.is_ascii_digit() => {
                     self.handle_numeric_prefix(d);
                 }
