@@ -69,7 +69,7 @@ Starting with:
 * `=` will treat what you type as a formula.
 * `$` will treat it as us currency.
 
-Typing a number will treat the contents as a number. While typing non-numeric text will treat it as text content. <aside>We do not yet support modifyint the type of a cell after the fact. We may add this in the future.</aside>
+Typing a number will treat the contents as a number. While typing non-numeric text will treat it as text content. <aside>We do not yet support modifying the type of a cell after the fact. We may add this in the future.</aside>
 
 For the most part this should work the same way you expect a spreadsheet to work.
 
