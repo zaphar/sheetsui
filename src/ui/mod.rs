@@ -385,16 +385,16 @@ impl<'ws> Workspace<'ws> {
                     self.enter_dialog_mode(self.render_help_text());
                 }
                 KeyCode::Char('n') if key.modifiers == KeyModifiers::CONTROL => {
-                    for _ in 1..=self.state.get_n_prefix() {
-                        self.book.select_next_sheet();
-                    }
-                    self.state.reset_n_prefix();
+                    self.run_with_prefix(|ws: &mut Workspace<'_>| -> Result<()> {
+                        ws.book.select_next_sheet();
+                        Ok(())
+                    })?;
                 }
                 KeyCode::Char('p') if key.modifiers == KeyModifiers::CONTROL => {
-                    for _ in 1..=self.state.get_n_prefix() {
-                        self.book.select_prev_sheet();
-                    }
-                    self.state.reset_n_prefix();
+                    self.run_with_prefix(|ws: &mut Workspace<'_>| -> Result<()> {
+                        ws.book.select_prev_sheet();
+                        Ok(())
+                    })?;
                 }
                 KeyCode::Char('s')
                     if key.modifiers == KeyModifiers::HYPER
@@ -403,42 +403,42 @@ impl<'ws> Workspace<'ws> {
                     self.save_file()?;
                 }
                 KeyCode::Char('l') if key.modifiers == KeyModifiers::CONTROL => {
-                    for _ in 1..=self.state.get_n_prefix() {
-                        let Address { row: _, col } = &self.book.location;
-                        self.book
-                            .set_col_size(*col, self.book.get_col_size(*col)? + 1)?;
-                    }
-                    self.state.reset_n_prefix();
+                    self.run_with_prefix(|ws: &mut Workspace<'_>| -> Result<()> {
+                        let Address { row: _, col } = &ws.book.location;
+                        ws.book
+                            .set_col_size(*col, ws.book.get_col_size(*col)? + 1)?;
+                        Ok(())
+                    })?;
                 }
                 KeyCode::Char('h') if key.modifiers == KeyModifiers::CONTROL => {
-                    for _ in 1..=self.state.get_n_prefix() {
-                        let Address { row: _, col } = &self.book.location;
-                        let curr_size = self.book.get_col_size(*col)?;
+                    self.run_with_prefix(|ws: &mut Workspace<'_>| -> Result<()> {
+                        let Address { row: _, col } = &ws.book.location;
+                        let curr_size = ws.book.get_col_size(*col)?;
                         if curr_size > 1 {
-                            self.book.set_col_size(*col, curr_size - 1)?;
+                            ws.book.set_col_size(*col, curr_size - 1)?;
                         }
-                    }
-                    self.state.reset_n_prefix();
+                        Ok(())
+                    })?;
                 }
                 KeyCode::Char('r') if key.modifiers == KeyModifiers::CONTROL => {
-                    for _ in 1..=self.state.get_n_prefix() {
-                        let (row_count, _) = self.book.get_size()?;
-                        self.book.update_entry(
+                    self.run_with_prefix(|ws: &mut Workspace<'_>| -> Result<()> {
+                        let (row_count, _) = ws.book.get_size()?;
+                        ws.book.update_entry(
                             &Address {
                                 row: row_count + 1,
                                 col: 1,
                             },
                             "",
                         )?;
-                        let (row, _) = self.book.get_size()?;
-                        let mut loc = self.book.location.clone();
+                        let (row, _) = ws.book.get_size()?;
+                        let mut loc = ws.book.location.clone();
                         if loc.row < row as usize {
                             loc.row = row as usize;
-                            self.book.move_to(&loc)?;
+                            ws.book.move_to(&loc)?;
                         }
-                        self.handle_movement_change();
-                    }
-                    self.state.reset_n_prefix();
+                        ws.handle_movement_change();
+                        Ok(())
+                    })?;
                 }
                 KeyCode::Char('q') => {
                     return Ok(Some(ExitCode::SUCCESS));
