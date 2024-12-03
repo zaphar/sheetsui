@@ -62,7 +62,7 @@ For the most part this should work the same way you expect a spreadsheet to work
 * `Enter` will update the cell contents.
 * `Esc` will cancel editing the cell and leave it unedited.
 
-<aside>TODO(zaphar): Add links to the ironcalc formula and input documentation</aside>
+You can find the functions we support documented here: [ironcalc docs](https://docs.ironcalc.com/functions/lookup-and-reference.html)
 
 ### Command Mode
 
