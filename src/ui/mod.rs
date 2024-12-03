@@ -420,26 +420,6 @@ impl<'ws> Workspace<'ws> {
                         Ok(())
                     })?;
                 }
-                KeyCode::Char('r') if key.modifiers == KeyModifiers::CONTROL => {
-                    self.run_with_prefix(|ws: &mut Workspace<'_>| -> Result<()> {
-                        let (row_count, _) = ws.book.get_size()?;
-                        ws.book.update_entry(
-                            &Address {
-                                row: row_count + 1,
-                                col: 1,
-                            },
-                            "",
-                        )?;
-                        let (row, _) = ws.book.get_size()?;
-                        let mut loc = ws.book.location.clone();
-                        if loc.row < row as usize {
-                            loc.row = row as usize;
-                            ws.book.move_to(&loc)?;
-                        }
-                        ws.handle_movement_change();
-                        Ok(())
-                    })?;
-                }
                 KeyCode::Char('q') => {
                     return Ok(Some(ExitCode::SUCCESS));
                 }
