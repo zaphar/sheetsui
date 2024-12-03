@@ -31,9 +31,9 @@ The interface will start out in navigation mode. You can navigate around the tab
 **Cell Navigation**
 
 * `h`, ⬆️, and `TAB` will move one cell to the left.
-* `l`, ➡️, and `Shift-Tab` will move one cell to the right.
+* `l` and, ➡️ will move one cell to the right.
 * `j`, ⬇️, and `Enter` will move one cell down.
-* `k`, ⬆️, and `Shift-Enter` will move one cell up.
+* `k` ⬆️, will move one cell up.
 
 **Sheet Navigation**
 
