@@ -4,7 +4,21 @@
 
 `sheetui --help` will print out help for the command line tags.
 
-`sheetui path/to/file` will open the file as a spreadsheet. The file does not have to exist already. If it does not it will be created when you save the spreadsheet.
+Currently this will print out:
+
+```sh
+Usage: sheetui [OPTIONS] <WORKBOOK>
+
+Arguments:
+  <WORKBOOK>
+
+Options:
+  -l, --locale-name <LOCALE_NAME>      [default: en]
+  -t, --timezone-name <TIMEZONE_NAME>  [default: America/New_York]
+      --log-input <LOG_INPUT>
+  -h, --help                           Print help
+  -V, --version                        Print version
+```
 
 ## User Interface
 
