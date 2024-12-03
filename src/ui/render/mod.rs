@@ -35,8 +35,10 @@ impl<'ws> Workspace<'ws> {
             Box::new(|rect: Rect, buf: &mut Buffer, ws: &mut Self| {
                 let [text_rect, info_rect] = Layout::horizontal(vec![Constraint::Fill(1),Constraint::Fill(1)]).areas(rect);
                 ws.text_area.render(text_rect, buf);
-                let hint = Paragraph::new(vec![Line::from(""),Line::from("ALT-h to toggle help dialog").centered()]);
-                // TODO(zaphar): Show a small getting-started text?
+                let hint = Paragraph::new(vec![
+                    Line::from(""),
+                    Line::from("ALT-h to toggle help dialog").centered()
+                ]);
                 hint.render(info_rect, buf);
             }),
             Box::new(move |rect: Rect, buf: &mut Buffer, ws: &mut Self| {
