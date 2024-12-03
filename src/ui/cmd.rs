@@ -108,7 +108,7 @@ fn try_consume_new_sheet<'cmd, 'i: 'cmd>(
         return Ok(None);
     }
     if input.remaining() > 0 && !is_ws(&mut input) {
-        return Err("Invalid command: Did you mean to type `write <arg>`?");
+        return Err("Invalid command: Did you mean to type `new-sheet <arg>`?");
     }
     let arg = input.span(0..).trim();
     return Ok(Some(Cmd::NewSheet(if arg.is_empty() {
@@ -129,11 +129,11 @@ fn try_consume_select_sheet<'cmd, 'i: 'cmd>(
         return Ok(None);
     }
     if input.remaining() > 0 && !is_ws(&mut input) {
-        return Err("Invalid command: Did you mean to type `write <sheet-name>`?");
+        return Err("Invalid command: Did you mean to type `select-sheet <sheet-name>`?");
     }
     let arg = input.span(0..).trim();
     if arg.is_empty() {
-        return Err("Invalid command: Did you forget the sheet name? `write <sheet-name>`?");
+        return Err("Invalid command: Did you forget the sheet name? `select-sheet <sheet-name>`?");
     }
     return Ok(Some(Cmd::SelectSheet(arg)));
 }
@@ -189,7 +189,7 @@ fn try_consume_insert_column<'cmd, 'i: 'cmd>(
         if let Ok(count) = arg.parse() {
             count
         } else {
-            return Err("You must pass in a non negative number for the row count");
+            return Err("You must pass in a non negative number for the column count");
         }
     })));
 }
