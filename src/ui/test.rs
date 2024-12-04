@@ -1,6 +1,6 @@
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
 
-use crate::ui::Modality;
+use crate::ui::{Address, Modality};
 
 use super::cmd::{parse, Cmd};
 use super::Workspace;
@@ -350,4 +350,65 @@ fn test_navigation_tab_next_numeric_prefix()
     ws.handle_input(construct_modified_key_event(KeyCode::Char('n'), KeyModifiers::CONTROL))
         .expect("Failed to handle 'Ctrl-n' key event");
     assert_eq!("Sheet1", ws.book.get_sheet_name().expect("Failed to get sheet name"));
+}
+
+#[test]
+fn test_range_copy() {
+    let mut ws =
+        Workspace::new_empty("en", "America/New_York").expect("Failed to get empty workbook");
+    assert_eq!(Some(&Modality::Navigate), ws.state.modality_stack.last());
+    
+    ws.book.move_to(&Address { row: 1, col: 1, }).expect("Failed to move to row");
+    let original_loc = ws.book.location.clone();
+    ws.handle_input(construct_modified_key_event(KeyCode::Char('r'), KeyModifiers::CONTROL))
+        .expect("Failed to handle 'Ctrl-r' key event");
+    assert_eq!(Some(&Modality::RangeCopy), ws.state.modality_stack.last());
+    assert_eq!(Some(original_loc.clone()), ws.state.original_location);
+    assert!(ws.state.start_range.is_none());
+    assert!(ws.state.end_range.is_none());
+    
+    ws.handle_input(construct_key_event(KeyCode::Char('l')))
+        .expect("Failed to handle 'l' key event");
+    ws.handle_input(construct_key_event(KeyCode::Char(' ')))
+        .expect("Failed to handle ' ' key event");
+    assert_eq!(Some(Address {row:1, col:2, }), ws.state.start_range);
+    
+    ws.handle_input(construct_key_event(KeyCode::Char('j')))
+        .expect("Failed to handle 'j' key event");
+    ws.handle_input(construct_key_event(KeyCode::Char(' ')))
+        .expect("Failed to handle ' ' key event");
+    
+    assert!(ws.state.original_location.is_none());
+    assert_eq!(Some(Address {row:1, col:2, }), ws.state.start_range);
+    assert_eq!(Some(Address {row:2, col:2, }), ws.state.end_range);
+    assert_eq!(original_loc, ws.book.location);
+    assert_eq!(Some(&Modality::Navigate), ws.state.modality_stack.last());
+   
+    ws.book.move_to(&Address { row: 5, col: 5, }).expect("Failed to move to row");
+    let original_loc_2 = ws.book.location.clone();
+    assert_eq!(Address { row: 5, col: 5 }, original_loc_2);
+    
+    ws.handle_input(construct_modified_key_event(KeyCode::Char('r'), KeyModifiers::CONTROL))
+        .expect("Failed to handle 'Ctrl-r' key event");
+    assert_eq!(Some(&Modality::RangeCopy), ws.state.modality_stack.last());
+    assert_eq!(Some(original_loc_2.clone()), ws.state.original_location);
+    assert!(ws.state.start_range.is_none());
+    assert!(ws.state.end_range.is_none());
+    
+    ws.handle_input(construct_key_event(KeyCode::Char('h')))
+        .expect("Failed to handle 'h' key event");
+    ws.handle_input(construct_key_event(KeyCode::Char(' ')))
+        .expect("Failed to handle ' ' key event");
+    assert_eq!(Some(Address {row:5, col:4, }), ws.state.start_range);
+    
+    ws.handle_input(construct_key_event(KeyCode::Char('k')))
+        .expect("Failed to handle 'k' key event");
+    ws.handle_input(construct_key_event(KeyCode::Char(' ')))
+        .expect("Failed to handle ' ' key event");
+    
+    assert!(ws.state.original_location.is_none());
+    assert_eq!(Some(Address {row:5, col:4, }), ws.state.start_range);
+    assert_eq!(Some(Address {row:4, col:4, }), ws.state.end_range);
+    assert_eq!(original_loc_2, ws.book.location);
+    assert_eq!(Some(&Modality::Navigate), ws.state.modality_stack.last());
 }

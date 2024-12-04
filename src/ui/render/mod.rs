@@ -95,6 +95,7 @@ impl<'widget, 'ws: 'widget> Widget for &'widget mut Workspace<'ws> {
                 Modality::CellEdit => "edit",
                 Modality::Command => "command",
                 Modality::Dialog => "",
+                Modality::RangeCopy => "range-copy",
             })
             .title_bottom(
                 Line::from(format!(

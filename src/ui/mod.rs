@@ -30,6 +30,7 @@ pub enum Modality {
     CellEdit,
     Command,
     Dialog,
+    RangeCopy,
 }
 
 #[derive(Debug)]
@@ -38,6 +39,9 @@ pub struct AppState<'ws> {
     pub viewport_state: ViewportState,
     pub command_state: TextState<'ws>,
     pub numeric_prefix: Vec<char>,
+    pub original_location: Option<Address>,
+    pub start_range: Option<Address>,
+    pub end_range: Option<Address>,
     dirty: bool,
     popup: Vec<String>,
 }
@@ -49,6 +53,9 @@ impl<'ws> Default for AppState<'ws> {
             viewport_state: Default::default(),
             command_state: Default::default(),
             numeric_prefix: Default::default(),
+            original_location: Default::default(),
+            start_range: Default::default(),
+            end_range: Default::default(),
             dirty: Default::default(),
             popup: Default::default(),
         }
@@ -197,6 +204,7 @@ impl<'ws> Workspace<'ws> {
                 Modality::CellEdit => self.handle_edit_input(key)?,
                 Modality::Command => self.handle_command_input(key)?,
                 Modality::Dialog => self.handle_dialog_input(key)?,
+                Modality::RangeCopy => self.handle_range_copy_input(key)?,
             };
             return Ok(result);
         }
@@ -363,6 +371,57 @@ impl<'ws> Workspace<'ws> {
         self.state.numeric_prefix.push(digit);
     }
 
+    fn handle_range_copy_input(&mut self,  key: event::KeyEvent) -> Result<Option<ExitCode>> {
+        if key.kind == KeyEventKind::Press {
+            match key.code {
+                KeyCode::Esc => {
+                    self.state.reset_n_prefix();
+                }
+                KeyCode::Char(d) if d.is_ascii_digit() => {
+                    self.handle_numeric_prefix(d);
+                }
+                KeyCode::Char('h') => {
+                    self.run_with_prefix(|ws: &mut Workspace<'_>| -> Result<()> {
+                        ws.move_left()?;
+                        dbg!(&ws.book.location);
+                        Ok(())
+                    })?;
+                }
+                KeyCode::Char('j') => {
+                    self.run_with_prefix(|ws: &mut Workspace<'_>| -> Result<()> {
+                        ws.move_down()?;
+                        Ok(())
+                    })?;
+                }
+                KeyCode::Char('k') => {
+                    self.run_with_prefix(|ws: &mut Workspace<'_>| -> Result<()> {
+                        ws.move_up()?;
+                        dbg!(&ws.book.location);
+                        Ok(())
+                    })?;
+                }
+                KeyCode::Char('l') => {
+                    self.run_with_prefix(|ws: &mut Workspace<'_>| -> Result<()> {
+                        ws.move_right()?;
+                        Ok(())
+                    })?;
+                }
+                KeyCode::Char(' ') => {
+                    if self.state.start_range.is_none() {
+                        self.state.start_range = dbg!(Some(self.book.location.clone()));
+                    } else {
+                        self.state.end_range = dbg!(Some(self.book.location.clone()));
+                        self.exit_range_copy_mode()?;
+                    }
+                }
+                _ => {
+                    // moop
+                }
+            }
+        }
+        Ok(None)
+    }
+    
     fn handle_navigation_input(&mut self, key: event::KeyEvent) -> Result<Option<ExitCode>> {
         if key.kind == KeyEventKind::Press {
             match key.code {
@@ -380,6 +439,9 @@ impl<'ws> Workspace<'ws> {
                 }
                 KeyCode::Char('s') if key.modifiers == KeyModifiers::CONTROL => {
                     self.save_file()?;
+                }
+                KeyCode::Char('r') if key.modifiers == KeyModifiers::CONTROL => {
+                    self.enter_range_copy_mode();
                 }
                 KeyCode::Char('h') if key.modifiers == KeyModifiers::ALT => {
                     self.enter_dialog_mode(self.render_help_text());
@@ -506,6 +568,14 @@ impl<'ws> Workspace<'ws> {
         self.state.popup = msg;
         self.state.modality_stack.push(Modality::Dialog);
     }
+    
+    fn enter_range_copy_mode(&mut self) {
+        self.state.original_location = Some(self.book.location.clone());
+        self.state.start_range = None;
+        self.state.end_range = None;
+        self.state.modality_stack.push(Modality::RangeCopy);
+    }
+
 
     fn enter_edit_mode(&mut self) {
         self.state.modality_stack.push(Modality::CellEdit);
@@ -530,6 +600,14 @@ impl<'ws> Workspace<'ws> {
         self.state.pop_modality();
         Ok(())
     }
+    
+    fn exit_range_copy_mode(&mut self) -> Result<()> {
+        self.book.location = self.state.original_location.clone().expect("Missing original location after range copy");
+        self.state.original_location = None;
+        self.state.pop_modality();
+        Ok(())
+    }
+
 
     fn exit_edit_mode(&mut self, keep: bool) -> Result<()> {
         self.text_area.set_cursor_line_style(Style::default());
@@ -542,6 +620,7 @@ impl<'ws> Workspace<'ws> {
             self.text_area = reset_text_area(self.book.get_current_cell_contents()?);
         }
         self.state.dirty = false;
+        self.state.pop_modality();
         Ok(())
     }
 
