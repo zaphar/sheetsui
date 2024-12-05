@@ -58,6 +58,12 @@ impl RangeSelection {
         }
         None
     }
+
+    pub fn reset_range_selection(&mut self) {
+        self.start = None;
+        self.end = None;
+        self.sheet = None;
+    }
 }
 
 #[derive(Debug)]
@@ -503,7 +509,7 @@ impl<'ws> Workspace<'ws> {
                     }
                 }
                 KeyCode::Char('n') if key.modifiers == KeyModifiers::CONTROL => {
-                    // TODO(jwall): We should reset our range selections.
+                    self.state.range_select.reset_range_selection();
                     self.run_with_prefix(|ws: &mut Workspace<'_>| -> Result<()> {
                         ws.book.select_next_sheet();
                         Ok(())
@@ -511,7 +517,7 @@ impl<'ws> Workspace<'ws> {
                     self.state.range_select.sheet = Some(self.book.current_sheet);
                 }
                 KeyCode::Char('p') if key.modifiers == KeyModifiers::CONTROL => {
-                    // TODO(jwall): We should reset our range selections.
+                    self.state.range_select.reset_range_selection();
                     self.run_with_prefix(|ws: &mut Workspace<'_>| -> Result<()> {
                         ws.book.select_prev_sheet();
                         Ok(())
