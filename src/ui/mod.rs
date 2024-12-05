@@ -495,10 +495,6 @@ impl<'ws> Workspace<'ws> {
         Ok(())
     }
 
-    fn enter_navigation_mode(&mut self) {
-        self.state.modality_stack.push(Modality::Navigate);
-    }
-
     fn enter_command_mode(&mut self) {
         self.state.modality_stack.push(Modality::Command);
         self.state.command_state.truncate();
@@ -546,7 +542,6 @@ impl<'ws> Workspace<'ws> {
             self.text_area = reset_text_area(self.book.get_current_cell_contents()?);
         }
         self.state.dirty = false;
-        self.enter_navigation_mode();
         Ok(())
     }
 
