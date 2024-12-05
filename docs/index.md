@@ -22,11 +22,14 @@ Options:
 
 ## User Interface
 
-The sheetui user interface is loosely inspired by vim. It is a modal interface that is entirely keyboard driven. At nearly any time you can type `Alt-h` to get some context sensitive help.
+The sheetui user interface is loosely inspired by vim. It is a modal interface
+that is entirely keyboard driven. At nearly any time you can type `Alt-h` to
+get some context sensitive help.
 
 ### Navigation Mode
 
-The interface will start out in navigation mode. You can navigate around the table and between the sheets using the following keybinds:
+The interface will start out in navigation mode. You can navigate around the
+table and between the sheets using the following keybinds:
 
 **Cell Navigation**
 
@@ -44,7 +47,9 @@ Sheet navigation moving will loop around when you reach the ends.
 
 **Numeric prefixes**
 
-You can prefix each of the keybinds above with a numeric prefix to do them that many times. So typing `123h` will move to the left 123 times. Hitting `Esc` will clear the numeric prefix if you want to cancel it.
+You can prefix each of the keybinds above with a numeric prefix to do them that
+many times. So typing `123h` will move to the left 123 times. Hitting `Esc`
+will clear the numeric prefix if you want to cancel it.
 
 **Modifying the Sheet or Cells**
 
@@ -54,36 +59,51 @@ You can prefix each of the keybinds above with a numeric prefix to do them that 
 
 **Other Keybindings**
 
+* `Ctrl-r` will enter range selection mode
 * `Ctrl-s` will save the sheet.
 * `q` will exit the application.
 * `:` will enter CommandMode.
- 
-<aside>Note that for `q` this will not currently prompt you if the sheet is not saved.</aside>
+
+Range selections made from navigation mode will be available to paste into a Cell Edit.
+
+<aside>Note that for `q` this will not currently prompt you if the sheet is not
+saved.</aside>
 
 ### CellEdit Mode
 
-You enter CellEdit mode by hitting `e` or `i` while in navigation mode. Type what you want into the cell.
+You enter CellEdit mode by hitting `e` or `i` while in navigation mode. Type
+what you want into the cell.
 
 Starting with:
 
 * `=` will treat what you type as a formula.
 * `$` will treat it as us currency.
 
-Typing a number will treat the contents as a number. While typing non-numeric text will treat it as text content. <aside>We do not yet support modifying the type of a cell after the fact. We may add this in the future.</aside>
+Typing a number will treat the contents as a number. While typing non-numeric
+text will treat it as text content.
 
-For the most part this should work the same way you expect a spreadsheet to work.
+<aside>We do not yet support modifying the type of a cell after the fact. We
+may add this in the future.</aside>
+
+For the most part this should work the same way you expect a spreadsheet to
+work.
 
 * `Enter` will update the cell contents.
 * `Esc` will cancel editing the cell and leave it unedited.
+* `Ctrl-p` will paste the range selection if it exists into the cell.
 
-`Ctrl-r` will enter range select mode when editing a formula. You can navigate around the
-sheet and hit space to select that cell in the sheet to set the start of the range. Navigate some more and hit space to set the end of the range.
+`Ctrl-r` will enter range select mode when editing a formula. You can navigate
+around the sheet and hit space to select that cell in the sheet to set the
+start of the range. Navigate some more and hit space to set the end of the
+range.
 
-You can find the functions we support documented here: [ironcalc docs](https://docs.ironcalc.com/functions/lookup-and-reference.html)
+You can find the functions we support documented here:
+[ironcalc docs](https://docs.ironcalc.com/functions/lookup-and-reference.html)
 
 ### Command Mode
 
-You enter command mode by typing `:` while in navigation mode. You can then type a command and hit `Enter` to execute it or `Esc` to cancel.
+You enter command mode by typing `:` while in navigation mode. You can then
+type a command and hit `Enter` to execute it or `Esc` to cancel.
 
 The currently supported commands are:
 
@@ -96,16 +116,22 @@ The currently supported commands are:
 * `edit <path>` Edit a new spreadsheet at the current path. `e` is a shorthand alias for this command. 
 * `quit` Quits the application. `q` is a shorthand alias for this command.
 
-<aside>Note that in the case of `quit` and `edit` that we do not currently prompt you if the current spreadsheet has not been saved yet. So your changes will be discarded if you have not saved first.</aside>
+<aside>Note that in the case of `quit` and `edit` that we do not currently
+prompt you if the current spreadsheet has not been saved yet. So your changes
+will be discarded if you have not saved first.</aside>
 
 ### Range Select Mode
 
-Range Select mode copies a range reference for use later. You can enter range select mode from CellEdit mode with `CTRL-r`.
+Range Select mode copies a range reference for use later. You can enter range
+select mode from CellEdit mode with `CTRL-r`.
 
 * `h`, `j`, `k`, `l` will navigate around the sheet.
 * `Ctrl-n`, `Ctrl-p` will navigate between sheets.
-* ` ` the spacebar will select the start and end of the range respectively.
+* `The spacebar will select the start and end of the range respectively.
 
-When you have selected the end of the range you will exit range select mode and the range reference will be placed into the cell contents you are editing.
+When you have selected the end of the range you will exit range select mode and
+the range reference will be placed into the cell contents you are editing.
 
-<aside>We only support continuous ranges for the moment. Planned for discontinuous ranges still needs the interaction interface to be determined.</aside>
+<aside>We only support continuous ranges for the moment. Planned for
+discontinuous ranges still needs the interaction interface to be
+determined.</aside>
