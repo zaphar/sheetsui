@@ -7,7 +7,7 @@ use ratatui::{
     widgets::{Block, Cell, Row, StatefulWidget, Table, Widget},
 };
 
-use super::{Address, AppState, Book, RangeSelection};
+use super::{Address, Book, RangeSelection};
 
 // TODO(zaphar): Move this to the book module.
 // NOTE(zaphar): This is stolen from ironcalc but ironcalc doesn't expose it
