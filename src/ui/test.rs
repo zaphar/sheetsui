@@ -362,7 +362,7 @@ fn test_range_copy() {
     let original_loc = ws.book.location.clone();
     ws.handle_input(construct_modified_key_event(KeyCode::Char('r'), KeyModifiers::CONTROL))
         .expect("Failed to handle 'Ctrl-r' key event");
-    assert_eq!(Some(&Modality::RangeCopy), ws.state.modality_stack.last());
+    assert_eq!(Some(&Modality::RangeSelect), ws.state.modality_stack.last());
     assert_eq!(Some(original_loc.clone()), ws.state.original_location);
     assert!(ws.state.start_range.is_none());
     assert!(ws.state.end_range.is_none());
@@ -390,7 +390,7 @@ fn test_range_copy() {
     
     ws.handle_input(construct_modified_key_event(KeyCode::Char('r'), KeyModifiers::CONTROL))
         .expect("Failed to handle 'Ctrl-r' key event");
-    assert_eq!(Some(&Modality::RangeCopy), ws.state.modality_stack.last());
+    assert_eq!(Some(&Modality::RangeSelect), ws.state.modality_stack.last());
     assert_eq!(Some(original_loc_2.clone()), ws.state.original_location);
     assert!(ws.state.start_range.is_none());
     assert!(ws.state.end_range.is_none());
@@ -411,4 +411,17 @@ fn test_range_copy() {
     assert_eq!(Some(Address {row:4, col:4, }), ws.state.end_range);
     assert_eq!(original_loc_2, ws.book.location);
     assert_eq!(Some(&Modality::Navigate), ws.state.modality_stack.last());
+}
+
+#[test]
+fn test_range_copy_mode_from_edit_mode() {
+    let mut ws =
+        Workspace::new_empty("en", "America/New_York").expect("Failed to get empty workbook");
+    assert_eq!(Some(&Modality::Navigate), ws.state.modality_stack.last());
+    ws.handle_input(construct_key_event(KeyCode::Char('e')))
+        .expect("Failed to handle 'e' key event");
+    assert_eq!(Some(&Modality::CellEdit), ws.state.modality_stack.last());
+    ws.handle_input(construct_modified_key_event(KeyCode::Char('r'), KeyModifiers::CONTROL))
+        .expect("Failed to handle 'Ctrl-r' key event");
+    assert_eq!(Some(&Modality::RangeSelect), ws.state.modality_stack.last());
 }

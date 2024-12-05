@@ -30,7 +30,7 @@ pub enum Modality {
     CellEdit,
     Command,
     Dialog,
-    RangeCopy,
+    RangeSelect,
 }
 
 #[derive(Debug)]
@@ -40,6 +40,8 @@ pub struct AppState<'ws> {
     pub command_state: TextState<'ws>,
     pub numeric_prefix: Vec<char>,
     pub original_location: Option<Address>,
+    pub original_sheet: Option<u32>,
+    pub range_sheet: Option<u32>,
     pub start_range: Option<Address>,
     pub end_range: Option<Address>,
     dirty: bool,
@@ -54,6 +56,8 @@ impl<'ws> Default for AppState<'ws> {
             command_state: Default::default(),
             numeric_prefix: Default::default(),
             original_location: Default::default(),
+            original_sheet: Default::default(),
+            range_sheet: Default::default(),
             start_range: Default::default(),
             end_range: Default::default(),
             dirty: Default::default(),
@@ -103,6 +107,19 @@ pub struct Address {
 impl Address {
     pub fn new(row: usize, col: usize) -> Self {
         Self { row, col }
+    }
+
+    pub fn to_range_part(&self) -> String {
+        let count = if self.col == 26 {
+            1
+        } else {
+            (self.col / 26) + 1
+        };
+        format!(
+            "{}{}",
+            render::viewport::COLNAMES[(self.col - 1) % 26].repeat(count),
+            self.row
+        )
     }
 }
 
@@ -156,6 +173,33 @@ impl<'ws> Workspace<'ws> {
         Ok(())
     }
 
+    pub fn selected_range_to_string(&self) -> String {
+        let state = &self.state;
+        let start = state
+            .start_range
+            .as_ref()
+            .map(|addr| addr.to_range_part())
+            .unwrap_or_else(|| String::new());
+        let end = state
+            .end_range
+            .as_ref()
+            .map(|addr| format!(":{}", addr.to_range_part()))
+            .unwrap_or_else(|| String::new());
+        if let Some(range_sheet) = state.range_sheet {
+            if range_sheet != self.book.current_sheet {
+                return format!(
+                    "{}!{}{}",
+                    self.book
+                        .get_sheet_name_by_idx(range_sheet as usize)
+                        .expect("No such sheet index"),
+                    start,
+                    end
+                );
+            }
+        }
+        format!("{}:{}", start, end)
+    }
+
     /// Move a row down in the current sheet.
     pub fn move_down(&mut self) -> Result<()> {
         let mut loc = self.book.location.clone();
@@ -204,7 +248,7 @@ impl<'ws> Workspace<'ws> {
                 Modality::CellEdit => self.handle_edit_input(key)?,
                 Modality::Command => self.handle_command_input(key)?,
                 Modality::Dialog => self.handle_dialog_input(key)?,
-                Modality::RangeCopy => self.handle_range_copy_input(key)?,
+                Modality::RangeSelect => self.handle_range_select_input(key)?,
             };
             return Ok(result);
         }
@@ -225,13 +269,14 @@ impl<'ws> Workspace<'ws> {
                 "* CTRl-h: Shrink column width by 1".to_string(),
                 "* CTRl-n: Next sheet. Starts over at beginning if at end.".to_string(),
                 "* CTRl-p: Previous sheet. Starts over at end if at beginning.".to_string(),
-                "* CTRl-?: Previous sheet. Starts over at end if at beginning.".to_string(),
+                "* ALT-h: Previous sheet. Starts over at end if at beginning.".to_string(),
                 "* q exit".to_string(),
                 "* Ctrl-S Save sheet".to_string(),
             ],
             Modality::CellEdit => vec![
                 "Edit Mode:".to_string(),
                 "* ENTER/RETURN: Exit edit mode and save changes".to_string(),
+                "* Ctrl-r: Enter Range Selection mode".to_string(),
                 "* ESC: Exit edit mode and discard changes".to_string(),
                 "Otherwise edit as normal".to_string(),
             ],
@@ -240,6 +285,14 @@ impl<'ws> Workspace<'ws> {
                 "* ESC: Exit command mode".to_string(),
                 "* CTRL-?: Exit command mode".to_string(),
                 "* ENTER/RETURN: run command and exit command mode".to_string(),
+            ],
+            Modality::RangeSelect => vec![
+                "Range Selection Mode:".to_string(),
+                "* ESC: Exit command mode".to_string(),
+                "* h,j,k,l: vim style navigation".to_string(),
+                "* Spacebar: Select start and end of range".to_string(),
+                "* CTRl-n: Next sheet. Starts over at beginning if at end.".to_string(),
+                "* CTRl-p: Previous sheet. Starts over at end if at beginning.".to_string(),
             ],
             _ => vec!["General help".to_string()],
         }
@@ -282,6 +335,15 @@ impl<'ws> Workspace<'ws> {
             match key.code {
                 KeyCode::Char('h') if key.modifiers == KeyModifiers::ALT => {
                     self.enter_dialog_mode(self.render_help_text());
+                    return Ok(None);
+                }
+                KeyCode::Char('r') if key.modifiers == KeyModifiers::CONTROL => {
+                    self.enter_range_select_mode();
+                    return Ok(None);
+                }
+                KeyCode::Char('p') if key.modifiers == KeyModifiers::CONTROL => {
+                    self.text_area.set_yank_text(self.selected_range_to_string());
+                    self.text_area.paste();
                     return Ok(None);
                 }
                 KeyCode::Enter => self.exit_edit_mode(true)?,
@@ -371,11 +433,15 @@ impl<'ws> Workspace<'ws> {
         self.state.numeric_prefix.push(digit);
     }
 
-    fn handle_range_copy_input(&mut self,  key: event::KeyEvent) -> Result<Option<ExitCode>> {
+    fn handle_range_select_input(&mut self, key: event::KeyEvent) -> Result<Option<ExitCode>> {
         if key.kind == KeyEventKind::Press {
             match key.code {
                 KeyCode::Esc => {
                     self.state.reset_n_prefix();
+                }
+                KeyCode::Char('h') if key.modifiers == KeyModifiers::ALT => {
+                    self.enter_dialog_mode(self.render_help_text());
+                    return Ok(None);
                 }
                 KeyCode::Char(d) if d.is_ascii_digit() => {
                     self.handle_numeric_prefix(d);
@@ -383,7 +449,6 @@ impl<'ws> Workspace<'ws> {
                 KeyCode::Char('h') => {
                     self.run_with_prefix(|ws: &mut Workspace<'_>| -> Result<()> {
                         ws.move_left()?;
-                        dbg!(&ws.book.location);
                         Ok(())
                     })?;
                 }
@@ -396,7 +461,6 @@ impl<'ws> Workspace<'ws> {
                 KeyCode::Char('k') => {
                     self.run_with_prefix(|ws: &mut Workspace<'_>| -> Result<()> {
                         ws.move_up()?;
-                        dbg!(&ws.book.location);
                         Ok(())
                     })?;
                 }
@@ -408,11 +472,25 @@ impl<'ws> Workspace<'ws> {
                 }
                 KeyCode::Char(' ') => {
                     if self.state.start_range.is_none() {
-                        self.state.start_range = dbg!(Some(self.book.location.clone()));
+                        self.state.start_range = Some(self.book.location.clone());
                     } else {
-                        self.state.end_range = dbg!(Some(self.book.location.clone()));
-                        self.exit_range_copy_mode()?;
+                        self.state.end_range = Some(self.book.location.clone());
+                        self.exit_range_select_mode()?;
                     }
+                }
+                KeyCode::Char('n') if key.modifiers == KeyModifiers::CONTROL => {
+                    self.run_with_prefix(|ws: &mut Workspace<'_>| -> Result<()> {
+                        ws.book.select_next_sheet();
+                        Ok(())
+                    })?;
+                    self.state.range_sheet = Some(self.book.current_sheet);
+                }
+                KeyCode::Char('p') if key.modifiers == KeyModifiers::CONTROL => {
+                    self.run_with_prefix(|ws: &mut Workspace<'_>| -> Result<()> {
+                        ws.book.select_prev_sheet();
+                        Ok(())
+                    })?;
+                    self.state.range_sheet = Some(self.book.current_sheet);
                 }
                 _ => {
                     // moop
@@ -421,7 +499,7 @@ impl<'ws> Workspace<'ws> {
         }
         Ok(None)
     }
-    
+
     fn handle_navigation_input(&mut self, key: event::KeyEvent) -> Result<Option<ExitCode>> {
         if key.kind == KeyEventKind::Press {
             match key.code {
@@ -441,7 +519,7 @@ impl<'ws> Workspace<'ws> {
                     self.save_file()?;
                 }
                 KeyCode::Char('r') if key.modifiers == KeyModifiers::CONTROL => {
-                    self.enter_range_copy_mode();
+                    self.enter_range_select_mode();
                 }
                 KeyCode::Char('h') if key.modifiers == KeyModifiers::ALT => {
                     self.enter_dialog_mode(self.render_help_text());
@@ -549,7 +627,10 @@ impl<'ws> Workspace<'ws> {
         return Ok(None);
     }
 
-    fn run_with_prefix(&mut self, action: impl Fn(&mut Workspace<'_>) -> std::result::Result<(), anyhow::Error>) -> Result<(), anyhow::Error> {
+    fn run_with_prefix(
+        &mut self,
+        action: impl Fn(&mut Workspace<'_>) -> std::result::Result<(), anyhow::Error>,
+    ) -> Result<(), anyhow::Error> {
         for _ in 1..=self.state.get_n_prefix() {
             action(self)?;
         }
@@ -568,14 +649,15 @@ impl<'ws> Workspace<'ws> {
         self.state.popup = msg;
         self.state.modality_stack.push(Modality::Dialog);
     }
-    
-    fn enter_range_copy_mode(&mut self) {
+
+    fn enter_range_select_mode(&mut self) {
+        self.state.range_sheet = Some(self.book.current_sheet);
+        self.state.original_sheet = Some(self.book.current_sheet);
         self.state.original_location = Some(self.book.location.clone());
         self.state.start_range = None;
         self.state.end_range = None;
-        self.state.modality_stack.push(Modality::RangeCopy);
+        self.state.modality_stack.push(Modality::RangeSelect);
     }
-
 
     fn enter_edit_mode(&mut self) {
         self.state.modality_stack.push(Modality::CellEdit);
@@ -600,14 +682,26 @@ impl<'ws> Workspace<'ws> {
         self.state.pop_modality();
         Ok(())
     }
-    
-    fn exit_range_copy_mode(&mut self) -> Result<()> {
-        self.book.location = self.state.original_location.clone().expect("Missing original location after range copy");
+
+    fn exit_range_select_mode(&mut self) -> Result<()> {
+        self.book.current_sheet = self
+            .state
+            .original_sheet
+            .clone()
+            .expect("Missing original sheet");
+        self.book.location = self
+            .state
+            .original_location
+            .clone()
+            .expect("Missing original location after range copy");
         self.state.original_location = None;
         self.state.pop_modality();
+        if self.state.modality() == &Modality::CellEdit {
+            self.text_area.set_yank_text(self.selected_range_to_string());
+            self.text_area.paste();
+        }
         Ok(())
     }
-
 
     fn exit_edit_mode(&mut self, keep: bool) -> Result<()> {
         self.text_area.set_cursor_line_style(Style::default());

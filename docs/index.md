@@ -76,6 +76,9 @@ For the most part this should work the same way you expect a spreadsheet to work
 * `Enter` will update the cell contents.
 * `Esc` will cancel editing the cell and leave it unedited.
 
+`Ctrl-r` will enter range select mode when editing a formula. You can navigate around the
+sheet and hit space to select that cell in the sheet to set the start of the range. Navigate some more and hit space to set the end of the range.
+
 You can find the functions we support documented here: [ironcalc docs](https://docs.ironcalc.com/functions/lookup-and-reference.html)
 
 ### Command Mode
@@ -94,3 +97,15 @@ The currently supported commands are:
 * `quit` Quits the application. `q` is a shorthand alias for this command.
 
 <aside>Note that in the case of `quit` and `edit` that we do not currently prompt you if the current spreadsheet has not been saved yet. So your changes will be discarded if you have not saved first.</aside>
+
+### Range Select Mode
+
+Range Select mode copies a range reference for use later. You can enter range select mode from CellEdit mode with `CTRL-r`.
+
+* `h`, `j`, `k`, `l` will navigate around the sheet.
+* `Ctrl-n`, `Ctrl-p` will navigate between sheets.
+* ` ` the spacebar will select the start and end of the range respectively.
+
+When you have selected the end of the range you will exit range select mode and the range reference will be placed into the cell contents you are editing.
+
+<aside>We only support continuous ranges for the moment. Planned for discontinuous ranges still needs the interaction interface to be determined.</aside>

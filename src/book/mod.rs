@@ -287,6 +287,13 @@ impl Book {
             .map_err(|s| anyhow!("Invalid Worksheet: {}", s))?)
     }
     
+    pub(crate) fn get_sheet_name_by_idx(&self, idx: usize) -> Result<&str> {
+        Ok(&self
+            .model
+            .workbook
+            .worksheet(idx as u32)
+            .map_err(|s| anyhow!("Invalid Worksheet: {}", s))?.name)
+    }
     pub(crate) fn get_sheet_by_idx_mut(&mut self, idx: usize) -> Result<&mut Worksheet> {
         Ok(self
             .model
