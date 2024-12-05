@@ -33,17 +33,40 @@ pub enum Modality {
     RangeSelect,
 }
 
+#[derive(Debug, Default)]
+pub struct RangeSelection {
+    pub original_location: Option<Address>,
+    pub original_sheet: Option<u32>,
+    pub sheet: Option<u32>,
+    pub start: Option<Address>,
+    pub end: Option<Address>,
+}
+
+impl RangeSelection {
+    pub fn get_range(&self) -> Option<(Address, Address)> {
+        if let (Some(start), Some(end)) = (&self.start, &self.end) {
+            return Some((
+                Address {
+                    row: std::cmp::min(start.row, end.row),
+                    col: std::cmp::min(start.col, end.col),
+                },
+                Address {
+                    row: std::cmp::max(start.row, end.row),
+                    col: std::cmp::max(start.col, end.col),
+                },
+            ));
+        }
+        None
+    }
+}
+
 #[derive(Debug)]
 pub struct AppState<'ws> {
     pub modality_stack: Vec<Modality>,
     pub viewport_state: ViewportState,
     pub command_state: TextState<'ws>,
     pub numeric_prefix: Vec<char>,
-    pub original_location: Option<Address>,
-    pub original_sheet: Option<u32>,
-    pub range_sheet: Option<u32>,
-    pub start_range: Option<Address>,
-    pub end_range: Option<Address>,
+    pub range_select: RangeSelection,
     dirty: bool,
     popup: Vec<String>,
 }
@@ -55,11 +78,7 @@ impl<'ws> Default for AppState<'ws> {
             viewport_state: Default::default(),
             command_state: Default::default(),
             numeric_prefix: Default::default(),
-            original_location: Default::default(),
-            original_sheet: Default::default(),
-            range_sheet: Default::default(),
-            start_range: Default::default(),
-            end_range: Default::default(),
+            range_select: Default::default(),
             dirty: Default::default(),
             popup: Default::default(),
         }
@@ -175,29 +194,22 @@ impl<'ws> Workspace<'ws> {
 
     pub fn selected_range_to_string(&self) -> String {
         let state = &self.state;
-        let start = state
-            .start_range
-            .as_ref()
-            .map(|addr| addr.to_range_part())
-            .unwrap_or_else(|| String::new());
-        let end = state
-            .end_range
-            .as_ref()
-            .map(|addr| format!(":{}", addr.to_range_part()))
-            .unwrap_or_else(|| String::new());
-        if let Some(range_sheet) = state.range_sheet {
-            if range_sheet != self.book.current_sheet {
-                return format!(
-                    "{}!{}{}",
-                    self.book
-                        .get_sheet_name_by_idx(range_sheet as usize)
-                        .expect("No such sheet index"),
-                    start,
-                    end
-                );
+        if let Some((start, end)) = state.range_select.get_range() {
+            let a1 = format!("{}{}", start.to_range_part(), format!(":{}", end.to_range_part()));
+            if let Some(range_sheet) = state.range_select.sheet {
+                if range_sheet != self.book.current_sheet {
+                    return format!(
+                        "{}!{}",
+                        self.book
+                            .get_sheet_name_by_idx(range_sheet as usize)
+                            .expect("No such sheet index"),
+                        a1
+                    );
+                }
             }
+            return a1;
         }
-        format!("{}:{}", start, end)
+        return String::new()
     }
 
     /// Move a row down in the current sheet.
@@ -342,7 +354,8 @@ impl<'ws> Workspace<'ws> {
                     return Ok(None);
                 }
                 KeyCode::Char('p') if key.modifiers == KeyModifiers::CONTROL => {
-                    self.text_area.set_yank_text(self.selected_range_to_string());
+                    self.text_area
+                        .set_yank_text(self.selected_range_to_string());
                     self.text_area.paste();
                     self.state.dirty = true;
                     return Ok(None);
@@ -438,7 +451,13 @@ impl<'ws> Workspace<'ws> {
         if key.kind == KeyEventKind::Press {
             match key.code {
                 KeyCode::Esc => {
-                    self.state.reset_n_prefix();
+                    if self.state.numeric_prefix.len() > 0 {
+                        self.state.reset_n_prefix();
+                    } else {
+                        self.state.range_select.start = None;
+                        self.state.range_select.end = None;
+                        self.exit_range_select_mode()?;
+                    }
                 }
                 KeyCode::Char('h') if key.modifiers == KeyModifiers::ALT => {
                     self.enter_dialog_mode(self.render_help_text());
@@ -452,46 +471,52 @@ impl<'ws> Workspace<'ws> {
                         ws.move_left()?;
                         Ok(())
                     })?;
+                    self.maybe_update_range_end();
                 }
                 KeyCode::Char('j') => {
                     self.run_with_prefix(|ws: &mut Workspace<'_>| -> Result<()> {
                         ws.move_down()?;
                         Ok(())
                     })?;
+                    self.maybe_update_range_end();
                 }
                 KeyCode::Char('k') => {
                     self.run_with_prefix(|ws: &mut Workspace<'_>| -> Result<()> {
                         ws.move_up()?;
                         Ok(())
                     })?;
+                    self.maybe_update_range_end();
                 }
                 KeyCode::Char('l') => {
                     self.run_with_prefix(|ws: &mut Workspace<'_>| -> Result<()> {
                         ws.move_right()?;
                         Ok(())
                     })?;
+                    self.maybe_update_range_end();
                 }
-                KeyCode::Char(' ') => {
-                    if self.state.start_range.is_none() {
-                        self.state.start_range = Some(self.book.location.clone());
+                KeyCode::Char(' ') | KeyCode::Enter => {
+                    if self.state.range_select.start.is_none() {
+                        self.state.range_select.start = Some(self.book.location.clone());
                     } else {
-                        self.state.end_range = Some(self.book.location.clone());
+                        self.state.range_select.end = Some(self.book.location.clone());
                         self.exit_range_select_mode()?;
                     }
                 }
                 KeyCode::Char('n') if key.modifiers == KeyModifiers::CONTROL => {
+                    // TODO(jwall): We should reset our range selections.
                     self.run_with_prefix(|ws: &mut Workspace<'_>| -> Result<()> {
                         ws.book.select_next_sheet();
                         Ok(())
                     })?;
-                    self.state.range_sheet = Some(self.book.current_sheet);
+                    self.state.range_select.sheet = Some(self.book.current_sheet);
                 }
                 KeyCode::Char('p') if key.modifiers == KeyModifiers::CONTROL => {
+                    // TODO(jwall): We should reset our range selections.
                     self.run_with_prefix(|ws: &mut Workspace<'_>| -> Result<()> {
                         ws.book.select_prev_sheet();
                         Ok(())
                     })?;
-                    self.state.range_sheet = Some(self.book.current_sheet);
+                    self.state.range_select.sheet = Some(self.book.current_sheet);
                 }
                 _ => {
                     // moop
@@ -499,6 +524,12 @@ impl<'ws> Workspace<'ws> {
             }
         }
         Ok(None)
+    }
+
+    fn maybe_update_range_end(&mut self) {
+        if self.state.range_select.start.is_some() {
+            self.state.range_select.end = Some(self.book.location.clone());
+        }
     }
 
     fn handle_navigation_input(&mut self, key: event::KeyEvent) -> Result<Option<ExitCode>> {
@@ -652,11 +683,11 @@ impl<'ws> Workspace<'ws> {
     }
 
     fn enter_range_select_mode(&mut self) {
-        self.state.range_sheet = Some(self.book.current_sheet);
-        self.state.original_sheet = Some(self.book.current_sheet);
-        self.state.original_location = Some(self.book.location.clone());
-        self.state.start_range = None;
-        self.state.end_range = None;
+        self.state.range_select.sheet = Some(self.book.current_sheet);
+        self.state.range_select.original_sheet = Some(self.book.current_sheet);
+        self.state.range_select.original_location = Some(self.book.location.clone());
+        self.state.range_select.start = None;
+        self.state.range_select.end = None;
         self.state.modality_stack.push(Modality::RangeSelect);
     }
 
@@ -687,18 +718,21 @@ impl<'ws> Workspace<'ws> {
     fn exit_range_select_mode(&mut self) -> Result<()> {
         self.book.current_sheet = self
             .state
+            .range_select
             .original_sheet
             .clone()
             .expect("Missing original sheet");
         self.book.location = self
             .state
+            .range_select
             .original_location
             .clone()
             .expect("Missing original location after range copy");
-        self.state.original_location = None;
+        self.state.range_select.original_location = None;
         self.state.pop_modality();
         if self.state.modality() == &Modality::CellEdit {
-            self.text_area.set_yank_text(self.selected_range_to_string());
+            self.text_area
+                .set_yank_text(self.selected_range_to_string());
             self.text_area.paste();
             self.state.dirty = true;
         }
@@ -712,9 +746,8 @@ impl<'ws> Workspace<'ws> {
         if self.state.dirty && keep {
             self.book.edit_current_cell(contents)?;
             self.book.evaluate();
-        } else {
-            self.text_area = reset_text_area(self.book.get_current_cell_contents()?);
         }
+        self.text_area = reset_text_area(self.book.get_current_cell_contents()?);
         self.state.dirty = false;
         self.state.pop_modality();
         Ok(())

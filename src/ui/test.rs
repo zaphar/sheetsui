@@ -363,24 +363,24 @@ fn test_range_copy() {
     ws.handle_input(construct_modified_key_event(KeyCode::Char('r'), KeyModifiers::CONTROL))
         .expect("Failed to handle 'Ctrl-r' key event");
     assert_eq!(Some(&Modality::RangeSelect), ws.state.modality_stack.last());
-    assert_eq!(Some(original_loc.clone()), ws.state.original_location);
-    assert!(ws.state.start_range.is_none());
-    assert!(ws.state.end_range.is_none());
+    assert_eq!(Some(original_loc.clone()), ws.state.range_select.original_location);
+    assert!(ws.state.range_select.start.is_none());
+    assert!(ws.state.range_select.end.is_none());
     
     ws.handle_input(construct_key_event(KeyCode::Char('l')))
         .expect("Failed to handle 'l' key event");
     ws.handle_input(construct_key_event(KeyCode::Char(' ')))
         .expect("Failed to handle ' ' key event");
-    assert_eq!(Some(Address {row:1, col:2, }), ws.state.start_range);
+    assert_eq!(Some(Address {row:1, col:2, }), ws.state.range_select.start);
     
     ws.handle_input(construct_key_event(KeyCode::Char('j')))
         .expect("Failed to handle 'j' key event");
     ws.handle_input(construct_key_event(KeyCode::Char(' ')))
         .expect("Failed to handle ' ' key event");
     
-    assert!(ws.state.original_location.is_none());
-    assert_eq!(Some(Address {row:1, col:2, }), ws.state.start_range);
-    assert_eq!(Some(Address {row:2, col:2, }), ws.state.end_range);
+    assert!(ws.state.range_select.original_location.is_none());
+    assert_eq!(Some(Address {row:1, col:2, }), ws.state.range_select.start);
+    assert_eq!(Some(Address {row:2, col:2, }), ws.state.range_select.end);
     assert_eq!(original_loc, ws.book.location);
     assert_eq!(Some(&Modality::Navigate), ws.state.modality_stack.last());
    
@@ -391,24 +391,24 @@ fn test_range_copy() {
     ws.handle_input(construct_modified_key_event(KeyCode::Char('r'), KeyModifiers::CONTROL))
         .expect("Failed to handle 'Ctrl-r' key event");
     assert_eq!(Some(&Modality::RangeSelect), ws.state.modality_stack.last());
-    assert_eq!(Some(original_loc_2.clone()), ws.state.original_location);
-    assert!(ws.state.start_range.is_none());
-    assert!(ws.state.end_range.is_none());
+    assert_eq!(Some(original_loc_2.clone()), ws.state.range_select.original_location);
+    assert!(ws.state.range_select.start.is_none());
+    assert!(ws.state.range_select.end.is_none());
     
     ws.handle_input(construct_key_event(KeyCode::Char('h')))
         .expect("Failed to handle 'h' key event");
     ws.handle_input(construct_key_event(KeyCode::Char(' ')))
         .expect("Failed to handle ' ' key event");
-    assert_eq!(Some(Address {row:5, col:4, }), ws.state.start_range);
+    assert_eq!(Some(Address {row:5, col:4, }), ws.state.range_select.start);
     
     ws.handle_input(construct_key_event(KeyCode::Char('k')))
         .expect("Failed to handle 'k' key event");
     ws.handle_input(construct_key_event(KeyCode::Char(' ')))
         .expect("Failed to handle ' ' key event");
     
-    assert!(ws.state.original_location.is_none());
-    assert_eq!(Some(Address {row:5, col:4, }), ws.state.start_range);
-    assert_eq!(Some(Address {row:4, col:4, }), ws.state.end_range);
+    assert!(ws.state.range_select.original_location.is_none());
+    assert_eq!(Some(Address {row:5, col:4, }), ws.state.range_select.start);
+    assert_eq!(Some(Address {row:4, col:4, }), ws.state.range_select.end);
     assert_eq!(original_loc_2, ws.book.location);
     assert_eq!(Some(&Modality::Navigate), ws.state.modality_stack.last());
 }

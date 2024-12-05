@@ -7,7 +7,7 @@ use ratatui::{
     widgets::{Block, Cell, Row, StatefulWidget, Table, Widget},
 };
 
-use super::{Address, Book};
+use super::{Address, AppState, Book, RangeSelection};
 
 // TODO(zaphar): Move this to the book module.
 // NOTE(zaphar): This is stolen from ironcalc but ironcalc doesn't expose it
@@ -34,10 +34,11 @@ pub struct ViewportState {
 }
 
 /// A renderable viewport over a book.
-pub struct Viewport<'book> {
+pub struct Viewport<'ws> {
     pub(crate) selected: Address,
-    book: &'book Book,
-    block: Option<Block<'book>>,
+    book: &'ws Book,
+    range_selection: &'ws RangeSelection,
+    block: Option<Block<'ws>>,
 }
 
 pub(crate) const COLNAMES: [&'static str; 26] = [
@@ -45,10 +46,11 @@ pub(crate) const COLNAMES: [&'static str; 26] = [
     "T", "U", "V", "W", "X", "Y", "Z",
 ];
 
-impl<'book> Viewport<'book> {
-    pub fn new(book: &'book Book) -> Self {
+impl<'ws> Viewport<'ws> {
+    pub fn new(book: &'ws Book, app_state: &'ws RangeSelection) -> Self {
         Self {
             book,
+            range_selection: app_state,
             selected: Default::default(),
             block: None,
         }
@@ -127,7 +129,7 @@ impl<'book> Viewport<'book> {
         return Ok(visible);
     }
 
-    pub fn block(mut self, block: Block<'book>) -> Self {
+    pub fn block(mut self, block: Block<'ws>) -> Self {
         self.block = Some(block);
         self
     }
@@ -158,7 +160,17 @@ impl<'book> Viewport<'book> {
                                 .book
                                 .get_cell_addr_rendered(&Address { row: ri, col: *ci })
                                 .unwrap();
-                            let cell = Cell::new(Text::raw(content));
+                            let mut cell = Cell::new(Text::raw(content));
+                            if let Some((start, end)) = &self.range_selection.get_range() {
+                                if ri >= start.row
+                                    && ri <= end.row
+                                    && *ci >= start.col
+                                    && *ci <= end.col
+                                {
+                                    // This is a selected range
+                                    cell = cell.fg(Color::Black).bg(Color::LightBlue)
+                                }
+                            }
                             match (self.book.location.row == ri, self.book.location.col == *ci) {
                                 (true, true) => cell.fg(Color::White).bg(Color::Rgb(57, 61, 71)),
                                 _ => cell,
@@ -197,7 +209,7 @@ impl<'book> Viewport<'book> {
     }
 }
 
-impl<'book> StatefulWidget for Viewport<'book> {
+impl<'ws> StatefulWidget for Viewport<'ws> {
     type State = ViewportState;
 
     fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {

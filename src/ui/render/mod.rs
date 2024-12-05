@@ -44,7 +44,7 @@ impl<'ws> Workspace<'ws> {
             Box::new(move |rect: Rect, buf: &mut Buffer, ws: &mut Self| {
                 let sheet_name = ws.book.get_sheet_name().unwrap_or("Unknown");
                 let table_block = Block::bordered().title_top(sheet_name);
-                let viewport = Viewport::new(&ws.book)
+                let viewport = Viewport::new(&ws.book, &ws.state.range_select)
                     .with_selected(ws.book.location.clone())
                     .block(table_block);
                 StatefulWidget::render(viewport, rect, buf, &mut ws.state.viewport_state);
