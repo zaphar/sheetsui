@@ -319,7 +319,7 @@ impl<'ws> Workspace<'ws> {
     fn handle_command_input(&mut self, key: event::KeyEvent) -> Result<Option<ExitCode>> {
         if key.kind == KeyEventKind::Press {
             match key.code {
-                KeyCode::Esc | KeyCode::Enter => self.exit_command_mode()?,
+                KeyCode::Esc | KeyCode::Enter => return self.exit_command_mode(),
                 KeyCode::Char('h') if key.modifiers == KeyModifiers::ALT => {
                     self.enter_dialog_mode(self.render_help_text());
                     return Ok(None);
@@ -383,18 +383,18 @@ impl<'ws> Workspace<'ws> {
         Ok(None)
     }
 
-    fn handle_command(&mut self, cmd_text: String) -> Result<bool> {
+    fn handle_command(&mut self, cmd_text: String) -> Result<Option<ExitCode>> {
         if cmd_text.is_empty() {
-            return Ok(true);
+            return Ok(None);
         }
         match cmd::parse(&cmd_text) {
             Ok(Some(Cmd::Edit(path))) => {
                 self.load_into(path)?;
-                Ok(true)
+                Ok(None)
             }
             Ok(Some(Cmd::Help(_maybe_topic))) => {
                 self.enter_dialog_mode(vec!["TODO help topic".to_owned()]);
-                Ok(true)
+                Ok(None)
             }
             Ok(Some(Cmd::Write(maybe_path))) => {
                 if let Some(path) = maybe_path {
@@ -402,17 +402,17 @@ impl<'ws> Workspace<'ws> {
                 } else {
                     self.save_file()?;
                 }
-                Ok(true)
+                Ok(None)
             }
             Ok(Some(Cmd::InsertColumns(count))) => {
                 self.book.insert_columns(self.book.location.col, count)?;
                 self.book.evaluate();
-                Ok(true)
+                Ok(None)
             }
             Ok(Some(Cmd::InsertRow(count))) => {
                 self.book.insert_rows(self.book.location.row, count)?;
                 self.book.evaluate();
-                Ok(true)
+                Ok(None)
             }
             Ok(Some(Cmd::RenameSheet(idx, name))) => {
                 match idx {
@@ -424,27 +424,27 @@ impl<'ws> Workspace<'ws> {
                             .set_sheet_name(self.book.current_sheet as usize, name)?;
                     }
                 }
-                Ok(true)
+                Ok(None)
             }
             Ok(Some(Cmd::NewSheet(name))) => {
                 self.book.new_sheet(name)?;
-                Ok(true)
+                Ok(None)
             }
             Ok(Some(Cmd::SelectSheet(name))) => {
                 self.book.select_sheet_by_name(name);
-                Ok(true)
+                Ok(None)
             }
             Ok(Some(Cmd::Quit)) => {
                 // TODO(zaphar): We probably need to do better than this
-                std::process::exit(0);
+                Ok(Some(ExitCode::SUCCESS))
             }
             Ok(None) => {
                 self.enter_dialog_mode(vec![format!("Unrecognized commmand {}", cmd_text)]);
-                Ok(false)
+                Ok(None)
             }
             Err(msg) => {
                 self.enter_dialog_mode(vec![msg.to_owned()]);
-                Ok(false)
+                Ok(None)
             }
         }
     }
@@ -707,13 +707,12 @@ impl<'ws> Workspace<'ws> {
         self.text_area.move_cursor(CursorMove::End);
     }
 
-    fn exit_command_mode(&mut self) -> Result<()> {
+    fn exit_command_mode(&mut self) -> Result<Option<ExitCode>> {
         let cmd = self.state.command_state.value().to_owned();
         self.state.command_state.blur();
         *self.state.command_state.status_mut() = Status::Done;
         self.state.pop_modality();
-        self.handle_command(cmd)?;
-        Ok(())
+        self.handle_command(cmd)
     }
 
     fn exit_dialog_mode(&mut self) -> Result<()> {
