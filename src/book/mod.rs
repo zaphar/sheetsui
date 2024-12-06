@@ -104,6 +104,48 @@ impl Book {
         Ok(())
     }
 
+    pub fn clear_current_cell(&mut self) -> Result<()> {
+        self.clear_cell_contents(self.current_sheet as u32, self.location.clone())
+    }
+    
+    pub fn clear_current_cell_all(&mut self) -> Result<()> {
+        self.clear_cell_all(self.current_sheet as u32, self.location.clone())
+    }
+
+
+    pub fn clear_cell_contents(&mut self, sheet: u32, Address { row, col, }: Address) -> Result<()> {
+        Ok(self
+            .model
+            .cell_clear_contents(sheet, row as i32, col as i32)
+            .map_err(|s| anyhow!("Unable to clear cell contents {}", s))?)
+    }
+
+    pub fn clear_cell_range(&mut self, sheet: u32, start: Address, end: Address) -> Result<()> {
+        for row in start.row..=end.row {
+            for col in start.col..=end.col {
+                self.clear_cell_contents(sheet, Address { row, col })?;
+            }
+        }
+        Ok(())
+    }
+    
+    pub fn clear_cell_all(&mut self, sheet: u32, Address { row, col, }: Address) -> Result<()> {
+        Ok(self
+            .model
+            .cell_clear_all(sheet, row as i32, col as i32)
+            .map_err(|s| anyhow!("Unable to clear cell contents {}", s))?)
+    }
+
+    pub fn clear_cell_range_all(&mut self, sheet: u32, start: Address, end: Address) -> Result<()> {
+        for row in start.row..=end.row {
+            for col in start.col..=end.col {
+                self.clear_cell_all(sheet, Address { row, col })?;
+            }
+        }
+        Ok(())
+    }
+
+
     /// Get a cells formatted content.
     pub fn get_current_cell_rendered(&self) -> Result<String> {
         Ok(self.get_cell_addr_rendered(&self.location)?)
