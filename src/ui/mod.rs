@@ -201,7 +201,11 @@ impl<'ws> Workspace<'ws> {
     pub fn selected_range_to_string(&self) -> String {
         let state = &self.state;
         if let Some((start, end)) = state.range_select.get_range() {
-            let a1 = format!("{}{}", start.to_range_part(), format!(":{}", end.to_range_part()));
+            let a1 = format!(
+                "{}{}",
+                start.to_range_part(),
+                format!(":{}", end.to_range_part())
+            );
             if let Some(range_sheet) = state.range_select.sheet {
                 if range_sheet != self.book.current_sheet {
                     return format!(
@@ -215,7 +219,7 @@ impl<'ws> Workspace<'ws> {
             }
             return a1;
         }
-        return String::new()
+        return String::new();
     }
 
     /// Move a row down in the current sheet.
@@ -281,6 +285,8 @@ impl<'ws> Workspace<'ws> {
                 "* ENTER/RETURN: Go down one cell".to_string(),
                 "* TAB: Go over one cell".to_string(),
                 "* h,j,k,l: vim style navigation".to_string(),
+                "* d: clear cell contents leaving style untouched".to_string(),
+                "* D: clear cell contents including style".to_string(),
                 "* CTRl-r: Add a row".to_string(),
                 "* CTRl-c: Add a column".to_string(),
                 "* CTRl-l: Grow column width by 1".to_string(),
@@ -308,6 +314,8 @@ impl<'ws> Workspace<'ws> {
                 "Range Selection Mode:".to_string(),
                 "* ESC: Exit command mode".to_string(),
                 "* h,j,k,l: vim style navigation".to_string(),
+                "* d: delete the contents of the range leaving style untouched".to_string(),
+                "* D: clear cell contents including style".to_string(),
                 "* Spacebar: Select start and end of range".to_string(),
                 "* CTRl-n: Next sheet. Starts over at beginning if at end.".to_string(),
                 "* CTRl-p: Previous sheet. Starts over at end if at beginning.".to_string(),
@@ -471,6 +479,30 @@ impl<'ws> Workspace<'ws> {
                 KeyCode::Char(d) if d.is_ascii_digit() => {
                     self.handle_numeric_prefix(d);
                 }
+                KeyCode::Char('D') => {
+                    if let Some((start, end)) = self.state.range_select.get_range() {
+                        self.book.clear_cell_range_all(
+                            self.state
+                                .range_select
+                                .sheet
+                                .unwrap_or_else(|| self.book.current_sheet),
+                            start,
+                            end,
+                        )?;
+                    }
+                }
+                KeyCode::Char('d') => {
+                    if let Some((start, end)) = self.state.range_select.get_range() {
+                        self.book.clear_cell_range(
+                            self.state
+                                .range_select
+                                .sheet
+                                .unwrap_or_else(|| self.book.current_sheet),
+                            start,
+                            end,
+                        )?;
+                    }
+                }
                 KeyCode::Char('h') => {
                     self.run_with_prefix(|ws: &mut Workspace<'_>| -> Result<()> {
                         ws.move_left()?;
@@ -566,6 +598,12 @@ impl<'ws> Workspace<'ws> {
                         ws.book.select_next_sheet();
                         Ok(())
                     })?;
+                }
+                KeyCode::Char('d') => {
+                    self.book.clear_current_cell()?;
+                }
+                KeyCode::Char('D') => {
+                    self.book.clear_current_cell_all()?;
                 }
                 KeyCode::Char('p') if key.modifiers == KeyModifiers::CONTROL => {
                     self.run_with_prefix(|ws: &mut Workspace<'_>| -> Result<()> {
