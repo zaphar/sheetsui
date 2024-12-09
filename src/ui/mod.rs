@@ -67,6 +67,12 @@ impl RangeSelection {
 }
 
 #[derive(Debug)]
+pub enum ClipboardContents {
+    Cell(String),
+    Range(Vec<Vec<String>>),
+}
+
+#[derive(Debug)]
 pub struct AppState<'ws> {
     pub modality_stack: Vec<Modality>,
     pub viewport_state: ViewportState,
@@ -75,6 +81,7 @@ pub struct AppState<'ws> {
     pub range_select: RangeSelection,
     dirty: bool,
     popup: Vec<String>,
+    clipboard: Option<ClipboardContents>,
 }
 
 impl<'ws> Default for AppState<'ws> {
@@ -87,6 +94,7 @@ impl<'ws> Default for AppState<'ws> {
             range_select: Default::default(),
             dirty: Default::default(),
             popup: Default::default(),
+            clipboard: Default::default(),
         }
     }
 }
@@ -532,12 +540,7 @@ impl<'ws> Workspace<'ws> {
                     self.maybe_update_range_end();
                 }
                 KeyCode::Char(' ') | KeyCode::Enter => {
-                    if self.state.range_select.start.is_none() {
-                        self.state.range_select.start = Some(self.book.location.clone());
-                    } else {
-                        self.state.range_select.end = Some(self.book.location.clone());
-                        self.exit_range_select_mode()?;
-                    }
+                    self.update_range_selection()?;
                 }
                 KeyCode::Char('n') if key.modifiers == KeyModifiers::CONTROL => {
                     self.state.range_select.reset_range_selection();
@@ -555,12 +558,107 @@ impl<'ws> Workspace<'ws> {
                     })?;
                     self.state.range_select.sheet = Some(self.book.current_sheet);
                 }
+                KeyCode::Char('C')
+                    if key
+                        .modifiers
+                        .contains(KeyModifiers::CONTROL | KeyModifiers::SHIFT) =>
+                {
+                    // TODO(zaphar): Share the algorithm below between both copies
+                    self.copy_range_formatted()?;
+                }
+                KeyCode::Char('Y') => self.copy_range_formatted()?,
+                KeyCode::Char('c') if key.modifiers == KeyModifiers::CONTROL => {
+                    self.copy_range_contents()?;
+                }
+                KeyCode::Char('y') => self.copy_range_contents()?,
                 _ => {
                     // moop
                 }
             }
         }
         Ok(None)
+    }
+
+    fn copy_range_formatted(&mut self) -> Result<(), anyhow::Error> {
+        self.update_range_selection()?;
+        match &self.state.range_select.get_range() {
+            Some((
+                Address {
+                    row: row_start,
+                    col: col_start,
+                },
+                Address {
+                    row: row_end,
+                    col: col_end,
+                },
+            )) => {
+                let mut rows = Vec::new();
+                for ri in (*row_start)..=(*row_end) {
+                    let mut cols = Vec::new();
+                    for ci in (*col_start)..=(*col_end) {
+                        cols.push(
+                            self.book
+                                .get_cell_addr_rendered(&Address { row: ri, col: ci })?,
+                        );
+                    }
+                    rows.push(cols);
+                }
+                self.state.clipboard = Some(ClipboardContents::Range(rows));
+            }
+            None => {
+                self.state.clipboard = Some(ClipboardContents::Cell(
+                    self.book.get_current_cell_rendered()?,
+                ));
+            }
+        }
+        self.exit_range_select_mode()?;
+        Ok(())
+    }
+
+    fn copy_range_contents(&mut self) -> Result<(), anyhow::Error> {
+        self.update_range_selection()?;
+        match &self.state.range_select.get_range() {
+            Some((
+                Address {
+                    row: row_start,
+                    col: col_start,
+                },
+                Address {
+                    row: row_end,
+                    col: col_end,
+                },
+            )) => {
+                let mut rows = Vec::new();
+                for ri in (*row_start)..=(*row_end) {
+                    let mut cols = Vec::new();
+                    for ci in (*col_start)..=(*col_end) {
+                        cols.push(
+                            self.book
+                                .get_cell_addr_contents(&Address { row: ri, col: ci })?,
+                        );
+                    }
+                    rows.push(cols);
+                }
+                self.state.clipboard = Some(ClipboardContents::Range(rows));
+            }
+            None => {
+                self.state.clipboard = Some(ClipboardContents::Cell(
+                    self.book.get_current_cell_contents()?,
+                ));
+            }
+        }
+        self.exit_range_select_mode()?;
+        Ok(())
+    }
+
+    fn update_range_selection(&mut self) -> Result<(), anyhow::Error> {
+        Ok(if self.state.range_select.start.is_none() {
+            self.state.range_select.start = Some(self.book.location.clone());
+            self.state.range_select.end = Some(self.book.location.clone());
+        } else {
+            self.state.range_select.end = Some(self.book.location.clone());
+            self.exit_range_select_mode()?;
+        })
     }
 
     fn maybe_update_range_end(&mut self) {
@@ -589,6 +687,34 @@ impl<'ws> Workspace<'ws> {
                 }
                 KeyCode::Char('r') if key.modifiers == KeyModifiers::CONTROL => {
                     self.enter_range_select_mode();
+                }
+                KeyCode::Char('c') if key.modifiers == KeyModifiers::CONTROL => {
+                    self.state.clipboard = Some(ClipboardContents::Cell(
+                        self.book.get_current_cell_contents()?,
+                    ));
+                }
+                KeyCode::Char('y') => {
+                    self.state.clipboard = Some(ClipboardContents::Cell(
+                        self.book.get_current_cell_contents()?,
+                    ));
+                }
+                KeyCode::Char('C')
+                    if key
+                        .modifiers
+                        .contains(KeyModifiers::CONTROL | KeyModifiers::SHIFT) =>
+                {
+                    self.state.clipboard = Some(ClipboardContents::Cell(
+                        self.book.get_current_cell_rendered()?,
+                    ));
+                }
+                KeyCode::Char('v') if key.modifiers != KeyModifiers::CONTROL => {
+                    self.enter_range_select_mode()
+                }
+                KeyCode::Char('p') if key.modifiers != KeyModifiers::CONTROL => {
+                    self.paste_range()?;
+                }
+                KeyCode::Char('v') if key.modifiers == KeyModifiers::CONTROL => {
+                    self.paste_range()?;
                 }
                 KeyCode::Char('h') if key.modifiers == KeyModifiers::ALT => {
                     self.enter_dialog_mode(self.render_help_text());
@@ -700,6 +826,36 @@ impl<'ws> Workspace<'ws> {
             }
         }
         return Ok(None);
+    }
+
+    fn paste_range(&mut self) -> Result<(), anyhow::Error> {
+        match &self.state.clipboard {
+            Some(ClipboardContents::Cell(contents)) => {
+                self.book.edit_current_cell(contents)?;
+            }
+            Some(ClipboardContents::Range(ref rows)) => {
+                let Address { row, col } = self.book.location.clone();
+                let row_len = rows.len();
+                for ri in 0..row_len {
+                    let columns = &rows[ri];
+                    let col_len = columns.len();
+                    for ci in 0..col_len {
+                        self.book.update_cell(
+                            &Address {
+                                row: ri + row,
+                                col: ci + col,
+                            },
+                            columns[ci].clone(),
+                        )?;
+                    }
+                }
+            }
+            None => {
+                // NOOP
+            }
+        }
+        self.state.clipboard = None;
+        Ok(())
     }
 
     fn run_with_prefix(
