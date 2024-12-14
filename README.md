@@ -35,6 +35,13 @@ Options:
 sheetui path/to/file.xlsx # edit/view a spreadsheet
 ```
 
+### Supported files
+
+Currently we only support the [ironcalc](https://docs.ironcalc.com/) xlsx
+features for spreadsheet. CSV import and expor are planned.
+
+### Screenshot
+
 <img src="./assets/screenshot.png" />
 
 ## Reference
