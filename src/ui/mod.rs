@@ -564,13 +564,13 @@ impl<'ws> Workspace<'ws> {
                         .contains(KeyModifiers::CONTROL | KeyModifiers::SHIFT) =>
                 {
                     // TODO(zaphar): Share the algorithm below between both copies
-                    self.copy_range_formatted()?;
+                    self.copy_range(true)?;
                 }
-                KeyCode::Char('Y') => self.copy_range_formatted()?,
+                KeyCode::Char('Y') => self.copy_range(true)?,
                 KeyCode::Char('c') if key.modifiers == KeyModifiers::CONTROL => {
-                    self.copy_range_contents()?;
+                    self.copy_range(false)?;
                 }
-                KeyCode::Char('y') => self.copy_range_contents()?,
+                KeyCode::Char('y') => self.copy_range(false)?,
                 _ => {
                     // moop
                 }
@@ -579,7 +579,7 @@ impl<'ws> Workspace<'ws> {
         Ok(None)
     }
 
-    fn copy_range_formatted(&mut self) -> Result<(), anyhow::Error> {
+    fn copy_range(&mut self, formatted: bool) -> Result<(), anyhow::Error> {
         self.update_range_selection()?;
         match &self.state.range_select.get_range() {
             Some((
@@ -596,55 +596,26 @@ impl<'ws> Workspace<'ws> {
                 for ri in (*row_start)..=(*row_end) {
                     let mut cols = Vec::new();
                     for ci in (*col_start)..=(*col_end) {
-                        cols.push(
+                        cols.push(if formatted {
                             self.book
-                                .get_cell_addr_rendered(&Address { row: ri, col: ci })?,
-                        );
+                                .get_cell_addr_rendered(&Address { row: ri, col: ci })?
+                        } else {
+                            self.book
+                                .get_cell_addr_contents(&Address { row: ri, col: ci })?
+                        });
                     }
                     rows.push(cols);
                 }
                 self.state.clipboard = Some(ClipboardContents::Range(rows));
             }
             None => {
-                self.state.clipboard = Some(ClipboardContents::Cell(
-                    self.book.get_current_cell_rendered()?,
-                ));
-            }
-        }
-        self.exit_range_select_mode()?;
-        Ok(())
-    }
-
-    fn copy_range_contents(&mut self) -> Result<(), anyhow::Error> {
-        self.update_range_selection()?;
-        match &self.state.range_select.get_range() {
-            Some((
-                Address {
-                    row: row_start,
-                    col: col_start,
-                },
-                Address {
-                    row: row_end,
-                    col: col_end,
-                },
-            )) => {
-                let mut rows = Vec::new();
-                for ri in (*row_start)..=(*row_end) {
-                    let mut cols = Vec::new();
-                    for ci in (*col_start)..=(*col_end) {
-                        cols.push(
-                            self.book
-                                .get_cell_addr_contents(&Address { row: ri, col: ci })?,
-                        );
-                    }
-                    rows.push(cols);
-                }
-                self.state.clipboard = Some(ClipboardContents::Range(rows));
-            }
-            None => {
-                self.state.clipboard = Some(ClipboardContents::Cell(
-                    self.book.get_current_cell_contents()?,
-                ));
+                self.state.clipboard = Some(ClipboardContents::Cell(if formatted {
+                    self.book
+                        .get_current_cell_rendered()?
+                } else {
+                    self.book
+                        .get_current_cell_contents()?
+                }));
             }
         }
         self.exit_range_select_mode()?;
@@ -696,6 +667,11 @@ impl<'ws> Workspace<'ws> {
                 KeyCode::Char('y') => {
                     self.state.clipboard = Some(ClipboardContents::Cell(
                         self.book.get_current_cell_contents()?,
+                    ));
+                }
+                KeyCode::Char('Y') => {
+                    self.state.clipboard = Some(ClipboardContents::Cell(
+                        self.book.get_current_cell_rendered()?,
                     ));
                 }
                 KeyCode::Char('C')
