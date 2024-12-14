@@ -656,6 +656,11 @@ impl<'ws> Workspace<'ws> {
                 KeyCode::Char('s') if key.modifiers == KeyModifiers::CONTROL => {
                     self.save_file()?;
                 }
+                KeyCode::Char('s') if key.modifiers != KeyModifiers::CONTROL => {
+                    self.book.clear_current_cell()?;
+                    self.text_area = reset_text_area(String::new());
+                    self.enter_edit_mode();
+                }
                 KeyCode::Char('r') if key.modifiers == KeyModifiers::CONTROL => {
                     self.enter_range_select_mode();
                 }
