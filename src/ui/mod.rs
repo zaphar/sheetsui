@@ -425,7 +425,7 @@ impl<'ws> Workspace<'ws> {
                 self.book.evaluate();
                 Ok(None)
             }
-            Ok(Some(Cmd::InsertRow(count))) => {
+            Ok(Some(Cmd::InsertRows(count))) => {
                 self.book.insert_rows(self.book.location.row, count)?;
                 self.book.evaluate();
                 Ok(None)

@@ -5,7 +5,7 @@ use slice_utils::{Measured, Peekable, Seekable, Span, StrCursor};
 #[derive(Debug, PartialEq, Eq)]
 pub enum Cmd<'a> {
     Write(Option<&'a str>),
-    InsertRow(usize),
+    InsertRows(usize),
     InsertColumns(usize),
     RenameSheet(Option<usize>, &'a str),
     NewSheet(Option<&'a str>),
@@ -155,7 +155,7 @@ fn try_consume_insert_row<'cmd, 'i: 'cmd>(
         return Err("Invalid command: Did you mean to type `insert-rows <arg>`?");
     }
     let arg = input.span(0..).trim();
-    return Ok(Some(Cmd::InsertRow(if arg.is_empty() {
+    return Ok(Some(Cmd::InsertRows(if arg.is_empty() {
         1
     } else {
         if let Ok(count) = arg.parse() {

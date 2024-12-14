@@ -35,7 +35,7 @@ fn test_insert_rows_cmd() {
     let output = result.unwrap();
     assert!(output.is_some());
     let cmd = output.unwrap();
-    assert_eq!(cmd, Cmd::InsertRow(1));
+    assert_eq!(cmd, Cmd::InsertRows(1));
 }
 
 #[test]
@@ -46,7 +46,7 @@ fn test_insert_rows_cmd_short() {
     let output = result.unwrap();
     assert!(output.is_some());
     let cmd = output.unwrap();
-    assert_eq!(cmd, Cmd::InsertRow(1));
+    assert_eq!(cmd, Cmd::InsertRows(1));
 }
 
 #[test]
