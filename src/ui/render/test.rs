@@ -14,7 +14,7 @@ fn test_viewport_get_visible_columns() {
     let width = dbg!(dbg!(default_size) * 12 / 2);
     let app_state = AppState::default();
     let viewport =
-        Viewport::new(&book, &app_state.range_select).with_selected(Address { row: 1, col: 17 });
+        Viewport::new(&book, Some(&app_state.range_select)).with_selected(Address { row: 1, col: 17 });
     let cols = viewport
         .get_visible_columns((width + 5) as u16, &mut state)
         .expect("Failed to get visible columns");
@@ -31,7 +31,7 @@ fn test_viewport_get_visible_rows() {
     let height = 6;
     let app_state = AppState::default();
     let viewport =
-        Viewport::new(&book, &app_state.range_select).with_selected(Address { row: 17, col: 1 });
+        Viewport::new(&book, Some(&app_state.range_select)).with_selected(Address { row: 17, col: 1 });
     let rows = dbg!(viewport.get_visible_rows(height as u16, &mut state));
     assert_eq!(height - 1, rows.len());
     assert_eq!(
@@ -51,7 +51,7 @@ fn test_viewport_visible_columns_after_length_change() {
     let width = dbg!(dbg!(default_size) * 12 / 2);
     {
         let app_state = AppState::default();
-        let viewport = Viewport::new(&book, &app_state.range_select)
+        let viewport = Viewport::new(&book, Some(&app_state.range_select))
             .with_selected(Address { row: 1, col: 17 });
         let cols = viewport
             .get_visible_columns((width + 5) as u16, &mut state)
@@ -65,7 +65,7 @@ fn test_viewport_visible_columns_after_length_change() {
     {
         let app_state = AppState::default();
         let viewport =
-            Viewport::new(&book, &app_state.range_select).with_selected(Address { row: 1, col: 1 });
+            Viewport::new(&book, Some(&app_state.range_select)).with_selected(Address { row: 1, col: 1 });
         let cols = viewport
             .get_visible_columns((width + 5) as u16, &mut state)
             .expect("Failed to get visible columns");
