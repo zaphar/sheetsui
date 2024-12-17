@@ -155,7 +155,6 @@ impl<'ws> Viewport<'ws> {
                     let mut cells = vec![Cell::new(Text::from(ri.to_string()))];
                     cells.extend(visible_columns.iter().map(
                         |VisibleColumn { idx: ci, length: _ }| {
-                            // TODO(zaphar): Is this safe?
                             let content = self
                                 .book
                                 .get_cell_addr_rendered(&Address { row: ri, col: *ci })

@@ -435,7 +435,6 @@ impl<'ws> Workspace<'ws> {
                 Ok(None)
             }
             Ok(Some(Cmd::Quit)) => {
-                // TODO(zaphar): We probably need to do better than this
                 Ok(Some(ExitCode::SUCCESS))
             }
             Ok(None) => {
