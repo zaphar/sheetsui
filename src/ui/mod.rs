@@ -78,6 +78,7 @@ pub struct AppState<'ws> {
     pub viewport_state: ViewportState,
     pub command_state: TextState<'ws>,
     pub numeric_prefix: Vec<char>,
+    pub char_queue: Vec<char>,
     pub range_select: RangeSelection,
     dirty: bool,
     popup: Vec<String>,
@@ -91,6 +92,7 @@ impl<'ws> Default for AppState<'ws> {
             viewport_state: Default::default(),
             command_state: Default::default(),
             numeric_prefix: Default::default(),
+            char_queue: Default::default(),
             range_select: Default::default(),
             dirty: Default::default(),
             popup: Default::default(),
@@ -240,6 +242,12 @@ impl<'ws> Workspace<'ws> {
         Ok(())
     }
 
+    /// Move to the top row without changing columns
+    pub fn move_to_top(&mut self) -> Result<()> {
+        self.book.move_to(&Address { row: 1, col: self.book.location.col })?;
+        Ok(())
+    }
+    
     /// Move a row up in the current sheet.
     pub fn move_up(&mut self) -> Result<()> {
         let mut loc = self.book.location.clone();
@@ -800,6 +808,14 @@ impl<'ws> Workspace<'ws> {
                         ws.handle_movement_change();
                         Ok(())
                     })?;
+                }
+                KeyCode::Char('g') => {
+                    if self.state.char_queue.first().map(|c| *c == 'g').unwrap_or(false) {
+                        self.state.char_queue.pop();
+                        self.move_to_top()?;
+                    } else {
+                        self.state.char_queue.push('g');
+                    }
                 }
                 _ => {
                     // noop
