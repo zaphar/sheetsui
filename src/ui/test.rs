@@ -35,7 +35,7 @@ fn test_insert_rows_cmd() {
     let output = result.unwrap();
     assert!(output.is_some());
     let cmd = output.unwrap();
-    assert_eq!(cmd, Cmd::InsertRow(1));
+    assert_eq!(cmd, Cmd::InsertRows(1));
 }
 
 #[test]
@@ -46,7 +46,7 @@ fn test_insert_rows_cmd_short() {
     let output = result.unwrap();
     assert!(output.is_some());
     let cmd = output.unwrap();
-    assert_eq!(cmd, Cmd::InsertRow(1));
+    assert_eq!(cmd, Cmd::InsertRows(1));
 }
 
 #[test]
@@ -200,7 +200,6 @@ fn construct_modified_key_event(code: KeyCode, mods: KeyModifiers) -> Event {
     Event::Key(KeyEvent::new(code, mods))
 }
 
-// TODO(zaphar): Interaction testing for input.
 #[test]
 fn test_input_navitation_enter_key() {
     let mut ws =
@@ -424,4 +423,23 @@ fn test_range_copy_mode_from_edit_mode() {
     ws.handle_input(construct_modified_key_event(KeyCode::Char('r'), KeyModifiers::CONTROL))
         .expect("Failed to handle 'Ctrl-r' key event");
     assert_eq!(Some(&Modality::RangeSelect), ws.state.modality_stack.last());
+}
+
+#[test]
+fn test_gg_movement() {
+    let mut ws =
+        Workspace::new_empty("en", "America/New_York").expect("Failed to get empty workbook");
+    assert_eq!(Some(&Modality::Navigate), ws.state.modality_stack.last());
+    ws.handle_input(construct_key_event(KeyCode::Char('j')))
+        .expect("Failed to handle 'e' key event");
+    ws.handle_input(construct_key_event(KeyCode::Char('j')))
+        .expect("Failed to handle 'e' key event");
+    assert_eq!(ws.book.location, Address { row: 3, col: 1 });
+    ws.handle_input(construct_key_event(KeyCode::Char('l')))
+        .expect("Failed to handle 'e' key event");
+    ws.handle_input(construct_key_event(KeyCode::Char('g')))
+        .expect("Failed to handle 'e' key event");
+    ws.handle_input(construct_key_event(KeyCode::Char('g')))
+        .expect("Failed to handle 'e' key event");
+    assert_eq!(ws.book.location, Address { row: 1, col: 2 });
 }

@@ -96,13 +96,71 @@ impl Book {
         Ok(&self.get_sheet()?.sheet_data)
     }
 
-    /// Move to a specific sheel location in the current sheet
+    /// Move to a specific sheet location in the current sheet
     pub fn move_to(&mut self, Address { row, col }: &Address) -> Result<()> {
         // FIXME(zaphar): Check that this is safe first.
         self.location.row = *row;
         self.location.col = *col;
         Ok(())
     }
+   
+    /// Extend a cell to the rest of the range.
+    pub fn extend_to(&mut self, from: &Address, to: &Address) -> Result<()> {
+        for ri in from.row..=to.row {
+            for ci in from.col..=to.col {
+                if ri == from.row && ci == from.col {
+                    continue;
+                }
+                let contents = self.model.extend_to(self.current_sheet, from.row as i32, from.col as i32, ri as i32, ci as i32).map_err(|e| anyhow!(e))?;
+                self.model.set_user_input(self.current_sheet, ri as i32, ci as i32, contents)
+                    .map_err(|e| anyhow!(e))?;
+            }
+        }
+        self.evaluate();
+        Ok(())
+    }
+
+    pub fn clear_current_cell(&mut self) -> Result<()> {
+        self.clear_cell_contents(self.current_sheet as u32, self.location.clone())
+    }
+    
+    pub fn clear_current_cell_all(&mut self) -> Result<()> {
+        self.clear_cell_all(self.current_sheet as u32, self.location.clone())
+    }
+
+
+    pub fn clear_cell_contents(&mut self, sheet: u32, Address { row, col, }: Address) -> Result<()> {
+        Ok(self
+            .model
+            .cell_clear_contents(sheet, row as i32, col as i32)
+            .map_err(|s| anyhow!("Unable to clear cell contents {}", s))?)
+    }
+
+    pub fn clear_cell_range(&mut self, sheet: u32, start: Address, end: Address) -> Result<()> {
+        for row in start.row..=end.row {
+            for col in start.col..=end.col {
+                self.clear_cell_contents(sheet, Address { row, col })?;
+            }
+        }
+        Ok(())
+    }
+    
+    pub fn clear_cell_all(&mut self, sheet: u32, Address { row, col, }: Address) -> Result<()> {
+        Ok(self
+            .model
+            .cell_clear_all(sheet, row as i32, col as i32)
+            .map_err(|s| anyhow!("Unable to clear cell contents {}", s))?)
+    }
+
+    pub fn clear_cell_range_all(&mut self, sheet: u32, start: Address, end: Address) -> Result<()> {
+        for row in start.row..=end.row {
+            for col in start.col..=end.col {
+                self.clear_cell_all(sheet, Address { row, col })?;
+            }
+        }
+        Ok(())
+    }
+
 
     /// Get a cells formatted content.
     pub fn get_current_cell_rendered(&self) -> Result<String> {
@@ -116,6 +174,15 @@ impl Book {
             .get_formatted_cell_value(self.current_sheet, *row as i32, *col as i32)
             .map_err(|s| anyhow!("Unable to format cell {}", s))?)
     }
+    
+    /// Get a cells actual content unformatted as a string.
+    pub fn get_cell_addr_contents(&self, Address { row, col }: &Address) -> Result<String> {
+        Ok(self
+            .model
+            .get_cell_content(self.current_sheet, *row as i32, *col as i32)
+            .map_err(|s| anyhow!("Unable to format cell {}", s))?)
+    }
+
 
     /// Get a cells actual content as a string.
     pub fn get_current_cell_contents(&self) -> Result<String> {
@@ -132,13 +199,13 @@ impl Book {
     /// Update the current cell in a book.
     /// This update won't be reflected until you call `Book::evaluate`.
     pub fn edit_current_cell<S: Into<String>>(&mut self, value: S) -> Result<()> {
-        self.update_entry(&self.location.clone(), value)?;
+        self.update_cell(&self.location.clone(), value)?;
         Ok(())
     }
 
     /// Update an entry in the current sheet for a book.
     /// This update won't be reflected until you call `Book::evaluate`.
-    pub fn update_entry<S: Into<String>>(&mut self, location: &Address, value: S) -> Result<()> {
+    pub fn update_cell<S: Into<String>>(&mut self, location: &Address, value: S) -> Result<()> {
         self.model
             .set_user_input(
                 self.current_sheet,
@@ -307,7 +374,7 @@ impl Default for Book {
     fn default() -> Self {
         let mut book =
             Book::new(Model::new_empty("default_name", "en", "America/New_York").unwrap());
-        book.update_entry(&Address { row: 1, col: 1 }, "").unwrap();
+        book.update_cell(&Address { row: 1, col: 1 }, "").unwrap();
         book
     }
 }

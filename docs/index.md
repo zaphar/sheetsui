@@ -44,6 +44,8 @@ table and between the sheets using the following keybinds:
 * `l` and, ➡️ will move one cell to the right.
 * `j`, ⬇️, and `Enter` will move one cell down.
 * `k` ⬆️, will move one cell up.
+* `d` will delete the contents of the selected cell leaving style untouched
+* `D` will delete the contents of the selected cell including any style
 
 **Sheet Navigation**
 
@@ -66,8 +68,12 @@ will clear the numeric prefix if you want to cancel it.
 
 **Other Keybindings**
 
-* `Ctrl-r` will enter range selection mode
+* `Ctrl-r` will enter range selection mode.
+* `v` will enter range selection mode with the start of the range already selected.
 * `Ctrl-s` will save the sheet.
+* `Ctrl-c`, `y` Copy the cell or range contents.
+* `Ctrl-v`, `p` Paste into the sheet.
+* `Ctrl-Shift-C` Copy the cell or range formatted content.
 * `q` will exit the application.
 * `:` will enter CommandMode.
 
@@ -129,12 +135,16 @@ will be discarded if you have not saved first.</aside>
 
 ### Range Select Mode
 
-Range Select mode copies a range reference for use later. You can enter range
+Range Select mode copies a range reference for use later or delete a range's contents. You can enter range
 select mode from CellEdit mode with `CTRL-r`.
 
 * `h`, `j`, `k`, `l` will navigate around the sheet.
 * `Ctrl-n`, `Ctrl-p` will navigate between sheets.
+* `Ctrl-c`, `y` Copy the cell or range contents.
+* `Ctrl-Shift-C`, 'Y' Copy the cell or range formatted content.
 * `The spacebar will select the start and end of the range respectively.
+* `d` will delete the contents of the range leaving any style untouched
+* `D` will delete the contents of the range including any style
 
 When you have selected the end of the range you will exit range select mode and
 the range reference will be placed into the cell contents you are editing.
