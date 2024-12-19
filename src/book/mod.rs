@@ -18,6 +18,64 @@ mod test;
 
 const COL_PIXELS: f64 = 5.0;
 
+#[derive(Debug, Clone)]
+pub struct AddressRange<'book> {
+    pub start: &'book Address,
+    pub end: &'book Address,
+}
+
+impl<'book> AddressRange<'book> {
+    pub fn as_rows(&self) -> Vec<Vec<Address>> {
+        let (row_range, col_range) = self.get_ranges();
+        let mut rows = Vec::with_capacity(row_range.len());
+        for ri in row_range.iter() {
+            let mut row = Vec::with_capacity(col_range.len());
+            for ci in col_range.iter() {
+                row.push(Address { row: *ri, col: *ci });
+            }
+            rows.push(row);
+        }
+        rows
+    }
+    
+    pub fn as_series(&self) -> Vec<Address> {
+        let (row_range, col_range) = self.get_ranges();
+        let mut rows = Vec::with_capacity(row_range.len() * col_range.len());
+        for ri in row_range.iter() {
+            for ci in col_range.iter() {
+                rows.push(Address { row: *ri, col: *ci });
+            }
+        }
+        rows
+    }
+
+    fn get_ranges(&self) -> (Vec<usize>, Vec<usize>) {
+        let row_range = if self.start.row <= self.end.row {
+            (self.start.row..=self.end.row)
+                .into_iter()
+                .collect::<Vec<usize>>()
+        } else {
+            let mut v = (self.start.row..=self.end.row)
+                .into_iter()
+                .collect::<Vec<usize>>();
+            v.reverse();
+            v
+        };
+        let col_range = if self.start.col <= self.end.col {
+            (self.start.col..=self.end.col)
+                .into_iter()
+                .collect::<Vec<usize>>()
+        } else {
+            let mut v = (self.start.col..=self.end.col)
+                .into_iter()
+                .collect::<Vec<usize>>();
+            v.reverse();
+            v
+        };
+        (row_range, col_range)
+    }
+}
+
 /// A spreadsheet book with some internal state tracking.
 pub struct Book {
     pub(crate) model: Model,
@@ -103,18 +161,35 @@ impl Book {
         self.location.col = *col;
         Ok(())
     }
-   
+
     /// Extend a cell to the rest of the range.
     pub fn extend_to(&mut self, from: &Address, to: &Address) -> Result<()> {
-        for ri in from.row..=to.row {
-            for ci in from.col..=to.col {
-                if ri == from.row && ci == from.col {
-                    continue;
-                }
-                let contents = self.model.extend_to(self.current_sheet, from.row as i32, from.col as i32, ri as i32, ci as i32).map_err(|e| anyhow!(e))?;
-                self.model.set_user_input(self.current_sheet, ri as i32, ci as i32, contents)
-                    .map_err(|e| anyhow!(e))?;
-            }
+        for cell in (AddressRange {
+            start: from,
+            end: to,
+        })
+        .as_series()
+        .iter()
+        .skip(1)
+        {
+            let contents = self
+                .model
+                .extend_to(
+                    self.current_sheet,
+                    from.row as i32,
+                    from.col as i32,
+                    cell.row as i32,
+                    cell.col as i32,
+                )
+                .map_err(|e| anyhow!(e))?;
+            self.model
+                .set_user_input(
+                    self.current_sheet,
+                    cell.row as i32,
+                    cell.col as i32,
+                    contents,
+                )
+                .map_err(|e| anyhow!(e))?;
         }
         self.evaluate();
         Ok(())
@@ -123,13 +198,12 @@ impl Book {
     pub fn clear_current_cell(&mut self) -> Result<()> {
         self.clear_cell_contents(self.current_sheet as u32, self.location.clone())
     }
-    
+
     pub fn clear_current_cell_all(&mut self) -> Result<()> {
         self.clear_cell_all(self.current_sheet as u32, self.location.clone())
     }
 
-
-    pub fn clear_cell_contents(&mut self, sheet: u32, Address { row, col, }: Address) -> Result<()> {
+    pub fn clear_cell_contents(&mut self, sheet: u32, Address { row, col }: Address) -> Result<()> {
         Ok(self
             .model
             .cell_clear_contents(sheet, row as i32, col as i32)
@@ -144,8 +218,8 @@ impl Book {
         }
         Ok(())
     }
-    
-    pub fn clear_cell_all(&mut self, sheet: u32, Address { row, col, }: Address) -> Result<()> {
+
+    pub fn clear_cell_all(&mut self, sheet: u32, Address { row, col }: Address) -> Result<()> {
         Ok(self
             .model
             .cell_clear_all(sheet, row as i32, col as i32)
@@ -161,7 +235,6 @@ impl Book {
         Ok(())
     }
 
-
     /// Get a cells formatted content.
     pub fn get_current_cell_rendered(&self) -> Result<String> {
         Ok(self.get_cell_addr_rendered(&self.location)?)
@@ -174,7 +247,7 @@ impl Book {
             .get_formatted_cell_value(self.current_sheet, *row as i32, *col as i32)
             .map_err(|s| anyhow!("Unable to format cell {}", s))?)
     }
-    
+
     /// Get a cells actual content unformatted as a string.
     pub fn get_cell_addr_contents(&self, Address { row, col }: &Address) -> Result<String> {
         Ok(self
@@ -182,7 +255,6 @@ impl Book {
             .get_cell_content(self.current_sheet, *row as i32, *col as i32)
             .map_err(|s| anyhow!("Unable to format cell {}", s))?)
     }
-
 
     /// Get a cells actual content as a string.
     pub fn get_current_cell_contents(&self) -> Result<String> {
@@ -290,7 +362,7 @@ impl Book {
             .enumerate()
             .find(|(_idx, sheet)| sheet.name == name)
         {
-            self.current_sheet =idx as u32;
+            self.current_sheet = idx as u32;
             return true;
         }
         false
@@ -309,7 +381,7 @@ impl Book {
         }
         self.current_sheet = next;
     }
-    
+
     pub fn select_prev_sheet(&mut self) {
         let len = self.model.workbook.worksheets.len() as u32;
         let next = if self.current_sheet == 0 {
@@ -319,7 +391,6 @@ impl Book {
         };
         self.current_sheet = next;
     }
-
 
     /// Select a sheet by id.
     pub fn select_sheet_by_id(&mut self, id: u32) -> bool {
@@ -353,13 +424,14 @@ impl Book {
             .worksheet_mut(self.current_sheet)
             .map_err(|s| anyhow!("Invalid Worksheet: {}", s))?)
     }
-    
+
     pub(crate) fn get_sheet_name_by_idx(&self, idx: usize) -> Result<&str> {
         Ok(&self
             .model
             .workbook
             .worksheet(idx as u32)
-            .map_err(|s| anyhow!("Invalid Worksheet: {}", s))?.name)
+            .map_err(|s| anyhow!("Invalid Worksheet: {}", s))?
+            .name)
     }
     pub(crate) fn get_sheet_by_idx_mut(&mut self, idx: usize) -> Result<&mut Worksheet> {
         Ok(self
