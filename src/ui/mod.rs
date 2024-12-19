@@ -317,6 +317,7 @@ impl<'ws> Workspace<'ws> {
                 "Edit Mode:".to_string(),
                 "* ENTER/RETURN: Exit edit mode and save changes".to_string(),
                 "* Ctrl-r: Enter Range Selection mode".to_string(),
+                "* v: Enter Range Selection mode with the start of the range already selected".to_string(),
                 "* ESC: Exit edit mode and discard changes".to_string(),
                 "Otherwise edit as normal".to_string(),
             ],
@@ -380,7 +381,7 @@ impl<'ws> Workspace<'ws> {
                     return Ok(None);
                 }
                 KeyCode::Char('r') if key.modifiers == KeyModifiers::CONTROL => {
-                    self.enter_range_select_mode();
+                    self.enter_range_select_mode(false);
                     return Ok(None);
                 }
                 KeyCode::Char('p') if key.modifiers == KeyModifiers::CONTROL => {
@@ -579,6 +580,12 @@ impl<'ws> Workspace<'ws> {
                     self.copy_range(false)?;
                 }
                 KeyCode::Char('y') => self.copy_range(false)?,
+                KeyCode::Char('x') => {
+                    if let (Some(from), Some(to)) = (self.state.range_select.start.as_ref(), self.state.range_select.end.as_ref()) {
+                        self.book.extend_to(from, to)?;
+                    }
+                    self.exit_range_select_mode()?;
+                }
                 _ => {
                     // moop
                 }
@@ -670,7 +677,7 @@ impl<'ws> Workspace<'ws> {
                     self.enter_edit_mode();
                 }
                 KeyCode::Char('r') if key.modifiers == KeyModifiers::CONTROL => {
-                    self.enter_range_select_mode();
+                    self.enter_range_select_mode(false);
                 }
                 KeyCode::Char('c') if key.modifiers == KeyModifiers::CONTROL => {
                     self.state.clipboard = Some(ClipboardContents::Cell(
@@ -697,7 +704,7 @@ impl<'ws> Workspace<'ws> {
                     ));
                 }
                 KeyCode::Char('v') if key.modifiers != KeyModifiers::CONTROL => {
-                    self.enter_range_select_mode()
+                    self.enter_range_select_mode(true)
                 }
                 KeyCode::Char('p') if key.modifiers != KeyModifiers::CONTROL => {
                     self.paste_range()?;
@@ -810,6 +817,7 @@ impl<'ws> Workspace<'ws> {
                     })?;
                 }
                 KeyCode::Char('g') => {
+                    // TODO(zaphar): This really needs a better state machine.
                     if self.state.char_queue.first().map(|c| *c == 'g').unwrap_or(false) {
                         self.state.char_queue.pop();
                         self.move_to_top()?;
@@ -819,6 +827,7 @@ impl<'ws> Workspace<'ws> {
                 }
                 _ => {
                     // noop
+                    self.state.char_queue.clear();
                 }
             }
         }
@@ -829,6 +838,7 @@ impl<'ws> Workspace<'ws> {
         match &self.state.clipboard {
             Some(ClipboardContents::Cell(contents)) => {
                 self.book.edit_current_cell(contents)?;
+                self.book.evaluate();
             }
             Some(ClipboardContents::Range(ref rows)) => {
                 let Address { row, col } = self.book.location.clone();
@@ -846,6 +856,7 @@ impl<'ws> Workspace<'ws> {
                         )?;
                     }
                 }
+                self.book.evaluate();
             }
             None => {
                 // NOOP
@@ -878,11 +889,15 @@ impl<'ws> Workspace<'ws> {
         self.state.modality_stack.push(Modality::Dialog);
     }
 
-    fn enter_range_select_mode(&mut self) {
+    fn enter_range_select_mode(&mut self, init_start: bool) {
         self.state.range_select.sheet = Some(self.book.current_sheet);
         self.state.range_select.original_sheet = Some(self.book.current_sheet);
         self.state.range_select.original_location = Some(self.book.location.clone());
-        self.state.range_select.start = None;
+        if init_start {
+            self.state.range_select.start = Some(self.book.location.clone());
+        } else {
+            self.state.range_select.start = None;
+        }
         self.state.range_select.end = None;
         self.state.modality_stack.push(Modality::RangeSelect);
     }

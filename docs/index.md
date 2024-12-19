@@ -68,7 +68,8 @@ will clear the numeric prefix if you want to cancel it.
 
 **Other Keybindings**
 
-* `Ctrl-r` will enter range selection mode
+* `Ctrl-r` will enter range selection mode.
+* `v` will enter range selection mode with the start of the range already selected.
 * `Ctrl-s` will save the sheet.
 * `Ctrl-c`, `y` Copy the cell or range contents.
 * `Ctrl-v`, `p` Paste into the sheet.
