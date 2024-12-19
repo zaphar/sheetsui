@@ -1,7 +1,7 @@
 //! Ui rendering logic
 use std::{path::PathBuf, process::ExitCode};
 
-use crate::book::Book;
+use crate::book::{AddressRange, Book};
 
 use anyhow::{anyhow, Result};
 use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
@@ -598,25 +598,19 @@ impl<'ws> Workspace<'ws> {
         self.update_range_selection()?;
         match &self.state.range_select.get_range() {
             Some((
-                Address {
-                    row: row_start,
-                    col: col_start,
-                },
-                Address {
-                    row: row_end,
-                    col: col_end,
-                },
+                start,
+                end,
             )) => {
                 let mut rows = Vec::new();
-                for ri in (*row_start)..=(*row_end) {
+                for row in (AddressRange { start, end, }).as_rows() {
                     let mut cols = Vec::new();
-                    for ci in (*col_start)..=(*col_end) {
+                    for cell in row {
                         cols.push(if formatted {
                             self.book
-                                .get_cell_addr_rendered(&Address { row: ri, col: ci })?
+                                .get_cell_addr_rendered(&cell)?
                         } else {
                             self.book
-                                .get_cell_addr_contents(&Address { row: ri, col: ci })?
+                                .get_cell_addr_contents(&cell)?
                         });
                     }
                     rows.push(cols);
