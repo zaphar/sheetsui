@@ -96,11 +96,27 @@ impl Book {
         Ok(&self.get_sheet()?.sheet_data)
     }
 
-    /// Move to a specific sheel location in the current sheet
+    /// Move to a specific sheet location in the current sheet
     pub fn move_to(&mut self, Address { row, col }: &Address) -> Result<()> {
         // FIXME(zaphar): Check that this is safe first.
         self.location.row = *row;
         self.location.col = *col;
+        Ok(())
+    }
+   
+    /// Extend a cell to the rest of the range.
+    pub fn extend_to(&mut self, from: &Address, to: &Address) -> Result<()> {
+        for ri in from.row..=to.row {
+            for ci in from.col..=to.col {
+                if ri == from.row && ci == from.col {
+                    continue;
+                }
+                let contents = self.model.extend_to(self.current_sheet, from.row as i32, from.col as i32, ri as i32, ci as i32).map_err(|e| anyhow!(e))?;
+                self.model.set_user_input(self.current_sheet, ri as i32, ci as i32, contents)
+                    .map_err(|e| anyhow!(e))?;
+            }
+        }
+        self.evaluate();
         Ok(())
     }
 
