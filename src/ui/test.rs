@@ -1,3 +1,5 @@
+use std::process::ExitCode;
+
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
 
 use crate::ui::{Address, Modality};
@@ -192,6 +194,35 @@ fn test_cmd_rename_sheet_with_idx_and_name() {
     assert_eq!(cmd, Cmd::RenameSheet(Some(0), "test"));
 }
 
+#[derive(Default)]
+pub struct InputScript{
+    events: Vec<Event>
+}
+
+impl InputScript {
+    pub fn add_char(self, c: char) -> Self {
+        self.add_event(construct_key_event(KeyCode::Char(c)))
+    }
+    
+    pub fn add_modified_char(self, c: char, mods: KeyModifiers) -> Self {
+        self.add_event(construct_modified_key_event(KeyCode::Char(c), mods))
+    }
+    
+    pub fn add_event(mut self, evt: Event) -> Self {
+        self.events.push(evt);
+        self
+    }
+
+    pub fn run(self, ws: &mut Workspace) -> anyhow::Result<Option<ExitCode>> {
+        for evt in self.events {
+            if let Some(e) = ws.handle_input(evt)? {
+                return Ok(Some(e));
+            }
+        }
+        Ok(None)
+    }
+}
+
 fn construct_key_event(code: KeyCode) -> Event {
     construct_modified_key_event(code, KeyModifiers::empty())
 }
@@ -322,13 +353,31 @@ fn test_navigation_numeric_prefix()
     assert_eq!(Some(&Modality::Navigate), ws.state.modality_stack.last());
     ws.book.new_sheet(Some("Sheet2")).expect("failed to create sheet2");
     ws.book.new_sheet(Some("Sheet3")).expect("failed to create sheet3");
-    ws.handle_input(construct_key_event(KeyCode::Char('2')))
-        .expect("Failed to handle '3' key event");
-    ws.handle_input(construct_key_event(KeyCode::Char('3')))
-        .expect("Failed to handle '3' key event");
-    ws.handle_input(construct_key_event(KeyCode::Char('9')))
-        .expect("Failed to handle '3' key event");
+    InputScript::default()
+        .add_char('2')
+        .add_char('3')
+        .add_char('9')
+        .run(&mut ws)
+        .expect("Failed to run script");
     assert_eq!(239, ws.state.get_n_prefix());
+}
+
+#[test]
+fn test_navigation_numeric_prefix_cancel()
+{
+    let mut ws =
+        Workspace::new_empty("en", "America/New_York").expect("Failed to get empty workbook");
+    assert_eq!(Some(&Modality::Navigate), ws.state.modality_stack.last());
+    ws.book.new_sheet(Some("Sheet2")).expect("failed to create sheet2");
+    ws.book.new_sheet(Some("Sheet3")).expect("failed to create sheet3");
+    InputScript::default()
+        .add_char('2')
+        .add_char('3')
+        .add_char('9')
+        .add_event(construct_key_event(KeyCode::Esc))
+        .run(&mut ws)
+        .expect("Failed to run script");
+    assert_eq!(1, ws.state.get_n_prefix());
 }
 
 #[test]
@@ -430,16 +479,87 @@ fn test_gg_movement() {
     let mut ws =
         Workspace::new_empty("en", "America/New_York").expect("Failed to get empty workbook");
     assert_eq!(Some(&Modality::Navigate), ws.state.modality_stack.last());
-    ws.handle_input(construct_key_event(KeyCode::Char('j')))
-        .expect("Failed to handle 'e' key event");
-    ws.handle_input(construct_key_event(KeyCode::Char('j')))
-        .expect("Failed to handle 'e' key event");
+    InputScript::default()
+        .add_char('j')
+        .add_char('j').run(&mut ws)
+        .expect("failed to handle event sequence");
     assert_eq!(ws.book.location, Address { row: 3, col: 1 });
-    ws.handle_input(construct_key_event(KeyCode::Char('l')))
-        .expect("Failed to handle 'e' key event");
-    ws.handle_input(construct_key_event(KeyCode::Char('g')))
-        .expect("Failed to handle 'e' key event");
-    ws.handle_input(construct_key_event(KeyCode::Char('g')))
-        .expect("Failed to handle 'e' key event");
+    InputScript::default()
+        .add_char('l')
+        .add_char('g')
+        .add_char('g')
+        .run(&mut ws)
+        .expect("failed to handle event sequence");
     assert_eq!(ws.book.location, Address { row: 1, col: 2 });
+}
+
+macro_rules! assert_copy_paste {
+    ($c: expr, $p: expr, $source: expr,) => {
+        assert_copy_paste!($c, $p, $source, $source)
+    };
+    ($c: expr, $p: expr, $source: expr) => {
+        assert_copy_paste!($c, $p, $source, $source)
+    };
+    ($c: expr, $p: expr, $source: expr, $expected: expr,) => {
+        assert_copy_paste!($c, $p, $source, $expected)
+    };
+    ($c: expr, $p: expr, $source: expr, $expected: expr) => {{
+    let mut ws =
+        Workspace::new_empty("en", "America/New_York").expect("Failed to get empty workbook");
+    InputScript::default()
+        .add_char('j')
+        .add_char('l')
+        .run(&mut ws)
+        .expect("Failed to run script");
+    ws.book.edit_current_cell($source).expect("Failed to edit cell");
+    ws.book.evaluate();
+    InputScript::default()
+        .add_event($c)
+        .add_char('l')
+        .add_char('j')
+        .add_event($p)
+        .run(&mut ws)
+        .expect("Failed to run script");
+    let copy = ws.book.get_current_cell_contents()
+        .expect("Failed to get cell contents");
+    assert_eq!(copy, $expected);
+    }};
+}
+
+#[test]
+fn test_y_p_copy_paste() {
+    assert_copy_paste!(
+        construct_key_event(KeyCode::Char('y')),
+        construct_key_event(KeyCode::Char('p')),
+        "foo",
+    );
+}
+
+#[test]
+fn test_traditional_copy_paste() {
+    assert_copy_paste!(
+        construct_modified_key_event(KeyCode::Char('c'), KeyModifiers::CONTROL),
+        construct_modified_key_event(KeyCode::Char('v'), KeyModifiers::CONTROL),
+        "foo",
+    );
+}
+
+#[test]
+fn test_y_p_copy_paste_rendered() {
+    assert_copy_paste!(
+        construct_key_event(KeyCode::Char('Y')),
+        construct_key_event(KeyCode::Char('p')),
+        "=1+2",
+        "3",
+    );
+}
+
+#[test]
+fn test_traditional_copy_paste_rendered() {
+    assert_copy_paste!(
+        construct_modified_key_event(KeyCode::Char('C'), KeyModifiers::CONTROL),
+        construct_modified_key_event(KeyCode::Char('v'), KeyModifiers::CONTROL),
+        "=1+2",
+        "3",
+    );
 }

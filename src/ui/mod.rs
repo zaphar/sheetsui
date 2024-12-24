@@ -692,7 +692,7 @@ impl<'ws> Workspace<'ws> {
                 KeyCode::Char('C')
                     if key
                         .modifiers
-                        .contains(KeyModifiers::CONTROL | KeyModifiers::SHIFT) =>
+                        .contains(KeyModifiers::CONTROL) =>
                 {
                     self.state.clipboard = Some(ClipboardContents::Cell(
                         self.book.get_current_cell_rendered()?,
