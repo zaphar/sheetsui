@@ -37,7 +37,7 @@
     rust-bin = pkgs.rust-bin;
     
     devShells.default = pkgs.mkShell {
-      nativeBuildInputs = with pkgs; [ gnumake my-rust-bin rust-analyzer ];
+      nativeBuildInputs = with pkgs; [ gnumake my-rust-bin rust-analyzer cargo-tarpaulin ];
     };
   });
 }
