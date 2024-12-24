@@ -1,7 +1,7 @@
 //! Ui rendering logic
 use std::{path::PathBuf, process::ExitCode};
 
-use crate::book::Book;
+use crate::book::{AddressRange, Book};
 
 use anyhow::{anyhow, Result};
 use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
@@ -67,14 +67,22 @@ impl RangeSelection {
 }
 
 #[derive(Debug)]
+pub enum ClipboardContents {
+    Cell(String),
+    Range(Vec<Vec<String>>),
+}
+
+#[derive(Debug)]
 pub struct AppState<'ws> {
     pub modality_stack: Vec<Modality>,
     pub viewport_state: ViewportState,
     pub command_state: TextState<'ws>,
     pub numeric_prefix: Vec<char>,
+    pub char_queue: Vec<char>,
     pub range_select: RangeSelection,
     dirty: bool,
     popup: Vec<String>,
+    clipboard: Option<ClipboardContents>,
 }
 
 impl<'ws> Default for AppState<'ws> {
@@ -84,9 +92,11 @@ impl<'ws> Default for AppState<'ws> {
             viewport_state: Default::default(),
             command_state: Default::default(),
             numeric_prefix: Default::default(),
+            char_queue: Default::default(),
             range_select: Default::default(),
             dirty: Default::default(),
             popup: Default::default(),
+            clipboard: Default::default(),
         }
     }
 }
@@ -201,7 +211,11 @@ impl<'ws> Workspace<'ws> {
     pub fn selected_range_to_string(&self) -> String {
         let state = &self.state;
         if let Some((start, end)) = state.range_select.get_range() {
-            let a1 = format!("{}{}", start.to_range_part(), format!(":{}", end.to_range_part()));
+            let a1 = format!(
+                "{}{}",
+                start.to_range_part(),
+                format!(":{}", end.to_range_part())
+            );
             if let Some(range_sheet) = state.range_select.sheet {
                 if range_sheet != self.book.current_sheet {
                     return format!(
@@ -215,7 +229,7 @@ impl<'ws> Workspace<'ws> {
             }
             return a1;
         }
-        return String::new()
+        return String::new();
     }
 
     /// Move a row down in the current sheet.
@@ -228,6 +242,12 @@ impl<'ws> Workspace<'ws> {
         Ok(())
     }
 
+    /// Move to the top row without changing columns
+    pub fn move_to_top(&mut self) -> Result<()> {
+        self.book.move_to(&Address { row: 1, col: self.book.location.col })?;
+        Ok(())
+    }
+    
     /// Move a row up in the current sheet.
     pub fn move_up(&mut self) -> Result<()> {
         let mut loc = self.book.location.clone();
@@ -281,6 +301,8 @@ impl<'ws> Workspace<'ws> {
                 "* ENTER/RETURN: Go down one cell".to_string(),
                 "* TAB: Go over one cell".to_string(),
                 "* h,j,k,l: vim style navigation".to_string(),
+                "* d: clear cell contents leaving style untouched".to_string(),
+                "* D: clear cell contents including style".to_string(),
                 "* CTRl-r: Add a row".to_string(),
                 "* CTRl-c: Add a column".to_string(),
                 "* CTRl-l: Grow column width by 1".to_string(),
@@ -295,6 +317,7 @@ impl<'ws> Workspace<'ws> {
                 "Edit Mode:".to_string(),
                 "* ENTER/RETURN: Exit edit mode and save changes".to_string(),
                 "* Ctrl-r: Enter Range Selection mode".to_string(),
+                "* v: Enter Range Selection mode with the start of the range already selected".to_string(),
                 "* ESC: Exit edit mode and discard changes".to_string(),
                 "Otherwise edit as normal".to_string(),
             ],
@@ -308,6 +331,8 @@ impl<'ws> Workspace<'ws> {
                 "Range Selection Mode:".to_string(),
                 "* ESC: Exit command mode".to_string(),
                 "* h,j,k,l: vim style navigation".to_string(),
+                "* d: delete the contents of the range leaving style untouched".to_string(),
+                "* D: clear cell contents including style".to_string(),
                 "* Spacebar: Select start and end of range".to_string(),
                 "* CTRl-n: Next sheet. Starts over at beginning if at end.".to_string(),
                 "* CTRl-p: Previous sheet. Starts over at end if at beginning.".to_string(),
@@ -356,7 +381,7 @@ impl<'ws> Workspace<'ws> {
                     return Ok(None);
                 }
                 KeyCode::Char('r') if key.modifiers == KeyModifiers::CONTROL => {
-                    self.enter_range_select_mode();
+                    self.enter_range_select_mode(false);
                     return Ok(None);
                 }
                 KeyCode::Char('p') if key.modifiers == KeyModifiers::CONTROL => {
@@ -409,7 +434,7 @@ impl<'ws> Workspace<'ws> {
                 self.book.evaluate();
                 Ok(None)
             }
-            Ok(Some(Cmd::InsertRow(count))) => {
+            Ok(Some(Cmd::InsertRows(count))) => {
                 self.book.insert_rows(self.book.location.row, count)?;
                 self.book.evaluate();
                 Ok(None)
@@ -471,6 +496,30 @@ impl<'ws> Workspace<'ws> {
                 KeyCode::Char(d) if d.is_ascii_digit() => {
                     self.handle_numeric_prefix(d);
                 }
+                KeyCode::Char('D') => {
+                    if let Some((start, end)) = self.state.range_select.get_range() {
+                        self.book.clear_cell_range_all(
+                            self.state
+                                .range_select
+                                .sheet
+                                .unwrap_or_else(|| self.book.current_sheet),
+                            start,
+                            end,
+                        )?;
+                    }
+                }
+                KeyCode::Char('d') => {
+                    if let Some((start, end)) = self.state.range_select.get_range() {
+                        self.book.clear_cell_range(
+                            self.state
+                                .range_select
+                                .sheet
+                                .unwrap_or_else(|| self.book.current_sheet),
+                            start,
+                            end,
+                        )?;
+                    }
+                }
                 KeyCode::Char('h') => {
                     self.run_with_prefix(|ws: &mut Workspace<'_>| -> Result<()> {
                         ws.move_left()?;
@@ -500,12 +549,7 @@ impl<'ws> Workspace<'ws> {
                     self.maybe_update_range_end();
                 }
                 KeyCode::Char(' ') | KeyCode::Enter => {
-                    if self.state.range_select.start.is_none() {
-                        self.state.range_select.start = Some(self.book.location.clone());
-                    } else {
-                        self.state.range_select.end = Some(self.book.location.clone());
-                        self.exit_range_select_mode()?;
-                    }
+                    self.update_range_selection()?;
                 }
                 KeyCode::Char('n') if key.modifiers == KeyModifiers::CONTROL => {
                     self.state.range_select.reset_range_selection();
@@ -523,12 +567,78 @@ impl<'ws> Workspace<'ws> {
                     })?;
                     self.state.range_select.sheet = Some(self.book.current_sheet);
                 }
+                KeyCode::Char('C')
+                    if key
+                        .modifiers
+                        .contains(KeyModifiers::CONTROL | KeyModifiers::SHIFT) =>
+                {
+                    // TODO(zaphar): Share the algorithm below between both copies
+                    self.copy_range(true)?;
+                }
+                KeyCode::Char('Y') => self.copy_range(true)?,
+                KeyCode::Char('c') if key.modifiers == KeyModifiers::CONTROL => {
+                    self.copy_range(false)?;
+                }
+                KeyCode::Char('y') => self.copy_range(false)?,
+                KeyCode::Char('x') => {
+                    if let (Some(from), Some(to)) = (self.state.range_select.start.as_ref(), self.state.range_select.end.as_ref()) {
+                        self.book.extend_to(from, to)?;
+                    }
+                    self.exit_range_select_mode()?;
+                }
                 _ => {
                     // moop
                 }
             }
         }
         Ok(None)
+    }
+
+    fn copy_range(&mut self, formatted: bool) -> Result<(), anyhow::Error> {
+        self.update_range_selection()?;
+        match &self.state.range_select.get_range() {
+            Some((
+                start,
+                end,
+            )) => {
+                let mut rows = Vec::new();
+                for row in (AddressRange { start, end, }).as_rows() {
+                    let mut cols = Vec::new();
+                    for cell in row {
+                        cols.push(if formatted {
+                            self.book
+                                .get_cell_addr_rendered(&cell)?
+                        } else {
+                            self.book
+                                .get_cell_addr_contents(&cell)?
+                        });
+                    }
+                    rows.push(cols);
+                }
+                self.state.clipboard = Some(ClipboardContents::Range(rows));
+            }
+            None => {
+                self.state.clipboard = Some(ClipboardContents::Cell(if formatted {
+                    self.book
+                        .get_current_cell_rendered()?
+                } else {
+                    self.book
+                        .get_current_cell_contents()?
+                }));
+            }
+        }
+        self.exit_range_select_mode()?;
+        Ok(())
+    }
+
+    fn update_range_selection(&mut self) -> Result<(), anyhow::Error> {
+        Ok(if self.state.range_select.start.is_none() {
+            self.state.range_select.start = Some(self.book.location.clone());
+            self.state.range_select.end = Some(self.book.location.clone());
+        } else {
+            self.state.range_select.end = Some(self.book.location.clone());
+            self.exit_range_select_mode()?;
+        })
     }
 
     fn maybe_update_range_end(&mut self) {
@@ -555,8 +665,46 @@ impl<'ws> Workspace<'ws> {
                 KeyCode::Char('s') if key.modifiers == KeyModifiers::CONTROL => {
                     self.save_file()?;
                 }
+                KeyCode::Char('s') if key.modifiers != KeyModifiers::CONTROL => {
+                    self.book.clear_current_cell()?;
+                    self.text_area = reset_text_area(String::new());
+                    self.enter_edit_mode();
+                }
                 KeyCode::Char('r') if key.modifiers == KeyModifiers::CONTROL => {
-                    self.enter_range_select_mode();
+                    self.enter_range_select_mode(false);
+                }
+                KeyCode::Char('c') if key.modifiers == KeyModifiers::CONTROL => {
+                    self.state.clipboard = Some(ClipboardContents::Cell(
+                        self.book.get_current_cell_contents()?,
+                    ));
+                }
+                KeyCode::Char('y') => {
+                    self.state.clipboard = Some(ClipboardContents::Cell(
+                        self.book.get_current_cell_contents()?,
+                    ));
+                }
+                KeyCode::Char('Y') => {
+                    self.state.clipboard = Some(ClipboardContents::Cell(
+                        self.book.get_current_cell_rendered()?,
+                    ));
+                }
+                KeyCode::Char('C')
+                    if key
+                        .modifiers
+                        .contains(KeyModifiers::CONTROL | KeyModifiers::SHIFT) =>
+                {
+                    self.state.clipboard = Some(ClipboardContents::Cell(
+                        self.book.get_current_cell_rendered()?,
+                    ));
+                }
+                KeyCode::Char('v') if key.modifiers != KeyModifiers::CONTROL => {
+                    self.enter_range_select_mode(true)
+                }
+                KeyCode::Char('p') if key.modifiers != KeyModifiers::CONTROL => {
+                    self.paste_range()?;
+                }
+                KeyCode::Char('v') if key.modifiers == KeyModifiers::CONTROL => {
+                    self.paste_range()?;
                 }
                 KeyCode::Char('h') if key.modifiers == KeyModifiers::ALT => {
                     self.enter_dialog_mode(self.render_help_text());
@@ -566,6 +714,12 @@ impl<'ws> Workspace<'ws> {
                         ws.book.select_next_sheet();
                         Ok(())
                     })?;
+                }
+                KeyCode::Char('d') => {
+                    self.book.clear_current_cell()?;
+                }
+                KeyCode::Char('D') => {
+                    self.book.clear_current_cell_all()?;
                 }
                 KeyCode::Char('p') if key.modifiers == KeyModifiers::CONTROL => {
                     self.run_with_prefix(|ws: &mut Workspace<'_>| -> Result<()> {
@@ -656,12 +810,54 @@ impl<'ws> Workspace<'ws> {
                         Ok(())
                     })?;
                 }
+                KeyCode::Char('g') => {
+                    // TODO(zaphar): This really needs a better state machine.
+                    if self.state.char_queue.first().map(|c| *c == 'g').unwrap_or(false) {
+                        self.state.char_queue.pop();
+                        self.move_to_top()?;
+                    } else {
+                        self.state.char_queue.push('g');
+                    }
+                }
                 _ => {
                     // noop
+                    self.state.char_queue.clear();
                 }
             }
         }
         return Ok(None);
+    }
+
+    fn paste_range(&mut self) -> Result<(), anyhow::Error> {
+        match &self.state.clipboard {
+            Some(ClipboardContents::Cell(contents)) => {
+                self.book.edit_current_cell(contents)?;
+                self.book.evaluate();
+            }
+            Some(ClipboardContents::Range(ref rows)) => {
+                let Address { row, col } = self.book.location.clone();
+                let row_len = rows.len();
+                for ri in 0..row_len {
+                    let columns = &rows[ri];
+                    let col_len = columns.len();
+                    for ci in 0..col_len {
+                        self.book.update_cell(
+                            &Address {
+                                row: ri + row,
+                                col: ci + col,
+                            },
+                            columns[ci].clone(),
+                        )?;
+                    }
+                }
+                self.book.evaluate();
+            }
+            None => {
+                // NOOP
+            }
+        }
+        self.state.clipboard = None;
+        Ok(())
     }
 
     fn run_with_prefix(
@@ -687,11 +883,15 @@ impl<'ws> Workspace<'ws> {
         self.state.modality_stack.push(Modality::Dialog);
     }
 
-    fn enter_range_select_mode(&mut self) {
+    fn enter_range_select_mode(&mut self, init_start: bool) {
         self.state.range_select.sheet = Some(self.book.current_sheet);
         self.state.range_select.original_sheet = Some(self.book.current_sheet);
         self.state.range_select.original_location = Some(self.book.location.clone());
-        self.state.range_select.start = None;
+        if init_start {
+            self.state.range_select.start = Some(self.book.location.clone());
+        } else {
+            self.state.range_select.start = None;
+        }
         self.state.range_select.end = None;
         self.state.modality_stack.push(Modality::RangeSelect);
     }

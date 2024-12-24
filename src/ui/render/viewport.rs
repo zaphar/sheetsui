@@ -37,7 +37,7 @@ pub struct ViewportState {
 pub struct Viewport<'ws> {
     pub(crate) selected: Address,
     book: &'ws Book,
-    range_selection: &'ws RangeSelection,
+    range_selection: Option<&'ws RangeSelection>,
     block: Option<Block<'ws>>,
 }
 
@@ -47,7 +47,7 @@ pub(crate) const COLNAMES: [&'static str; 26] = [
 ];
 
 impl<'ws> Viewport<'ws> {
-    pub fn new(book: &'ws Book, app_state: &'ws RangeSelection) -> Self {
+    pub fn new(book: &'ws Book, app_state: Option<&'ws RangeSelection>) -> Self {
         Self {
             book,
             range_selection: app_state,
@@ -160,7 +160,9 @@ impl<'ws> Viewport<'ws> {
                                 .get_cell_addr_rendered(&Address { row: ri, col: *ci })
                                 .unwrap();
                             let mut cell = Cell::new(Text::raw(content));
-                            if let Some((start, end)) = &self.range_selection.get_range() {
+                            if let Some((start, end)) =
+                                &self.range_selection.map_or(None, |r| r.get_range())
+                            {
                                 if ri >= start.row
                                     && ri <= end.row
                                     && *ci >= start.col

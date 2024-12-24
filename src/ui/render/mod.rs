@@ -28,25 +28,40 @@ impl<'ws> Workspace<'ws> {
         ];
         let mut rs: Vec<Box<dyn Fn(Rect, &mut Buffer, &mut Self)>> = vec![
             Box::new(|rect: Rect, buf: &mut Buffer, ws: &mut Self| {
-                let tabs = Tabs::new(ws.book.get_sheet_names().iter().enumerate().map(|(idx, name)| format!("{} {}", name, idx)).collect::<Vec<String>>())
-                    .select(Some(ws.book.current_sheet as usize));
+                let tabs = Tabs::new(
+                    ws.book
+                        .get_sheet_names()
+                        .iter()
+                        .enumerate()
+                        .map(|(idx, name)| format!("{} {}", name, idx))
+                        .collect::<Vec<String>>(),
+                )
+                .select(Some(ws.book.current_sheet as usize));
                 tabs.render(rect, buf);
             }),
             Box::new(|rect: Rect, buf: &mut Buffer, ws: &mut Self| {
-                let [text_rect, info_rect] = Layout::horizontal(vec![Constraint::Fill(1),Constraint::Fill(1)]).areas(rect);
+                let [text_rect, info_rect] =
+                    Layout::horizontal(vec![Constraint::Fill(1), Constraint::Fill(1)]).areas(rect);
                 ws.text_area.render(text_rect, buf);
                 let hint = Paragraph::new(vec![
                     Line::from(""),
-                    Line::from("ALT-h to toggle help dialog").centered()
+                    Line::from("ALT-h to toggle help dialog").centered(),
                 ]);
                 hint.render(info_rect, buf);
             }),
             Box::new(move |rect: Rect, buf: &mut Buffer, ws: &mut Self| {
                 let sheet_name = ws.book.get_sheet_name().unwrap_or("Unknown");
                 let table_block = Block::bordered().title_top(sheet_name);
-                let viewport = Viewport::new(&ws.book, &ws.state.range_select)
-                    .with_selected(ws.book.location.clone())
-                    .block(table_block);
+                let viewport = Viewport::new(
+                    &ws.book,
+                    if ws.state.modality() == &Modality::RangeSelect {
+                        Some(&ws.state.range_select)
+                    } else {
+                        None
+                    },
+                )
+                .with_selected(ws.book.location.clone())
+                .block(table_block);
                 StatefulWidget::render(viewport, rect, buf, &mut ws.state.viewport_state);
             }),
         ];
