@@ -563,3 +563,34 @@ fn test_traditional_copy_paste_rendered() {
         "3",
     );
 }
+
+#[test]
+fn test_clear_cell() {
+    let mut ws =
+        Workspace::new_empty("en", "America/New_York").expect("Failed to get empty workbook");
+    ws.book.edit_current_cell("foo")
+        .expect("failed to edit cell");
+    ws.book.evaluate();
+    assert_eq!("foo", ws.book.get_current_cell_contents().expect("failed to get cell contents"));
+    InputScript::default()
+        .add_char('d')
+        .run(&mut ws)
+        .expect("Failed to run input script");
+    assert_eq!("", ws.book.get_current_cell_contents().expect("failed to get cell contents"));
+}
+
+#[test]
+fn test_clear_cell_all() {
+    let mut ws =
+        Workspace::new_empty("en", "America/New_York").expect("Failed to get empty workbook");
+    ws.book.edit_current_cell("foo")
+        .expect("failed to edit cell");
+    ws.book.evaluate();
+    assert_eq!("foo", ws.book.get_current_cell_contents().expect("failed to get cell contents"));
+    InputScript::default()
+        .add_char('D')
+        .run(&mut ws)
+        .expect("Failed to run input script");
+    assert_eq!("", ws.book.get_current_cell_contents().expect("failed to get cell contents"));
+}
+
