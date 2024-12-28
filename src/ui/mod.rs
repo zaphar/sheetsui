@@ -652,6 +652,7 @@ impl<'ws> Workspace<'ws> {
             match key.code {
                 KeyCode::Esc => {
                     self.state.reset_n_prefix();
+                    self.state.char_queue.clear();
                 }
                 KeyCode::Char(d) if d.is_ascii_digit() => {
                     self.handle_numeric_prefix(d);
@@ -726,12 +727,6 @@ impl<'ws> Workspace<'ws> {
                         ws.book.select_prev_sheet();
                         Ok(())
                     })?;
-                }
-                KeyCode::Char('s')
-                    if key.modifiers == KeyModifiers::HYPER
-                        || key.modifiers == KeyModifiers::SUPER =>
-                {
-                    self.save_file()?;
                 }
                 KeyCode::Char('l') if key.modifiers == KeyModifiers::CONTROL => {
                     self.run_with_prefix(|ws: &mut Workspace<'_>| -> Result<()> {
