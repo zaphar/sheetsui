@@ -594,3 +594,51 @@ fn test_clear_cell_all() {
     assert_eq!("", ws.book.get_current_cell_contents().expect("failed to get cell contents"));
 }
 
+#[test]
+fn test_sheet_navigation() {
+    let mut ws =
+        Workspace::new_empty("en", "America/New_York").expect("Failed to get empty workbook");
+    ws.book.new_sheet(Some("sheet 2")).expect("Failed to set sheet name");
+    ws.book.new_sheet(Some("sheet 3")).expect("Failed to set sheet name");
+    ws.book.new_sheet(Some("sheet 4")).expect("Failed to set sheet name");
+    InputScript::default()
+        .add_modified_char('n', KeyModifiers::CONTROL)
+        .add_modified_char('n', KeyModifiers::CONTROL)
+        .run(&mut ws)
+        .expect("Failed to run input script");
+    assert_eq!("sheet 3", ws.book.get_sheet_name().expect("Failed to get sheet name"));
+    InputScript::default()
+        .add_modified_char('p', KeyModifiers::CONTROL)
+        .run(&mut ws)
+        .expect("Failed to run input script");
+    assert_eq!("sheet 2", ws.book.get_sheet_name().expect("Failed to get sheet name"));
+}
+
+#[test]
+fn test_sheet_column_sizing() {
+    let mut ws =
+        Workspace::new_empty("en", "America/New_York").expect("Failed to get empty workbook");
+    InputScript::default()
+        .add_char('3')
+        .add_modified_char('l', KeyModifiers::CONTROL)
+        .run(&mut ws)
+        .expect("Failed to run input script");
+    assert_eq!(28, ws.book.get_col_size(1).expect("Failed to get column size"));
+    InputScript::default()
+        .add_char('1')
+        .add_modified_char('h', KeyModifiers::CONTROL)
+        .run(&mut ws)
+        .expect("Failed to run input script");
+    assert_eq!(27, ws.book.get_col_size(1).expect("Failed to get column size"));
+}
+
+#[test]
+fn test_quit() {
+    let mut ws =
+        Workspace::new_empty("en", "America/New_York").expect("Failed to get empty workbook");
+    let result = InputScript::default()
+        .add_char('q')
+        .run(&mut ws)
+        .expect("Failed to run input script");
+    assert!(result.is_some());
+}
