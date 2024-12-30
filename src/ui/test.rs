@@ -307,19 +307,43 @@ fn test_input_navitation_shift_tab_key() {
     assert_eq!(col, ws.book.location.col);
 }
 
+macro_rules! assert_help_dialog {
+    ($exit : expr) => {{
+        let mut ws =
+            Workspace::new_empty("en", "America/New_York").expect("Failed to get empty workbook");
+        assert_eq!(Some(&Modality::Navigate), ws.state.modality_stack.last());
+        InputScript::default().char('i').run(&mut ws)
+            .expect("Failed to handle 'i' key");
+        assert_eq!(Some(&Modality::CellEdit), ws.state.modality_stack.last());
+        let edit_help = ws.render_help_text();
+        InputScript::default().alt('h').run(&mut ws)
+            .expect("Failed to handle 'alt-h' key event");
+        assert_eq!(Some(&Modality::Dialog), ws.state.modality_stack.last());
+        assert_eq!(edit_help, ws.state.popup);
+        $exit.run(&mut ws)
+            .expect("Failed to handle key event");
+        assert_eq!(Some(&Modality::CellEdit), ws.state.modality_stack.last());
+    }};
+}
+
 #[test]
-fn test_edit_mode_help_keycode() {
-    let mut ws =
-        Workspace::new_empty("en", "America/New_York").expect("Failed to get empty workbook");
-    assert_eq!(Some(&Modality::Navigate), ws.state.modality_stack.last());
-    InputScript::default().char('i').run(&mut ws)
-        .expect("Failed to handle 'i' key");
-    assert_eq!(Some(&Modality::CellEdit), ws.state.modality_stack.last());
-    let edit_help = ws.render_help_text();
-    InputScript::default().alt('h').run(&mut ws)
-        .expect("Failed to handle 'alt-h' key event");
-    assert_eq!(Some(&Modality::Dialog), ws.state.modality_stack.last());
-    assert_eq!(edit_help, ws.state.popup);
+fn test_edit_mode_help_keycode_esc() {
+    assert_help_dialog!(InputScript::default().esc());
+}
+
+#[test]
+fn test_edit_mode_help_keycode_enter() {
+    assert_help_dialog!(InputScript::default().enter());
+}
+
+#[test]
+fn test_edit_mode_help_keycode_q() {
+    assert_help_dialog!(InputScript::default().char('q'));
+}
+
+#[test]
+fn test_edit_mode_help_keycode_alt_h() {
+    assert_help_dialog!(InputScript::default().alt('h'));
 }
 
 #[test]
