@@ -200,17 +200,29 @@ pub struct InputScript{
 }
 
 impl InputScript {
-    pub fn add_char(self, c: char) -> Self {
-        self.add_event(construct_key_event(KeyCode::Char(c)))
+    pub fn char(self, c: char) -> Self {
+        self.event(construct_key_event(KeyCode::Char(c)))
     }
     
-    pub fn add_modified_char(self, c: char, mods: KeyModifiers) -> Self {
-        self.add_event(construct_modified_key_event(KeyCode::Char(c), mods))
+    pub fn ctrl(self, c: char) -> Self {
+        self.modified_char(c, KeyModifiers::CONTROL)
     }
     
-    pub fn add_event(mut self, evt: Event) -> Self {
+    pub fn modified_char(self, c: char, mods: KeyModifiers) -> Self {
+        self.event(construct_modified_key_event(KeyCode::Char(c), mods))
+    }
+    
+    pub fn event(mut self, evt: Event) -> Self {
         self.events.push(evt);
         self
+    }
+
+    pub fn enter(self) -> Self {
+        self.event(construct_key_event(KeyCode::Enter))
+    }
+
+    pub fn esc(self) -> Self {
+        self.event(construct_key_event(KeyCode::Esc))
     }
 
     pub fn run(self, ws: &mut Workspace) -> anyhow::Result<Option<ExitCode>> {
@@ -354,9 +366,9 @@ fn test_navigation_numeric_prefix()
     ws.book.new_sheet(Some("Sheet2")).expect("failed to create sheet2");
     ws.book.new_sheet(Some("Sheet3")).expect("failed to create sheet3");
     InputScript::default()
-        .add_char('2')
-        .add_char('3')
-        .add_char('9')
+        .char('2')
+        .char('3')
+        .char('9')
         .run(&mut ws)
         .expect("Failed to run script");
     assert_eq!(239, ws.state.get_n_prefix());
@@ -371,10 +383,10 @@ fn test_navigation_numeric_prefix_cancel()
     ws.book.new_sheet(Some("Sheet2")).expect("failed to create sheet2");
     ws.book.new_sheet(Some("Sheet3")).expect("failed to create sheet3");
     InputScript::default()
-        .add_char('2')
-        .add_char('3')
-        .add_char('9')
-        .add_event(construct_key_event(KeyCode::Esc))
+        .char('2')
+        .char('3')
+        .char('9')
+        .esc()
         .run(&mut ws)
         .expect("Failed to run script");
     assert_eq!(1, ws.state.get_n_prefix());
@@ -436,18 +448,18 @@ fn test_range_copy() {
     let original_loc_2 = ws.book.location.clone();
     assert_eq!(Address { row: 5, col: 5 }, original_loc_2);
     
-    ws.handle_input(construct_modified_key_event(KeyCode::Char('r'), KeyModifiers::CONTROL))
-        .expect("Failed to handle 'Ctrl-r' key event");
+    InputScript::default().char('v').run(&mut ws)
+        .expect("Failed to handle 'v' key event");
     assert_eq!(Some(&Modality::RangeSelect), ws.state.modality_stack.last());
     assert_eq!(Some(original_loc_2.clone()), ws.state.range_select.original_location);
-    assert!(ws.state.range_select.start.is_none());
+    assert!(ws.state.range_select.start.is_some());
     assert!(ws.state.range_select.end.is_none());
     
     ws.handle_input(construct_key_event(KeyCode::Char('h')))
         .expect("Failed to handle 'h' key event");
     ws.handle_input(construct_key_event(KeyCode::Char(' ')))
         .expect("Failed to handle ' ' key event");
-    assert_eq!(Some(Address {row:5, col:4, }), ws.state.range_select.start);
+    assert_eq!(Some(Address {row:5, col: 5, }), ws.state.range_select.start);
     
     ws.handle_input(construct_key_event(KeyCode::Char('k')))
         .expect("Failed to handle 'k' key event");
@@ -455,9 +467,9 @@ fn test_range_copy() {
         .expect("Failed to handle ' ' key event");
     
     assert!(ws.state.range_select.original_location.is_none());
-    assert_eq!(Some(Address {row:5, col:4, }), ws.state.range_select.start);
-    assert_eq!(Some(Address {row:4, col:4, }), ws.state.range_select.end);
-    assert_eq!(original_loc_2, ws.book.location);
+    assert_eq!(Some(Address {row:5, col:5, }), ws.state.range_select.start);
+    assert_eq!(Some(Address {row:5, col:4, }), ws.state.range_select.end);
+    assert_eq!(Address {row:4, col:5, }, ws.book.location);
     assert_eq!(Some(&Modality::Navigate), ws.state.modality_stack.last());
 }
 
@@ -480,14 +492,14 @@ fn test_gg_movement() {
         Workspace::new_empty("en", "America/New_York").expect("Failed to get empty workbook");
     assert_eq!(Some(&Modality::Navigate), ws.state.modality_stack.last());
     InputScript::default()
-        .add_char('j')
-        .add_char('j').run(&mut ws)
+        .char('j')
+        .char('j').run(&mut ws)
         .expect("failed to handle event sequence");
     assert_eq!(ws.book.location, Address { row: 3, col: 1 });
     InputScript::default()
-        .add_char('l')
-        .add_char('g')
-        .add_char('g')
+        .char('l')
+        .char('g')
+        .char('g')
         .run(&mut ws)
         .expect("failed to handle event sequence");
     assert_eq!(ws.book.location, Address { row: 1, col: 2 });
@@ -507,17 +519,17 @@ macro_rules! assert_copy_paste {
     let mut ws =
         Workspace::new_empty("en", "America/New_York").expect("Failed to get empty workbook");
     InputScript::default()
-        .add_char('j')
-        .add_char('l')
+        .char('j')
+        .char('l')
         .run(&mut ws)
         .expect("Failed to run script");
     ws.book.edit_current_cell($source).expect("Failed to edit cell");
     ws.book.evaluate();
     InputScript::default()
-        .add_event($c)
-        .add_char('l')
-        .add_char('j')
-        .add_event($p)
+        .event($c)
+        .char('l')
+        .char('j')
+        .event($p)
         .run(&mut ws)
         .expect("Failed to run script");
     let copy = ws.book.get_current_cell_contents()
@@ -573,7 +585,7 @@ fn test_clear_cell() {
     ws.book.evaluate();
     assert_eq!("foo", ws.book.get_current_cell_contents().expect("failed to get cell contents"));
     InputScript::default()
-        .add_char('d')
+        .char('d')
         .run(&mut ws)
         .expect("Failed to run input script");
     assert_eq!("", ws.book.get_current_cell_contents().expect("failed to get cell contents"));
@@ -588,7 +600,7 @@ fn test_clear_cell_all() {
     ws.book.evaluate();
     assert_eq!("foo", ws.book.get_current_cell_contents().expect("failed to get cell contents"));
     InputScript::default()
-        .add_char('D')
+        .char('D')
         .run(&mut ws)
         .expect("Failed to run input script");
     assert_eq!("", ws.book.get_current_cell_contents().expect("failed to get cell contents"));
@@ -602,13 +614,13 @@ fn test_sheet_navigation() {
     ws.book.new_sheet(Some("sheet 3")).expect("Failed to set sheet name");
     ws.book.new_sheet(Some("sheet 4")).expect("Failed to set sheet name");
     InputScript::default()
-        .add_modified_char('n', KeyModifiers::CONTROL)
-        .add_modified_char('n', KeyModifiers::CONTROL)
+        .ctrl('n')
+        .ctrl('n')
         .run(&mut ws)
         .expect("Failed to run input script");
     assert_eq!("sheet 3", ws.book.get_sheet_name().expect("Failed to get sheet name"));
     InputScript::default()
-        .add_modified_char('p', KeyModifiers::CONTROL)
+        .ctrl('p')
         .run(&mut ws)
         .expect("Failed to run input script");
     assert_eq!("sheet 2", ws.book.get_sheet_name().expect("Failed to get sheet name"));
@@ -619,14 +631,14 @@ fn test_sheet_column_sizing() {
     let mut ws =
         Workspace::new_empty("en", "America/New_York").expect("Failed to get empty workbook");
     InputScript::default()
-        .add_char('3')
-        .add_modified_char('l', KeyModifiers::CONTROL)
+        .char('3')
+        .ctrl('l')
         .run(&mut ws)
         .expect("Failed to run input script");
     assert_eq!(28, ws.book.get_col_size(1).expect("Failed to get column size"));
     InputScript::default()
-        .add_char('1')
-        .add_modified_char('h', KeyModifiers::CONTROL)
+        .char('1')
+        .ctrl('h')
         .run(&mut ws)
         .expect("Failed to run input script");
     assert_eq!(27, ws.book.get_col_size(1).expect("Failed to get column size"));
@@ -637,7 +649,7 @@ fn test_quit() {
     let mut ws =
         Workspace::new_empty("en", "America/New_York").expect("Failed to get empty workbook");
     let result = InputScript::default()
-        .add_char('q')
+        .char('q')
         .run(&mut ws)
         .expect("Failed to run input script");
     assert!(result.is_some());
