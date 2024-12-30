@@ -509,6 +509,26 @@ fn test_gg_movement() {
     assert_eq!(ws.book.location, Address { row: 1, col: 2 });
 }
 
+#[test]
+fn test_h_j_k_l_movement() {
+    let mut ws =
+        Workspace::new_empty("en", "America/New_York").expect("Failed to get empty workbook");
+    assert_eq!(Some(&Modality::Navigate), ws.state.modality_stack.last());
+    InputScript::default()
+        .char('2')
+        .char('j')
+        .char('l').run(&mut ws)
+        .expect("failed to handle event sequence");
+    assert_eq!(ws.book.location, Address { row: 3, col: 2 });
+    InputScript::default()
+        .char('2')
+        .char('h')
+        .char('k')
+        .run(&mut ws)
+        .expect("failed to handle event sequence");
+    assert_eq!(ws.book.location, Address { row: 1, col: 1 });
+}
+
 macro_rules! assert_copy_paste {
     ($c: expr, $p: expr, $source: expr,) => {
         assert_copy_paste!($c, $p, $source, $source)
