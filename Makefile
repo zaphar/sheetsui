@@ -8,7 +8,7 @@ build: $(rust-files)
 	cargo build
 
 tarpaulin-report.%: $(rust_files)
-	cargo tarpaulin --skip-clean --test --out $*
+	cargo tarpaulin --skip-clean --engine llvm --out $*
 
 cover: tarpaulin-report.html
 
