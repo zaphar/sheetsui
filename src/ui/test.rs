@@ -654,3 +654,23 @@ fn test_quit() {
         .expect("Failed to run input script");
     assert!(result.is_some());
 }
+
+#[test]
+fn test_cell_replace() {
+    let mut ws =
+        Workspace::new_empty("en", "America/New_York").expect("Failed to get empty workbook");
+    ws.book.edit_current_cell("foo").expect("Failed to edit current cell");
+    assert_eq!("foo",
+        ws.book.get_current_cell_contents().expect("failed to get cell contents").as_str());
+    InputScript::default()
+        .char('s')
+        .char('b')
+        .char('a')
+        .char('r')
+        .enter()
+        .run(&mut ws)
+        .expect("Failed to run input script");
+    assert_eq!("bar",
+        ws.book.get_current_cell_contents().expect("failed to get cell contents").as_str());
+}
+
