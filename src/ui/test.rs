@@ -24,6 +24,10 @@ impl InputScript {
     pub fn alt(self, c: char) -> Self {
         self.modified_char(c, KeyModifiers::ALT)
     }
+
+    pub fn tab(self) -> Self {
+        self.event(construct_key_event(KeyCode::Tab))
+    }
     
     pub fn modified_char(self, c: char, mods: KeyModifiers) -> Self {
         self.event(construct_modified_key_event(KeyCode::Char(c), mods))
@@ -253,7 +257,7 @@ fn test_input_navitation_enter_key() {
         Workspace::new_empty("en", "America/New_York").expect("Failed to get empty workbook");
     let row = ws.book.location.row;
     assert_eq!(Some(&Modality::Navigate), ws.state.modality_stack.last());
-    ws.handle_input(construct_key_event(KeyCode::Enter))
+    InputScript::default().enter().run(&mut ws)
         .expect("Failed to handle enter key");
     assert_eq!(row + 1, ws.book.location.row);
 }
@@ -264,7 +268,7 @@ fn test_input_navitation_tab_key() {
         Workspace::new_empty("en", "America/New_York").expect("Failed to get empty workbook");
     let col = dbg!(ws.book.location.col);
     assert_eq!(Some(&Modality::Navigate), ws.state.modality_stack.last());
-    ws.handle_input(construct_key_event(KeyCode::Tab))
+    InputScript::default().tab().run(&mut ws)
         .expect("Failed to handle enter key");
     assert_eq!(col + 1, ws.book.location.col);
 }
@@ -275,13 +279,13 @@ fn test_input_navitation_shift_enter_key() {
         Workspace::new_empty("en", "America/New_York").expect("Failed to get empty workbook");
     let row = ws.book.location.row;
     assert_eq!(Some(&Modality::Navigate), ws.state.modality_stack.last());
-    ws.handle_input(construct_key_event(KeyCode::Enter))
+    InputScript::default().enter().run(&mut ws)
         .expect("Failed to handle enter key");
     assert_eq!(row + 1, ws.book.location.row);
-    ws.handle_input(construct_modified_key_event(
+    InputScript::default().event(construct_modified_key_event(
         KeyCode::Enter,
         KeyModifiers::SHIFT,
-    ))
+    )).run(&mut ws)
     .expect("Failed to handle enter key");
     assert_eq!(row, ws.book.location.row);
 }
@@ -292,13 +296,13 @@ fn test_input_navitation_shift_tab_key() {
         Workspace::new_empty("en", "America/New_York").expect("Failed to get empty workbook");
     let col = dbg!(ws.book.location.col);
     assert_eq!(Some(&Modality::Navigate), ws.state.modality_stack.last());
-    ws.handle_input(construct_key_event(KeyCode::Tab))
+    InputScript::default().tab().run(&mut ws)
         .expect("Failed to handle enter key");
     assert_eq!(col + 1, ws.book.location.col);
-    ws.handle_input(construct_modified_key_event(
+    InputScript::default().event(construct_modified_key_event(
         KeyCode::Tab,
         KeyModifiers::SHIFT,
-    ))
+    )).run(&mut ws)
     .expect("Failed to handle enter key");
     assert_eq!(col, ws.book.location.col);
 }
@@ -308,7 +312,7 @@ fn test_edit_mode_help_keycode() {
     let mut ws =
         Workspace::new_empty("en", "America/New_York").expect("Failed to get empty workbook");
     assert_eq!(Some(&Modality::Navigate), ws.state.modality_stack.last());
-    ws.handle_input(construct_key_event(KeyCode::Char('i')))
+    InputScript::default().char('i').run(&mut ws)
         .expect("Failed to handle 'i' key");
     assert_eq!(Some(&Modality::CellEdit), ws.state.modality_stack.last());
     let edit_help = ws.render_help_text();
@@ -335,7 +339,7 @@ fn test_command_mode_help_keycode() {
     let mut ws =
         Workspace::new_empty("en", "America/New_York").expect("Failed to get empty workbook");
     assert_eq!(Some(&Modality::Navigate), ws.state.modality_stack.last());
-    ws.handle_input(construct_key_event(KeyCode::Char(':')))
+    InputScript::default().char(':').run(&mut ws)
         .expect("Failed to handle ':' key");
     assert_eq!(Some(&Modality::Command), ws.state.modality_stack.last());
     let edit_help = ws.render_help_text();
@@ -350,13 +354,11 @@ fn test_edit_mode_esc_keycode() {
     let mut ws =
         Workspace::new_empty("en", "America/New_York").expect("Failed to get empty workbook");
     assert_eq!(Some(&Modality::Navigate), ws.state.modality_stack.last());
-    ws.handle_input(construct_key_event(KeyCode::Char('i')))
+    InputScript::default().char('i').run(&mut ws)
         .expect("Failed to handle 'i' key");
     assert_eq!(Some(&Modality::CellEdit), ws.state.modality_stack.last());
-    ws.handle_input(construct_key_event(KeyCode::Char('a')))
-        .expect("Failed to handle 'a' key event");
-    ws.handle_input(construct_key_event(KeyCode::Esc))
-        .expect("Failed to handle 'esc' key event");
+    InputScript::default().char('a').esc().run(&mut ws)
+        .expect("Failed to handle key squence");
     assert_eq!("", ws.book.get_current_cell_contents().expect("Failed to get current cell contents"));
     assert_eq!("", ws.text_area.lines().join("\n"));
 }
@@ -404,14 +406,14 @@ fn test_navigation_tab_next_numeric_prefix()
     assert_eq!(Some(&Modality::Navigate), ws.state.modality_stack.last());
     ws.book.new_sheet(Some("Sheet2")).expect("failed to create sheet2");
     ws.book.new_sheet(Some("Sheet3")).expect("failed to create sheet3");
-    ws.handle_input(construct_key_event(KeyCode::Char('2')))
-        .expect("Failed to handle '3' key event");
+    InputScript::default().char('2').run(&mut ws)
+        .expect("Failed to handle '2' key event");
     assert_eq!(2, ws.state.get_n_prefix());
-    ws.handle_input(construct_modified_key_event(KeyCode::Char('n'), KeyModifiers::CONTROL))
+    InputScript::default().ctrl('n').run(&mut ws)
         .expect("Failed to handle 'Ctrl-n' key event");
     assert_eq!("Sheet3", ws.book.get_sheet_name().expect("Failed to get sheet name"));
     assert_eq!(1, ws.state.get_n_prefix());
-    ws.handle_input(construct_modified_key_event(KeyCode::Char('n'), KeyModifiers::CONTROL))
+    InputScript::default().ctrl('n').run(&mut ws)
         .expect("Failed to handle 'Ctrl-n' key event");
     assert_eq!("Sheet1", ws.book.get_sheet_name().expect("Failed to get sheet name"));
 }
@@ -424,23 +426,19 @@ fn test_range_copy() {
     
     ws.book.move_to(&Address { row: 1, col: 1, }).expect("Failed to move to row");
     let original_loc = ws.book.location.clone();
-    ws.handle_input(construct_modified_key_event(KeyCode::Char('r'), KeyModifiers::CONTROL))
+    InputScript::default().ctrl('r').run(&mut ws)
         .expect("Failed to handle 'Ctrl-r' key event");
     assert_eq!(Some(&Modality::RangeSelect), ws.state.modality_stack.last());
     assert_eq!(Some(original_loc.clone()), ws.state.range_select.original_location);
     assert!(ws.state.range_select.start.is_none());
     assert!(ws.state.range_select.end.is_none());
     
-    ws.handle_input(construct_key_event(KeyCode::Char('l')))
-        .expect("Failed to handle 'l' key event");
-    ws.handle_input(construct_key_event(KeyCode::Char(' ')))
-        .expect("Failed to handle ' ' key event");
+    InputScript::default().char('l').char(' ').run(&mut ws)
+        .expect("Failed to handle key sequence");
     assert_eq!(Some(Address {row:1, col:2, }), ws.state.range_select.start);
     
-    ws.handle_input(construct_key_event(KeyCode::Char('j')))
-        .expect("Failed to handle 'j' key event");
-    ws.handle_input(construct_key_event(KeyCode::Char(' ')))
-        .expect("Failed to handle ' ' key event");
+    InputScript::default().char('j').char(' ').run(&mut ws)
+        .expect("Failed to handle key sequence");
     
     assert!(ws.state.range_select.original_location.is_none());
     assert_eq!(Some(Address {row:1, col:2, }), ws.state.range_select.start);
@@ -459,16 +457,12 @@ fn test_range_copy() {
     assert!(ws.state.range_select.start.is_some());
     assert!(ws.state.range_select.end.is_none());
     
-    ws.handle_input(construct_key_event(KeyCode::Char('h')))
-        .expect("Failed to handle 'h' key event");
-    ws.handle_input(construct_key_event(KeyCode::Char(' ')))
-        .expect("Failed to handle ' ' key event");
+    InputScript::default().char('h').char(' ').run(&mut ws)
+        .expect("Failed to handle key sequence");
     assert_eq!(Some(Address {row:5, col: 5, }), ws.state.range_select.start);
     
-    ws.handle_input(construct_key_event(KeyCode::Char('k')))
-        .expect("Failed to handle 'k' key event");
-    ws.handle_input(construct_key_event(KeyCode::Char(' ')))
-        .expect("Failed to handle ' ' key event");
+    InputScript::default().char('k').char(' ').run(&mut ws)
+        .expect("Failed to handle key sequence");
     
     assert!(ws.state.range_select.original_location.is_none());
     assert_eq!(Some(Address {row:5, col:5, }), ws.state.range_select.start);
@@ -482,10 +476,10 @@ fn test_range_copy_mode_from_edit_mode() {
     let mut ws =
         Workspace::new_empty("en", "America/New_York").expect("Failed to get empty workbook");
     assert_eq!(Some(&Modality::Navigate), ws.state.modality_stack.last());
-    ws.handle_input(construct_key_event(KeyCode::Char('e')))
+    InputScript::default().char('e').run(&mut ws)
         .expect("Failed to handle 'e' key event");
     assert_eq!(Some(&Modality::CellEdit), ws.state.modality_stack.last());
-    ws.handle_input(construct_modified_key_event(KeyCode::Char('r'), KeyModifiers::CONTROL))
+    InputScript::default().ctrl('r').run(&mut ws)
         .expect("Failed to handle 'Ctrl-r' key event");
     assert_eq!(Some(&Modality::RangeSelect), ws.state.modality_stack.last());
 }
@@ -521,8 +515,8 @@ fn test_h_j_k_l_movement() {
         .expect("failed to handle event sequence");
     assert_eq!(ws.book.location, Address { row: 3, col: 2 });
     InputScript::default()
-        .char('2')
         .char('h')
+        .char('2')
         .char('k')
         .run(&mut ws)
         .expect("failed to handle event sequence");
