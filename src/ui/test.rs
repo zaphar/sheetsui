@@ -7,6 +7,59 @@ use crate::ui::{Address, Modality};
 use super::cmd::{parse, Cmd};
 use super::Workspace;
 
+#[derive(Default)]
+pub struct InputScript{
+    events: Vec<Event>
+}
+
+impl InputScript {
+    pub fn char(self, c: char) -> Self {
+        self.event(construct_key_event(KeyCode::Char(c)))
+    }
+    
+    pub fn ctrl(self, c: char) -> Self {
+        self.modified_char(c, KeyModifiers::CONTROL)
+    }
+    
+    pub fn alt(self, c: char) -> Self {
+        self.modified_char(c, KeyModifiers::ALT)
+    }
+    
+    pub fn modified_char(self, c: char, mods: KeyModifiers) -> Self {
+        self.event(construct_modified_key_event(KeyCode::Char(c), mods))
+    }
+    
+    pub fn event(mut self, evt: Event) -> Self {
+        self.events.push(evt);
+        self
+    }
+
+    pub fn enter(self) -> Self {
+        self.event(construct_key_event(KeyCode::Enter))
+    }
+
+    pub fn esc(self) -> Self {
+        self.event(construct_key_event(KeyCode::Esc))
+    }
+
+    pub fn run(self, ws: &mut Workspace) -> anyhow::Result<Option<ExitCode>> {
+        for evt in self.events {
+            if let Some(e) = ws.handle_input(evt)? {
+                return Ok(Some(e));
+            }
+        }
+        Ok(None)
+    }
+}
+
+fn construct_key_event(code: KeyCode) -> Event {
+    construct_modified_key_event(code, KeyModifiers::empty())
+}
+
+fn construct_modified_key_event(code: KeyCode, mods: KeyModifiers) -> Event {
+    Event::Key(KeyEvent::new(code, mods))
+}
+
 #[test]
 fn test_write_cmd() {
     let input = "write foo.xlsx";
@@ -194,55 +247,6 @@ fn test_cmd_rename_sheet_with_idx_and_name() {
     assert_eq!(cmd, Cmd::RenameSheet(Some(0), "test"));
 }
 
-#[derive(Default)]
-pub struct InputScript{
-    events: Vec<Event>
-}
-
-impl InputScript {
-    pub fn char(self, c: char) -> Self {
-        self.event(construct_key_event(KeyCode::Char(c)))
-    }
-    
-    pub fn ctrl(self, c: char) -> Self {
-        self.modified_char(c, KeyModifiers::CONTROL)
-    }
-    
-    pub fn modified_char(self, c: char, mods: KeyModifiers) -> Self {
-        self.event(construct_modified_key_event(KeyCode::Char(c), mods))
-    }
-    
-    pub fn event(mut self, evt: Event) -> Self {
-        self.events.push(evt);
-        self
-    }
-
-    pub fn enter(self) -> Self {
-        self.event(construct_key_event(KeyCode::Enter))
-    }
-
-    pub fn esc(self) -> Self {
-        self.event(construct_key_event(KeyCode::Esc))
-    }
-
-    pub fn run(self, ws: &mut Workspace) -> anyhow::Result<Option<ExitCode>> {
-        for evt in self.events {
-            if let Some(e) = ws.handle_input(evt)? {
-                return Ok(Some(e));
-            }
-        }
-        Ok(None)
-    }
-}
-
-fn construct_key_event(code: KeyCode) -> Event {
-    construct_modified_key_event(code, KeyModifiers::empty())
-}
-
-fn construct_modified_key_event(code: KeyCode, mods: KeyModifiers) -> Event {
-    Event::Key(KeyEvent::new(code, mods))
-}
-
 #[test]
 fn test_input_navitation_enter_key() {
     let mut ws =
@@ -308,8 +312,8 @@ fn test_edit_mode_help_keycode() {
         .expect("Failed to handle 'i' key");
     assert_eq!(Some(&Modality::CellEdit), ws.state.modality_stack.last());
     let edit_help = ws.render_help_text();
-    ws.handle_input(construct_modified_key_event(KeyCode::Char('h'), KeyModifiers::ALT))
-        .expect("Failed to handle 'ctrl-?' key event");
+    InputScript::default().alt('h').run(&mut ws)
+        .expect("Failed to handle 'alt-h' key event");
     assert_eq!(Some(&Modality::Dialog), ws.state.modality_stack.last());
     assert_eq!(edit_help, ws.state.popup);
 }
@@ -320,8 +324,8 @@ fn test_navigation_mode_help_keycode() {
         Workspace::new_empty("en", "America/New_York").expect("Failed to get empty workbook");
     assert_eq!(Some(&Modality::Navigate), ws.state.modality_stack.last());
     let help_text = ws.render_help_text();
-    ws.handle_input(construct_modified_key_event(KeyCode::Char('h'), KeyModifiers::ALT))
-        .expect("Failed to handle 'ctrl-?' key event");
+    InputScript::default().alt('h').run(&mut ws)
+        .expect("Failed to handle 'alt-h' key event");
     assert_eq!(Some(&Modality::Dialog), ws.state.modality_stack.last());
     assert_eq!(help_text, ws.state.popup);
 }
@@ -335,8 +339,8 @@ fn test_command_mode_help_keycode() {
         .expect("Failed to handle ':' key");
     assert_eq!(Some(&Modality::Command), ws.state.modality_stack.last());
     let edit_help = ws.render_help_text();
-    ws.handle_input(construct_modified_key_event(KeyCode::Char('h'), KeyModifiers::ALT))
-        .expect("Failed to handle 'ctrl-?' key event");
+    InputScript::default().alt('h').run(&mut ws)
+        .expect("Failed to handle 'alt-h' key event");
     assert_eq!(Some(&Modality::Dialog), ws.state.modality_stack.last());
     assert_eq!(edit_help, ws.state.popup);
 }
