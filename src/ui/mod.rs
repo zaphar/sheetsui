@@ -386,7 +386,7 @@ impl<'ws> Workspace<'ws> {
                 }
                 KeyCode::Char('p') if key.modifiers == KeyModifiers::CONTROL => {
                     self.text_area
-                        .set_yank_text(self.selected_range_to_string());
+                        .set_yank_text(dbg!(self.selected_range_to_string()));
                     self.text_area.paste();
                     self.state.dirty = true;
                     return Ok(None);
