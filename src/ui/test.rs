@@ -253,8 +253,7 @@ fn test_cmd_rename_sheet_with_idx_and_name() {
 
 #[test]
 fn test_input_navitation_enter_key() {
-    let mut ws =
-        Workspace::new_empty("en", "America/New_York").expect("Failed to get empty workbook");
+    let mut ws = new_workspace();
     let row = ws.book.location.row;
     assert_eq!(Some(&Modality::Navigate), ws.state.modality_stack.last());
     InputScript::default()
@@ -266,8 +265,7 @@ fn test_input_navitation_enter_key() {
 
 #[test]
 fn test_input_navitation_tab_key() {
-    let mut ws =
-        Workspace::new_empty("en", "America/New_York").expect("Failed to get empty workbook");
+    let mut ws = new_workspace();
     let col = dbg!(ws.book.location.col);
     assert_eq!(Some(&Modality::Navigate), ws.state.modality_stack.last());
     InputScript::default()
@@ -279,8 +277,7 @@ fn test_input_navitation_tab_key() {
 
 #[test]
 fn test_input_navitation_shift_enter_key() {
-    let mut ws =
-        Workspace::new_empty("en", "America/New_York").expect("Failed to get empty workbook");
+    let mut ws = new_workspace();
     let row = ws.book.location.row;
     assert_eq!(Some(&Modality::Navigate), ws.state.modality_stack.last());
     InputScript::default()
@@ -300,8 +297,7 @@ fn test_input_navitation_shift_enter_key() {
 
 #[test]
 fn test_input_navitation_shift_tab_key() {
-    let mut ws =
-        Workspace::new_empty("en", "America/New_York").expect("Failed to get empty workbook");
+    let mut ws = new_workspace();
     let col = dbg!(ws.book.location.col);
     assert_eq!(Some(&Modality::Navigate), ws.state.modality_stack.last());
     InputScript::default()
@@ -321,8 +317,7 @@ fn test_input_navitation_shift_tab_key() {
 
 macro_rules! assert_help_dialog {
     ($exit : expr) => {{
-        let mut ws =
-            Workspace::new_empty("en", "America/New_York").expect("Failed to get empty workbook");
+        let mut ws = new_workspace();
         assert_eq!(Some(&Modality::Navigate), ws.state.modality_stack.last());
         InputScript::default()
             .char('i')
@@ -363,8 +358,7 @@ fn test_edit_mode_help_keycode_alt_h() {
 
 #[test]
 fn test_navigation_mode_help_keycode() {
-    let mut ws =
-        Workspace::new_empty("en", "America/New_York").expect("Failed to get empty workbook");
+    let mut ws = new_workspace();
     assert_eq!(Some(&Modality::Navigate), ws.state.modality_stack.last());
     let help_text = ws.render_help_text();
     InputScript::default()
@@ -377,8 +371,7 @@ fn test_navigation_mode_help_keycode() {
 
 #[test]
 fn test_command_mode_help_keycode() {
-    let mut ws =
-        Workspace::new_empty("en", "America/New_York").expect("Failed to get empty workbook");
+    let mut ws = new_workspace();
     assert_eq!(Some(&Modality::Navigate), ws.state.modality_stack.last());
     InputScript::default()
         .char(':')
@@ -396,8 +389,7 @@ fn test_command_mode_help_keycode() {
 
 #[test]
 fn test_edit_mode_esc_keycode() {
-    let mut ws =
-        Workspace::new_empty("en", "America/New_York").expect("Failed to get empty workbook");
+    let mut ws = new_workspace();
     assert_eq!(Some(&Modality::Navigate), ws.state.modality_stack.last());
     InputScript::default()
         .char('i')
@@ -420,8 +412,7 @@ fn test_edit_mode_esc_keycode() {
 
 #[test]
 fn test_navigation_numeric_prefix() {
-    let mut ws =
-        Workspace::new_empty("en", "America/New_York").expect("Failed to get empty workbook");
+    let mut ws = new_workspace();
     assert_eq!(Some(&Modality::Navigate), ws.state.modality_stack.last());
     ws.book
         .new_sheet(Some("Sheet2"))
@@ -440,8 +431,7 @@ fn test_navigation_numeric_prefix() {
 
 #[test]
 fn test_navigation_numeric_prefix_cancel() {
-    let mut ws =
-        Workspace::new_empty("en", "America/New_York").expect("Failed to get empty workbook");
+    let mut ws = new_workspace();
     assert_eq!(Some(&Modality::Navigate), ws.state.modality_stack.last());
     ws.book
         .new_sheet(Some("Sheet2"))
@@ -461,8 +451,7 @@ fn test_navigation_numeric_prefix_cancel() {
 
 #[test]
 fn test_navigation_tab_next_numeric_prefix() {
-    let mut ws =
-        Workspace::new_empty("en", "America/New_York").expect("Failed to get empty workbook");
+    let mut ws = new_workspace();
     assert_eq!(Some(&Modality::Navigate), ws.state.modality_stack.last());
     ws.book
         .new_sheet(Some("Sheet2"))
@@ -496,8 +485,7 @@ fn test_navigation_tab_next_numeric_prefix() {
 
 #[test]
 fn test_range_copy() {
-    let mut ws =
-        Workspace::new_empty("en", "America/New_York").expect("Failed to get empty workbook");
+    let mut ws = new_workspace();
     assert_eq!(Some(&Modality::Navigate), ws.state.modality_stack.last());
 
     ws.book
@@ -587,8 +575,7 @@ fn test_range_copy() {
 
 #[test]
 fn test_range_copy_mode_from_edit_mode() {
-    let mut ws =
-        Workspace::new_empty("en", "America/New_York").expect("Failed to get empty workbook");
+    let mut ws = new_workspace();
     assert_eq!(Some(&Modality::Navigate), ws.state.modality_stack.last());
     InputScript::default()
         .char('e')
@@ -604,8 +591,7 @@ fn test_range_copy_mode_from_edit_mode() {
 
 #[test]
 fn test_gg_movement() {
-    let mut ws =
-        Workspace::new_empty("en", "America/New_York").expect("Failed to get empty workbook");
+    let mut ws = new_workspace();
     assert_eq!(Some(&Modality::Navigate), ws.state.modality_stack.last());
     InputScript::default()
         .char('j')
@@ -624,8 +610,7 @@ fn test_gg_movement() {
 
 #[test]
 fn test_h_j_k_l_movement() {
-    let mut ws =
-        Workspace::new_empty("en", "America/New_York").expect("Failed to get empty workbook");
+    let mut ws = new_workspace();
     assert_eq!(Some(&Modality::Navigate), ws.state.modality_stack.last());
     InputScript::default()
         .char('2')
@@ -654,8 +639,7 @@ macro_rules! assert_copy_paste {
         assert_copy_paste!($c, $p, $source, $expected)
     };
     ($c: expr, $p: expr, $source: expr, $expected: expr) => {{
-        let mut ws =
-            Workspace::new_empty("en", "America/New_York").expect("Failed to get empty workbook");
+        let mut ws = new_workspace();
         InputScript::default()
             .char('j')
             .char('l')
@@ -720,8 +704,7 @@ fn test_traditional_copy_paste_rendered() {
 
 #[test]
 fn test_clear_cell() {
-    let mut ws =
-        Workspace::new_empty("en", "America/New_York").expect("Failed to get empty workbook");
+    let mut ws = new_workspace();
     ws.book
         .edit_current_cell("foo")
         .expect("failed to edit cell");
@@ -746,8 +729,7 @@ fn test_clear_cell() {
 
 #[test]
 fn test_clear_cell_all() {
-    let mut ws =
-        Workspace::new_empty("en", "America/New_York").expect("Failed to get empty workbook");
+    let mut ws = new_workspace();
     ws.book
         .edit_current_cell("foo")
         .expect("failed to edit cell");
@@ -772,8 +754,7 @@ fn test_clear_cell_all() {
 
 #[test]
 fn test_sheet_navigation() {
-    let mut ws =
-        Workspace::new_empty("en", "America/New_York").expect("Failed to get empty workbook");
+    let mut ws = new_workspace();
     ws.book
         .new_sheet(Some("sheet 2"))
         .expect("Failed to set sheet name");
@@ -804,8 +785,7 @@ fn test_sheet_navigation() {
 
 #[test]
 fn test_sheet_column_sizing() {
-    let mut ws =
-        Workspace::new_empty("en", "America/New_York").expect("Failed to get empty workbook");
+    let mut ws = new_workspace();
     InputScript::default()
         .char('3')
         .ctrl('l')
@@ -839,8 +819,7 @@ fn test_quit() {
 
 #[test]
 fn test_cell_replace() {
-    let mut ws =
-        Workspace::new_empty("en", "America/New_York").expect("Failed to get empty workbook");
+    let mut ws = new_workspace();
     ws.book
         .edit_current_cell("foo")
         .expect("Failed to edit current cell");
@@ -870,8 +849,7 @@ fn test_cell_replace() {
 
 macro_rules! assert_command_finish {
     ($script : expr) => {
-        let mut ws =
-            Workspace::new_empty("en", "America/New_York").expect("Failed to get empty workbook");
+    let mut ws = new_workspace();
         assert_eq!(Some(&Modality::Navigate), ws.state.modality_stack.last());
         InputScript::default()
             .char(':')
@@ -897,8 +875,7 @@ fn test_command_mode_enter() {
 
 #[test]
 fn test_edit_mode_paste() {
-    let mut ws =
-        Workspace::new_empty("en", "America/New_York").expect("Failed to get empty workbook");
+    let mut ws = new_workspace();
     assert_eq!(Some(&Modality::Navigate), ws.state.modality_stack.last());
     ws.state.range_select.start = Some(Address { row: 1, col: 1, });
     ws.state.range_select.end = Some(Address { row: 2, col: 2, });
@@ -910,4 +887,27 @@ fn test_edit_mode_paste() {
         .expect("Failed to handle input script");
     assert_eq!(Some(&Modality::CellEdit), ws.state.modality_stack.last());
     assert_eq!(vec!["A1:B2".to_string()], ws.text_area.into_lines());
+}
+
+#[test]
+fn test_range_select_esc() {
+    let mut ws = new_workspace();
+    assert_eq!(Some(&Modality::Navigate), ws.state.modality_stack.last());
+    InputScript::default().char('v').run(&mut ws).expect("Failed to handle script");
+    assert_eq!(Some(&Modality::RangeSelect), ws.state.modality_stack.last());
+    InputScript::default().esc().run(&mut ws).expect("Failed to handle script");
+    assert_eq!(Some(&Modality::Navigate), ws.state.modality_stack.last());
+    InputScript::default().char('v').chars("123").run(&mut ws)
+        .expect("Failed to handle script");
+    assert_eq!(Some(&Modality::RangeSelect), ws.state.modality_stack.last());
+    assert_eq!(3, ws.state.numeric_prefix.len());
+    InputScript::default().esc().run(&mut ws).expect("Failed to handle script");
+    assert_eq!(Some(&Modality::RangeSelect), ws.state.modality_stack.last());
+    assert_eq!(0, ws.state.numeric_prefix.len());
+    InputScript::default().esc().run(&mut ws).expect("Failed to handle script");
+    assert_eq!(Some(&Modality::Navigate), ws.state.modality_stack.last());
+}
+
+fn new_workspace<'a>() -> Workspace<'a> {
+    Workspace::new_empty("en", "America/New_York").expect("Failed to get empty workbook")
 }
