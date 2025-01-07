@@ -17,6 +17,10 @@ impl InputScript {
         self.event(construct_key_event(KeyCode::Char(c)))
     }
 
+    pub fn chars(self, cs: &str) -> Self {
+        cs.chars().fold(self, |s, c| s.char(c))
+    }
+
     pub fn ctrl(self, c: char) -> Self {
         self.modified_char(c, KeyModifiers::CONTROL)
     }
@@ -849,16 +853,14 @@ fn test_cell_replace() {
 
 macro_rules! assert_command_finish {
     ($script : expr) => {
-    let mut ws = new_workspace();
+        let mut ws = new_workspace();
         assert_eq!(Some(&Modality::Navigate), ws.state.modality_stack.last());
         InputScript::default()
             .char(':')
             .run(&mut ws)
             .expect("Failed to handle ':' key");
         assert_eq!(Some(&Modality::Command), ws.state.modality_stack.last());
-        $script
-            .run(&mut ws)
-            .expect("Failed to handle script");
+        $script.run(&mut ws).expect("Failed to handle script");
         assert_eq!(Some(&Modality::Navigate), ws.state.modality_stack.last());
     };
 }
@@ -877,8 +879,8 @@ fn test_command_mode_enter() {
 fn test_edit_mode_paste() {
     let mut ws = new_workspace();
     assert_eq!(Some(&Modality::Navigate), ws.state.modality_stack.last());
-    ws.state.range_select.start = Some(Address { row: 1, col: 1, });
-    ws.state.range_select.end = Some(Address { row: 2, col: 2, });
+    ws.state.range_select.start = Some(Address { row: 1, col: 1 });
+    ws.state.range_select.end = Some(Address { row: 2, col: 2 });
     dbg!(ws.selected_range_to_string());
     InputScript::default()
         .char('e')
@@ -893,20 +895,198 @@ fn test_edit_mode_paste() {
 fn test_range_select_esc() {
     let mut ws = new_workspace();
     assert_eq!(Some(&Modality::Navigate), ws.state.modality_stack.last());
-    InputScript::default().char('v').run(&mut ws).expect("Failed to handle script");
+    InputScript::default()
+        .char('v')
+        .run(&mut ws)
+        .expect("Failed to handle script");
     assert_eq!(Some(&Modality::RangeSelect), ws.state.modality_stack.last());
-    InputScript::default().esc().run(&mut ws).expect("Failed to handle script");
+    InputScript::default()
+        .esc()
+        .run(&mut ws)
+        .expect("Failed to handle script");
     assert_eq!(Some(&Modality::Navigate), ws.state.modality_stack.last());
-    InputScript::default().char('v').chars("123").run(&mut ws)
+    InputScript::default()
+        .char('v')
+        .chars("123")
+        .run(&mut ws)
         .expect("Failed to handle script");
     assert_eq!(Some(&Modality::RangeSelect), ws.state.modality_stack.last());
     assert_eq!(3, ws.state.numeric_prefix.len());
-    InputScript::default().esc().run(&mut ws).expect("Failed to handle script");
+    InputScript::default()
+        .esc()
+        .run(&mut ws)
+        .expect("Failed to handle script");
     assert_eq!(Some(&Modality::RangeSelect), ws.state.modality_stack.last());
     assert_eq!(0, ws.state.numeric_prefix.len());
-    InputScript::default().esc().run(&mut ws).expect("Failed to handle script");
+    InputScript::default()
+        .esc()
+        .run(&mut ws)
+        .expect("Failed to handle script");
     assert_eq!(Some(&Modality::Navigate), ws.state.modality_stack.last());
 }
+
+macro_rules! assert_range_clear {
+    ($script : expr) => {{
+        let mut ws = new_workspace();
+        assert_eq!(Some(&Modality::Navigate), ws.state.modality_stack.last());
+        let first_corner = Address { row: 1, col: 1 };
+        let second_corner = Address { row: 2, col: 2 };
+        ws.book
+            .update_cell(&first_corner, "foo")
+            .expect("Failed to update cell");
+        ws.book
+            .update_cell(&second_corner, "bar")
+            .expect("Failed to update cell");
+        assert_eq!(
+            "foo".to_string(),
+            ws.book
+                .get_cell_addr_contents(&first_corner)
+                .expect("failed to get cell contents")
+        );
+        assert_eq!(
+            "bar".to_string(),
+            ws.book
+                .get_cell_addr_contents(&second_corner)
+                .expect("failed to get cell contents")
+        );
+        InputScript::default()
+            .char('v')
+            .run(&mut ws)
+            .expect("Failed to handle script");
+        assert_eq!(Some(&Modality::RangeSelect), ws.state.modality_stack.last());
+        $script.run(&mut ws)
+            .expect("Failed to handle script");
+        assert_eq!(
+            "".to_string(),
+            ws.book
+                .get_cell_addr_contents(&first_corner)
+                .expect("failed to get cell contents")
+        );
+        assert_eq!(
+            "".to_string(),
+            ws.book
+                .get_cell_addr_contents(&second_corner)
+                .expect("failed to get cell contents")
+        );
+    }};
+}
+
+#[test]
+fn test_range_select_clear_upper_d() {
+    assert_range_clear!(InputScript::default()
+        .char('j')
+        .char('l')
+        .char('D'));
+}
+
+#[test]
+fn test_range_select_movement() {
+    let mut ws = new_workspace();
+    ws.book.new_sheet(Some("s2")).expect("Unable create s2 sheet");
+    ws.book.new_sheet(Some("s3")).expect("Unable create s3 sheet");
+    InputScript::default().ctrl('r').run(&mut ws)
+        .expect("failed to run script");
+    assert_eq!(Some(&Modality::RangeSelect), ws.state.modality_stack.last());
+    InputScript::default()
+        .char('3')
+        .char('j')
+        .char('3')
+        .char('l')
+        .char('1')
+        .char('h')
+        .char('1')
+        .char('k')
+        .run(&mut ws)
+        .expect("failed to run script");
+    assert_eq!(&Address { row: 3, col: 3 }, &ws.book.location);
+    assert_eq!(0, ws.book.current_sheet);
+    InputScript::default()
+        .ctrl('n')
+        .run(&mut ws)
+        .expect("Unable to run script");
+    assert_eq!(1, ws.book.current_sheet);
+    InputScript::default()
+        .ctrl('p')
+        .run(&mut ws)
+        .expect("Unable to run script");
+    assert_eq!(0, ws.book.current_sheet);
+}
+
+#[test]
+fn test_range_select_clear_lower_d() {
+    assert_range_clear!(InputScript::default()
+        .char('j')
+        .char('l')
+        .char('d'));
+}
+
+macro_rules! assert_range_copy {
+    ($script: expr) => {{
+        let mut ws = new_workspace();
+        let top_left_addr = Address { row: 2, col: 2 };
+        let bot_right_addr = Address { row: 4, col: 4 };
+        ws.book.update_cell(&top_left_addr, "top_left").expect("Failed to update top left");
+        ws.book.update_cell(&bot_right_addr, "bot_right").expect("Failed to update top left");
+        assert!(ws.state.clipboard.is_none());
+        InputScript::default()
+            .ctrl('r')
+            .char('j')
+            .char('l')
+            .char(' ')
+            .run(&mut ws)
+            .expect("failed to run script");
+        assert_eq!(&top_left_addr, ws.state.range_select.start.as_ref().expect("Didn't find a start of range"));
+        InputScript::default()
+            .char('2')
+            .char('j')
+            .char('2')
+            .char('l')
+            .run(&mut ws)
+            .expect("failed to run script");
+        assert_eq!(&bot_right_addr, ws.state.range_select.end.as_ref().expect("Didn't find a start of range"));
+        assert_eq!(&Address { row: 1, col: 1}, ws.state.range_select.original_location
+            .as_ref().expect("Expected an original location"));
+        assert_eq!(0, ws.state.range_select.original_sheet.
+            expect("Expected an original sheet"));
+        assert_eq!(Some(&Modality::RangeSelect), ws.state.modality_stack.iter().last());
+        dbg!(ws.state.range_select.get_range());
+        $script.run(&mut ws)
+            .expect("failed to run script");
+        assert!(ws.state.clipboard.is_some());
+        match ws.state.clipboard.unwrap() {
+            crate::ui::ClipboardContents::Cell(_) => assert!(false, "Not rows in Clipboard"),
+            crate::ui::ClipboardContents::Range(rows) => {
+                assert_eq!(vec![
+                    vec!["top_left".to_string(), "".to_string(), "".to_string()],
+                    vec!["".to_string(), "".to_string(), "".to_string()],
+                    vec!["".to_string(), "".to_string(), "bot_right".to_string()],
+                ], rows);
+            },
+        }
+        assert_eq!(Some(&Modality::Navigate), ws.state.modality_stack.iter().last());
+    }};
+}
+
+#[test]
+fn test_range_select_copy_c() {
+    assert_range_copy!(InputScript::default().ctrl('c'));
+}
+
+#[test]
+fn test_range_select_copy_y() {
+    assert_range_copy!(InputScript::default().char('y'));
+}
+
+#[test]
+fn test_range_select_copy_capital_y() {
+    assert_range_copy!(InputScript::default().char('Y'));
+}
+
+#[test]
+fn test_range_select_copy_capital_c() {
+    assert_range_copy!(InputScript::default().ctrl('C'));
+}
+
 
 fn new_workspace<'a>() -> Workspace<'a> {
     Workspace::new_empty("en", "America/New_York").expect("Failed to get empty workbook")

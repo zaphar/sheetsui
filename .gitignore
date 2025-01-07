@@ -2,3 +2,4 @@
 result/
 *.json
 tarpaulin-report.*
+*.profraw
