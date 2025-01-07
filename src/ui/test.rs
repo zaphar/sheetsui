@@ -1087,6 +1087,21 @@ fn test_range_select_copy_capital_c() {
     assert_range_copy!(InputScript::default().ctrl('C'));
 }
 
+#[test]
+fn test_extend_to_range() {
+    let mut ws = new_workspace();
+    ws.book.edit_current_cell("=B1+1").expect("Failed to edit cell");
+    ws.book.evaluate();
+    InputScript::default()
+        .char('v')
+        .char('j')
+        .char('x')
+        .run(&mut ws)
+        .expect("Unable to run script");
+    let extended_cell = ws.book.get_cell_addr_contents(&Address { row: 2, col: 1 })
+        .expect("Failed to get cell contents");
+    assert_eq!("=B2+1".to_string(), extended_cell);
+}
 
 fn new_workspace<'a>() -> Workspace<'a> {
     Workspace::new_empty("en", "America/New_York").expect("Failed to get empty workbook")
