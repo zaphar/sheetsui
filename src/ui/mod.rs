@@ -549,7 +549,9 @@ impl<'ws> Workspace<'ws> {
                     self.maybe_update_range_end();
                 }
                 KeyCode::Char(' ') | KeyCode::Enter => {
-                    self.update_range_selection()?;
+                    if self.update_range_selection()? {
+                        self.exit_range_select_mode()?;
+                    }
                 }
                 KeyCode::Char('n') if key.modifiers == KeyModifiers::CONTROL => {
                     self.state.range_select.reset_range_selection();
@@ -570,16 +572,24 @@ impl<'ws> Workspace<'ws> {
                 KeyCode::Char('C')
                     if key
                         .modifiers
-                        .contains(KeyModifiers::CONTROL | KeyModifiers::SHIFT) =>
+                        .contains(KeyModifiers::CONTROL) =>
                 {
                     // TODO(zaphar): Share the algorithm below between both copies
                     self.copy_range(true)?;
+                    self.exit_range_select_mode()?;
                 }
-                KeyCode::Char('Y') => self.copy_range(true)?,
+                KeyCode::Char('Y') => {
+                    self.copy_range(true)?;
+                    self.exit_range_select_mode()?;
+                }
                 KeyCode::Char('c') if key.modifiers == KeyModifiers::CONTROL => {
                     self.copy_range(false)?;
+                    self.exit_range_select_mode()?;
                 }
-                KeyCode::Char('y') => self.copy_range(false)?,
+                KeyCode::Char('y') => {
+                    self.copy_range(false)?;
+                    self.exit_range_select_mode()?;
+                }
                 KeyCode::Char('x') => {
                     if let (Some(from), Some(to)) = (self.state.range_select.start.as_ref(), self.state.range_select.end.as_ref()) {
                         self.book.extend_to(from, to)?;
@@ -627,17 +637,17 @@ impl<'ws> Workspace<'ws> {
                 }));
             }
         }
-        self.exit_range_select_mode()?;
         Ok(())
     }
 
-    fn update_range_selection(&mut self) -> Result<(), anyhow::Error> {
+    fn update_range_selection(&mut self) -> Result<bool, anyhow::Error> {
         Ok(if self.state.range_select.start.is_none() {
             self.state.range_select.start = Some(self.book.location.clone());
             self.state.range_select.end = Some(self.book.location.clone());
+            false
         } else {
             self.state.range_select.end = Some(self.book.location.clone());
-            self.exit_range_select_mode()?;
+            true
         })
     }
 
@@ -692,7 +702,7 @@ impl<'ws> Workspace<'ws> {
                 KeyCode::Char('C')
                     if key
                         .modifiers
-                        .contains(KeyModifiers::CONTROL | KeyModifiers::SHIFT) =>
+                        .contains(KeyModifiers::CONTROL) =>
                 {
                     self.state.clipboard = Some(ClipboardContents::Cell(
                         self.book.get_current_cell_rendered()?,
