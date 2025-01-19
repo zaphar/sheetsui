@@ -3,7 +3,7 @@ use std::cmp::max;
 use anyhow::{anyhow, Result};
 use ironcalc::{
     base::{
-        types::{SheetData, Worksheet},
+        types::{CellStyleXfs, CellStyles, SheetData, Style, Worksheet},
         worksheet::WorksheetDimension,
         Model,
     },
@@ -238,6 +238,17 @@ impl Book {
     /// Get a cells formatted content.
     pub fn get_current_cell_rendered(&self) -> Result<String> {
         Ok(self.get_cell_addr_rendered(&self.location)?)
+    }
+
+    pub fn get_cell_style(&self, sheet: u32, cell: &Address) -> Option<Style> {
+        // TODO(jwall): This is modeled a little weird. We should probably record
+        // the error *somewhere* but for the user there is nothing to be done except
+        // not use a style.
+        match self.model.get_style_for_cell(sheet, cell.row as i32, cell.col as i32)
+        {
+            Err(e) => None,
+            Ok(s) => Some(s),
+        }
     }
 
     /// Get a cells rendered content for display.

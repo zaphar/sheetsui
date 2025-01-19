@@ -159,7 +159,7 @@ impl<'ws> Viewport<'ws> {
                                 .book
                                 .get_cell_addr_rendered(&Address { row: ri, col: *ci })
                                 .unwrap();
-                            self.compute_cell_style(ri, ci, Cell::new(Text::raw(content)))
+                            self.compute_cell_style(ri, *ci, Cell::new(Text::raw(content)))
                         },
                     ));
                     Row::new(cells)
@@ -192,26 +192,68 @@ impl<'ws> Viewport<'ws> {
             .flex(Flex::Start))
     }
 
-    fn compute_cell_style<'widget>(&self, ri: usize, ci: &usize, mut cell: Cell<'widget>) -> Cell<'widget> {
+    fn compute_cell_style<'widget>(&self, ri: usize, ci: usize, mut cell: Cell<'widget>) -> Cell<'widget> {
+        let style = self.book.get_cell_style(self.book.current_sheet, &Address { row: ri, col: ci, });
+        let bg_color = map_color(style.as_ref().map(|s| s.fill.bg_color.as_ref()).flatten(), Color::Rgb(35, 33, 54));
+        let fg_color = map_color(style.as_ref().map(|s| s.fill.fg_color.as_ref()).flatten(), Color::White);
         if let Some((start, end)) =
             &self.range_selection.map_or(None, |r| r.get_range())
         {
             if ri >= start.row
                 && ri <= end.row
-                && *ci >= start.col
-                && *ci <= end.col
+                && ci >= start.col
+                && ci <= end.col
             {
                 // This is a selected range
                 cell = cell.fg(Color::Black).bg(Color::LightBlue)
             }
+        } else {
+            cell = cell.bg(bg_color).fg(fg_color);
         }
-        match (self.book.location.row == ri, self.book.location.col == *ci) {
+        match (self.book.location.row == ri, self.book.location.col == ci) {
             (true, true) => cell.fg(Color::White).bg(Color::Rgb(57, 61, 71)),
             // TODO(zaphar): Support ironcalc style options
             _ => cell,
         }
         .bold()
     }
+}
+
+pub(crate) fn map_color(color: Option<&String>, otherwise: Color) -> Color {
+    color.map(|s| match s.to_lowercase().as_str() {
+        "red" => Color::Red,
+        "blue" => Color::Blue,
+        "green" => Color::Green,
+        "magenta" => Color::Magenta,
+        "cyan" => Color::Cyan,
+        "white" => Color::White,
+        "yellow" => Color::Yellow,
+        "black" => Color::Black,
+        "gray" | "grey" => Color::Gray,
+        "lightred" => Color::LightRed,
+        "lightblue" => Color::LightBlue,
+        "lightgreen" => Color::LightGreen,
+        "lightmagenta" => Color::LightMagenta,
+        "lightcyan" => Color::LightCyan,
+        "lightyellow" => Color::LightYellow,
+        "darkgrey" | "darkgray" => Color::DarkGray,
+        candidate => {
+            // TODO(jeremy): Should we support more syntaxes than hex string?
+            // hsl(...) ??
+            // rgb(...) ??
+            if candidate.starts_with("#") {
+                if let Ok(rgb) = colorsys::Rgb::from_hex_str(candidate) {
+                    // Note that the colorsys rgb model clamps the f64 values to no more 
+                    // than 255.0 so the below casts are safe.
+                    Color::Rgb(rgb.red() as u8, rgb.green() as u8, rgb.blue() as u8)
+                } else {
+                    otherwise
+                }
+            } else {
+                otherwise
+            }
+        }
+    }).unwrap_or(otherwise)
 }
 
 impl<'ws> StatefulWidget for Viewport<'ws> {
