@@ -46,6 +46,7 @@ table and between the sheets using the following keybinds:
 * `k` ⬆️, will move one cell up.
 * `d` will delete the contents of the selected cell leaving style untouched
 * `D` will delete the contents of the selected cell including any style
+* `gg` will go to the top row in the current column
 
 **Sheet Navigation**
 

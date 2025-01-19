@@ -294,6 +294,9 @@ impl<'ws> Workspace<'ws> {
     }
 
     fn render_help_text(&self) -> Vec<String> {
+        // TODO(zaphar): We should be sourcing these from our actual help documentation.
+        // Ideally we would also render the markdown content properly.
+        // https://github.com/zaphar/sheetsui/issues/22
         match self.state.modality() {
             Modality::Navigate => vec![
                 "Navigate Mode:".to_string(),
