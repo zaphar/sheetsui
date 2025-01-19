@@ -159,24 +159,7 @@ impl<'ws> Viewport<'ws> {
                                 .book
                                 .get_cell_addr_rendered(&Address { row: ri, col: *ci })
                                 .unwrap();
-                            let mut cell = Cell::new(Text::raw(content));
-                            if let Some((start, end)) =
-                                &self.range_selection.map_or(None, |r| r.get_range())
-                            {
-                                if ri >= start.row
-                                    && ri <= end.row
-                                    && *ci >= start.col
-                                    && *ci <= end.col
-                                {
-                                    // This is a selected range
-                                    cell = cell.fg(Color::Black).bg(Color::LightBlue)
-                                }
-                            }
-                            match (self.book.location.row == ri, self.book.location.col == *ci) {
-                                (true, true) => cell.fg(Color::White).bg(Color::Rgb(57, 61, 71)),
-                                _ => cell,
-                            }
-                            .bold()
+                            self.compute_cell_style(ri, ci, Cell::new(Text::raw(content)))
                         },
                     ));
                     Row::new(cells)
@@ -207,6 +190,27 @@ impl<'ws> Viewport<'ws> {
             .header(Row::new(header).underlined())
             .column_spacing(0)
             .flex(Flex::Start))
+    }
+
+    fn compute_cell_style<'widget>(&self, ri: usize, ci: &usize, mut cell: Cell<'widget>) -> Cell<'widget> {
+        if let Some((start, end)) =
+            &self.range_selection.map_or(None, |r| r.get_range())
+        {
+            if ri >= start.row
+                && ri <= end.row
+                && *ci >= start.col
+                && *ci <= end.col
+            {
+                // This is a selected range
+                cell = cell.fg(Color::Black).bg(Color::LightBlue)
+            }
+        }
+        match (self.book.location.row == ri, self.book.location.col == *ci) {
+            (true, true) => cell.fg(Color::White).bg(Color::Rgb(57, 61, 71)),
+            // TODO(zaphar): Support ironcalc style options
+            _ => cell,
+        }
+        .bold()
     }
 }
 
