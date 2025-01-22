@@ -465,6 +465,21 @@ impl<'ws> Workspace<'ws> {
             Ok(Some(Cmd::Quit)) => {
                 Ok(Some(ExitCode::SUCCESS))
             }
+            Ok(Some(Cmd::ColorRows(_count, _color))) => {
+                Ok(Some(ExitCode::FAILURE))
+            }
+            Ok(Some(Cmd::ColorColumns(_count, _color))) => {
+                Ok(Some(ExitCode::FAILURE))
+            }
+            Ok(Some(Cmd::ColorCell(color))) => {
+                let address = self.book.location.clone();
+                let sheet = self.book.current_sheet;
+                let mut style = self.book.get_cell_style(sheet, &address)
+                    .expect("I think this should be impossible.").clone();
+                style.fill.bg_color = Some(color.to_string());
+                self.book.set_cell_style(&style, sheet, &address)?;
+                Ok(None)
+            }
             Ok(None) => {
                 self.enter_dialog_mode(vec![format!("Unrecognized commmand {}", cmd_text)]);
                 Ok(None)

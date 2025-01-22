@@ -251,6 +251,12 @@ impl Book {
         }
     }
 
+    pub fn set_cell_style(&mut self, style: &Style, sheet: u32, cell: &Address) -> Result<()> {
+        self.model.set_cell_style(sheet, cell.row as i32, cell.col as i32, style)
+            .map_err(|s| anyhow!("Unable to format cell {}", s))?;
+        Ok(())
+    }
+
     /// Get a cells rendered content for display.
     pub fn get_cell_addr_rendered(&self, Address { row, col }: &Address) -> Result<String> {
         Ok(self

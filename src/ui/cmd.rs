@@ -7,6 +7,9 @@ pub enum Cmd<'a> {
     Write(Option<&'a str>),
     InsertRows(usize),
     InsertColumns(usize),
+    ColorRows(usize, &'a str),
+    ColorColumns(usize, &'a str),
+    ColorCell(&'a str),
     RenameSheet(Option<usize>, &'a str),
     NewSheet(Option<&'a str>),
     SelectSheet(&'a str),
@@ -49,6 +52,9 @@ pub fn parse<'cmd, 'i: 'cmd>(input: &'i str) -> Result<Option<Cmd<'cmd>>, &'stat
         return Ok(Some(cmd));
     }
     if let Some(cmd) = try_consume_rename_sheet(cursor.clone())? {
+        return Ok(Some(cmd));
+    }
+    if let Some(cmd) = try_consume_color_cell(cursor.clone())? {
         return Ok(Some(cmd));
     }
     Ok(None)
@@ -136,6 +142,28 @@ fn try_consume_select_sheet<'cmd, 'i: 'cmd>(
         return Err("Invalid command: Did you forget the sheet name? `select-sheet <sheet-name>`?");
     }
     return Ok(Some(Cmd::SelectSheet(arg)));
+}
+
+fn try_consume_color_cell<'cmd, 'i: 'cmd>(
+    mut input: StrCursor<'i>,
+) -> Result<Option<Cmd<'cmd>>, &'static str> {
+    const SHORT: &'static str = "cc";
+    const LONG: &'static str = "color-cell";
+    if compare(input.clone(), LONG) {
+        input.seek(LONG.len());
+    } else if compare(input.clone(), SHORT) {
+        input.seek(SHORT.len());
+    } else {
+        return Ok(None);
+    };
+    if input.remaining() > 0 && !is_ws(&mut input) {
+        return Err("Invalid command: Did you mean to type `color-cell <color>`?");
+    }
+    let arg = input.span(0..).trim();
+    if arg.len() == 0 {
+        return Err("Invalid command: Did you mean to type `color-cell <color>`?");
+    }
+    return Ok(Some(Cmd::ColorCell(arg)));
 }
 
 fn try_consume_insert_row<'cmd, 'i: 'cmd>(
