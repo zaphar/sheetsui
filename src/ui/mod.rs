@@ -466,10 +466,26 @@ impl<'ws> Workspace<'ws> {
                 Ok(Some(ExitCode::SUCCESS))
             }
             Ok(Some(Cmd::ColorRows(_count, _color))) => {
-                Ok(Some(ExitCode::FAILURE))
+                let row = self.book.location.row;
+                let mut style = if let Some(style) = self.book.get_row_style(self.book.current_sheet, row)? {
+                    style
+                } else {
+                    self.book.create_style()
+                };
+                style.fill.bg_color = Some(_color.to_string());
+                self.book.set_row_style(&style, self.book.current_sheet, row)?;
+                Ok(None)
             }
             Ok(Some(Cmd::ColorColumns(_count, _color))) => {
-                Ok(Some(ExitCode::FAILURE))
+                let col = self.book.location.col;
+                let mut style = if let Some(style) = self.book.get_column_style(self.book.current_sheet, col)? {
+                    style
+                } else {
+                    self.book.create_style()
+                };
+                style.fill.bg_color = Some(_color.to_string());
+                self.book.set_col_style(&style, self.book.current_sheet, col)?;
+                Ok(None)
             }
             Ok(Some(Cmd::ColorCell(color))) => {
                 let address = self.book.location.clone();
