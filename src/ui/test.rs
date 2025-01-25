@@ -260,6 +260,51 @@ fn test_cmd_rename_sheet_with_idx_and_name() {
 }
 
 #[test]
+fn test_cmd_color_rows_with_color() {
+    let input = "color-rows red";
+    let result = parse(input);
+    assert!(result.is_ok());
+    let output = result.unwrap();
+    assert!(output.is_some());
+    let cmd = output.unwrap();
+    assert_eq!(cmd, Cmd::ColorRows(None, "red"));
+}
+
+#[test]
+fn test_cmd_color_rows_with_idx_and_color() {
+    let input = "color-rows 1 red";
+    let result = parse(input);
+    assert!(result.is_ok());
+    let output = result.unwrap();
+    assert!(output.is_some());
+    let cmd = output.unwrap();
+    assert_eq!(cmd, Cmd::ColorRows(Some(1), "red"));
+}
+
+#[test]
+fn test_cmd_color_columns_with_color() {
+    let input = "color-columns red";
+    let result = parse(input);
+    assert!(result.is_ok());
+    let output = result.unwrap();
+    assert!(output.is_some());
+    let cmd = output.unwrap();
+    assert_eq!(cmd, Cmd::ColorColumns(None, "red"));
+}
+
+#[test]
+fn test_cmd_color_columns_with_idx_and_color() {
+    let input = "color-columns 1 red";
+    let result = parse(input);
+    assert!(result.is_ok());
+    let output = result.unwrap();
+    assert!(output.is_some());
+    let cmd = output.unwrap();
+    assert_eq!(cmd, Cmd::ColorColumns(Some(1), "red"));
+}
+
+
+#[test]
 fn test_input_navitation_enter_key() {
     let mut ws = new_workspace();
     let row = ws.book.location.row;

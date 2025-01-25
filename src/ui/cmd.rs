@@ -7,8 +7,8 @@ pub enum Cmd<'a> {
     Write(Option<&'a str>),
     InsertRows(usize),
     InsertColumns(usize),
-    ColorRows(usize, &'a str),
-    ColorColumns(usize, &'a str),
+    ColorRows(Option<usize>, &'a str),
+    ColorColumns(Option<usize>, &'a str),
     ColorCell(&'a str),
     RenameSheet(Option<usize>, &'a str),
     NewSheet(Option<&'a str>),
@@ -52,6 +52,12 @@ pub fn parse<'cmd, 'i: 'cmd>(input: &'i str) -> Result<Option<Cmd<'cmd>>, &'stat
         return Ok(Some(cmd));
     }
     if let Some(cmd) = try_consume_rename_sheet(cursor.clone())? {
+        return Ok(Some(cmd));
+    }
+    if let Some(cmd) = try_consume_color_rows(cursor.clone())? {
+        return Ok(Some(cmd));
+    }
+    if let Some(cmd) = try_consume_color_columns(cursor.clone())? {
         return Ok(Some(cmd));
     }
     if let Some(cmd) = try_consume_color_cell(cursor.clone())? {
@@ -306,9 +312,49 @@ fn try_consume_rename_sheet<'cmd, 'i: 'cmd>(
     let (idx, rest) = try_consume_usize(input.clone());
     let arg = rest.span(0..).trim();
     if arg.is_empty() {
-        return Err("Invalid command: `rename-sheet` requires a sheet name argument?");
+        return Err("Invalid command: `rename-sheet` requires a sheet name argument");
     }
     return Ok(Some(Cmd::RenameSheet(idx, arg)));
+}
+
+fn try_consume_color_rows<'cmd, 'i: 'cmd>(
+    mut input: StrCursor<'i>,
+) -> Result<Option<Cmd<'cmd>>, &'static str> {
+    const LONG: &'static str = "color-rows";
+    if compare(input.clone(), LONG) {
+        input.seek(LONG.len());
+    } else {
+        return Ok(None);
+    }
+    if input.remaining() > 0 && !is_ws(&mut input) {
+        return Err("Invalid command: Did you mean to type `color-rows [count] <color>`?");
+    }
+    let (idx, rest) = try_consume_usize(input.clone());
+    let arg = rest.span(0..).trim();
+    if arg.is_empty() {
+        return Err("Invalid command: `color-rows` requires a color argument");
+    }
+    return Ok(Some(Cmd::ColorRows(idx, arg)));
+}
+
+fn try_consume_color_columns<'cmd, 'i: 'cmd>(
+    mut input: StrCursor<'i>,
+) -> Result<Option<Cmd<'cmd>>, &'static str> {
+    const LONG: &'static str = "color-columns";
+    if compare(input.clone(), LONG) {
+        input.seek(LONG.len());
+    } else {
+        return Ok(None);
+    }
+    if input.remaining() > 0 && !is_ws(&mut input) {
+        return Err("Invalid command: Did you mean to type `color-columns [count] <color>`?");
+    }
+    let (idx, rest) = try_consume_usize(input.clone());
+    let arg = rest.span(0..).trim();
+    if arg.is_empty() {
+        return Err("Invalid command: `color-columns` requires a color argument");
+    }
+    return Ok(Some(Cmd::ColorColumns(idx, arg)));
 }
 
 fn try_consume_usize<'cmd, 'i: 'cmd>(
