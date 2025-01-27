@@ -323,9 +323,13 @@ impl Book {
 
     pub fn set_col_style(&mut self, style: &Style, sheet: u32, col: usize) -> Result<()> {
         let idx = self.create_or_get_style_idx(style);
-        self.model.workbook.worksheet_mut(sheet)
-            .map_err(|e| anyhow!("{}", e))?
-            .set_column_style(col as i32, idx)
+        let sheet = self.model.workbook.worksheet_mut(sheet)
+            .map_err(|e| anyhow!("{}", e))?;
+        let width = sheet.get_column_width(col as i32)
+            .map_err(|e| anyhow!("{}", e))?;
+        sheet.set_column_style(col as i32, idx)
+            .map_err(|e| anyhow!("{}", e))?;
+        sheet.set_column_width(col as i32, width)
             .map_err(|e| anyhow!("{}", e))?;
         Ok(())
     }
