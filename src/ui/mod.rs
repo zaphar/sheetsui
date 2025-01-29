@@ -465,6 +465,56 @@ impl<'ws> Workspace<'ws> {
             Ok(Some(Cmd::Quit)) => {
                 Ok(Some(ExitCode::SUCCESS))
             }
+            Ok(Some(Cmd::ColorRows(_count, color))) => {
+                let row_count = _count.unwrap_or(1);
+                let row = self.book.location.row;
+                for r in row..(row+row_count) {
+                    let mut style = if let Some(style) = self.book.get_row_style(self.book.current_sheet, r)? {
+                        style
+                    } else {
+                        self.book.create_style()
+                    };
+                    style.fill.bg_color = Some(color.to_string());
+                    self.book.set_row_style(&style, self.book.current_sheet, r)?;
+                }
+                Ok(None)
+            }
+            Ok(Some(Cmd::ColorColumns(_count, color))) => {
+                let col_count = _count.unwrap_or(1);
+                let col = self.book.location.col;
+                for c in col..(col+col_count) {
+                    let mut style = if let Some(style) = self.book.get_column_style(self.book.current_sheet, c)? {
+                        style
+                    } else {
+                        self.book.create_style()
+                    };
+                    style.fill.bg_color = Some(color.to_string());
+                    self.book.set_col_style(&style, self.book.current_sheet, c)?;
+                }
+                Ok(None)
+            }
+            Ok(Some(Cmd::ColorCell(color))) => {
+                if let Some((start, end)) = self.state.range_select.get_range() {
+                    for ri in start.row..=end.row {
+                        for ci in start.col..=end.col {
+                            let address = Address { row: ri, col: ci };
+                            let sheet = self.book.current_sheet;
+                            let mut style = self.book.get_cell_style(sheet, &address)
+                                .expect("I think this should be impossible.").clone();
+                            style.fill.bg_color = Some(color.to_string());
+                            self.book.set_cell_style(&style, sheet, &address)?;
+                        }
+                    }
+                } else {
+                    let address = self.book.location.clone();
+                    let sheet = self.book.current_sheet;
+                    let mut style = self.book.get_cell_style(sheet, &address)
+                        .expect("I think this should be impossible.").clone();
+                    style.fill.bg_color = Some(color.to_string());
+                    self.book.set_cell_style(&style, sheet, &address)?;
+                }
+                Ok(None)
+            }
             Ok(None) => {
                 self.enter_dialog_mode(vec![format!("Unrecognized commmand {}", cmd_text)]);
                 Ok(None)
@@ -598,6 +648,9 @@ impl<'ws> Workspace<'ws> {
                         self.book.extend_to(from, to)?;
                     }
                     self.exit_range_select_mode()?;
+                }
+                KeyCode::Char(':') => {
+                    self.enter_command_mode();
                 }
                 _ => {
                     // moop

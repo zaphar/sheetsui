@@ -3,7 +3,7 @@ use std::cmp::max;
 use anyhow::{anyhow, Result};
 use ironcalc::{
     base::{
-        types::{SheetData, Worksheet},
+        types::{Border, Col, Fill, Font, Row, SheetData, Style, Worksheet},
         worksheet::WorksheetDimension,
         Model,
     },
@@ -238,6 +238,118 @@ impl Book {
     /// Get a cells formatted content.
     pub fn get_current_cell_rendered(&self) -> Result<String> {
         Ok(self.get_cell_addr_rendered(&self.location)?)
+    }
+
+    pub fn get_cell_style(&self, sheet: u32, cell: &Address) -> Option<Style> {
+        // TODO(jwall): This is modeled a little weird. We should probably record
+        // the error *somewhere* but for the user there is nothing to be done except
+        // not use a style.
+        match self.model.get_style_for_cell(sheet, cell.row as i32, cell.col as i32)
+        {
+            Err(_) => None,
+            Ok(s) => Some(s),
+        }
+    }
+
+    fn get_column(&self, sheet: u32, col: usize) -> Result<Option<&Col>> {
+        Ok(self.model.workbook.worksheet(sheet)
+            .map_err(|e| anyhow!("{}", e))?.cols.get(col))
+    }
+
+    fn get_row(&self, sheet: u32, col: usize) -> Result<Option<&Row>> {
+        Ok(self.model.workbook.worksheet(sheet)
+            .map_err(|e| anyhow!("{}", e))?.rows.get(col))
+    }
+
+    pub fn get_column_style(&self, sheet: u32, col: usize) -> Result<Option<Style>> {
+        // TODO(jwall): This is modeled a little weird. We should probably record
+        // the error *somewhere* but for the user there is nothing to be done except
+        // not use a style.
+        if let Some(col) = self.get_column(sheet, col)? {
+            if let Some(style_idx) = col.style.map(|idx| idx as usize) {
+                let styles = &self.model.workbook.styles;
+                if styles.cell_style_xfs.len() <= style_idx {
+                    return Ok(Some(Style {
+                        alignment: None,
+                        num_fmt: styles.num_fmts[style_idx].format_code.clone(),
+                        fill: styles.fills[style_idx].clone(),
+                        font: styles.fonts[style_idx].clone(),
+                        border: styles.borders[style_idx].clone(),
+                        quote_prefix: false,
+                    }));
+                }
+            }
+        }
+        return Ok(None);
+    }
+
+    pub fn get_row_style(&self, sheet: u32, row: usize) -> Result<Option<Style>> {
+        // TODO(jwall): This is modeled a little weird. We should probably record
+        // the error *somewhere* but for the user there is nothing to be done except
+        // not use a style.
+        if let Some(row) = self.get_row(sheet, row)? {
+            let style_idx = row.s as usize;
+            let styles = &self.model.workbook.styles;
+            if styles.cell_style_xfs.len() <= style_idx {
+                return Ok(Some(Style {
+                    alignment: None,
+                    num_fmt: styles.num_fmts[style_idx].format_code.clone(),
+                    fill: styles.fills[style_idx].clone(),
+                    font: styles.fonts[style_idx].clone(),
+                    border: styles.borders[style_idx].clone(),
+                    quote_prefix: false,
+                }));
+            }
+        }
+        return Ok(None);
+    }
+
+    pub fn create_style(&mut self) -> Style {
+        Style {
+            alignment: None,
+            num_fmt: String::new(),
+            fill: Fill::default(),
+            font: Font::default(),
+            border: Border::default(),
+            quote_prefix: false,
+        }
+    }
+
+    pub fn set_cell_style(&mut self, style: &Style, sheet: u32, cell: &Address) -> Result<()> {
+        self.model.set_cell_style(sheet, cell.row as i32, cell.col as i32, style)
+            .map_err(|s| anyhow!("Unable to format cell {}", s))?;
+        Ok(())
+    }
+
+    pub fn set_col_style(&mut self, style: &Style, sheet: u32, col: usize) -> Result<()> {
+        let idx = self.create_or_get_style_idx(style);
+        let sheet = self.model.workbook.worksheet_mut(sheet)
+            .map_err(|e| anyhow!("{}", e))?;
+        let width = sheet.get_column_width(col as i32)
+            .map_err(|e| anyhow!("{}", e))?;
+        sheet.set_column_style(col as i32, idx)
+            .map_err(|e| anyhow!("{}", e))?;
+        sheet.set_column_width(col as i32, width)
+            .map_err(|e| anyhow!("{}", e))?;
+        Ok(())
+    }
+
+    pub fn set_row_style(&mut self, style: &Style, sheet: u32, row: usize) -> Result<()> {
+        let idx = self.create_or_get_style_idx(style);
+        self.model.workbook.worksheet_mut(sheet)
+            .map_err(|e| anyhow!("{}", e))?
+            .set_row_style(row as i32, idx)
+            .map_err(|e| anyhow!("{}", e))?;
+        Ok(())
+    }
+
+    fn create_or_get_style_idx(&mut self, style: &Style) -> i32 {
+        let idx = if let Some(style_idx) = self.model.workbook.styles.get_style_index(style) {
+            style_idx
+        } else {
+            self.model.workbook.styles.create_new_style(style)
+        };
+        idx
     }
 
     /// Get a cells rendered content for display.

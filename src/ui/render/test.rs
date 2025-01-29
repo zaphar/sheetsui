@@ -1,4 +1,5 @@
 use ironcalc::base::Model;
+use ratatui::style::Color;
 
 use crate::ui::AppState;
 
@@ -71,5 +72,32 @@ fn test_viewport_visible_columns_after_length_change() {
             .expect("Failed to get visible columns");
         assert_eq!(1, cols.len());
         assert_eq!(1, cols.last().expect("Failed to get last column").idx);
+    }
+}
+
+#[test]
+fn test_color_mapping() {
+    for (s, c) in [
+        ("red", Color::Red),
+        ("blue", Color::Blue),
+        ("green", Color::Green),
+        ("magenta", Color::Magenta),
+        ("cyan", Color::Cyan),
+        ("white", Color::White),
+        ("yellow", Color::Yellow),
+        ("black", Color::Black),
+        ("gray", Color::Gray),
+        ("grey", Color::Gray),
+        ("lightred", Color::LightRed),
+        ("lightblue", Color::LightBlue),
+        ("lightgreen", Color::LightGreen),
+        ("lightmagenta", Color::LightMagenta),
+        ("lightcyan", Color::LightCyan),
+        ("lightyellow", Color::LightYellow),
+        ("darkgrey", Color::DarkGray),
+        ("darkgray", Color::DarkGray),
+        ("#35f15b", Color::Rgb(53, 241, 91)),
+    ].map(|(s, c)| (Some(s.to_string()), c)) {
+        assert_eq!(super::viewport::map_color(s.as_ref(), Color::Gray), c);
     }
 }
