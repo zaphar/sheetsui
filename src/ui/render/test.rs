@@ -8,7 +8,7 @@ use super::{Address, Book, Viewport, ViewportState};
 #[test]
 fn test_viewport_get_visible_columns() {
     let mut state = ViewportState::default();
-    let book = Book::new(
+    let book = Book::from_model(
         Model::new_empty("test", "en", "America/New_York").expect("Failed to make model"),
     );
     let default_size = book.get_col_size(1).expect("Failed to get column size");
@@ -26,7 +26,7 @@ fn test_viewport_get_visible_columns() {
 #[test]
 fn test_viewport_get_visible_rows() {
     let mut state = dbg!(ViewportState::default());
-    let book = Book::new(
+    let book = Book::from_model(
         Model::new_empty("test", "en", "America/New_York").expect("Failed to make model"),
     );
     let height = 6;
@@ -45,7 +45,7 @@ fn test_viewport_get_visible_rows() {
 #[test]
 fn test_viewport_visible_columns_after_length_change() {
     let mut state = ViewportState::default();
-    let mut book = Book::new(
+    let mut book = Book::from_model(
         Model::new_empty("test", "en", "America/New_York").expect("Failed to make model"),
     );
     let default_size = book.get_col_size(1).expect("Failed to get column size");

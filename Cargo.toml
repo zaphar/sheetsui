@@ -10,7 +10,8 @@ anyhow = { version = "1.0.91", features = ["backtrace"] }
 clap = { version = "4.5.20", features = ["derive"] }
 crossterm = { version = "0.28.1", features = ["event-stream", "serde"] }
 csvx = "0.1.17"
-ironcalc = { git = "https://github.com/ironcalc/IronCalc" }
+# this revision introduces a way to get the Model back out of the UserModel
+ironcalc = { git = "https://github.com/ironcalc/IronCalc?rev=264fcac63cc93b08a4b4a6764815e0c0adf6a53c" }
 futures = "0.3.31"
 ratatui = "0.29.0"
 thiserror = "1.0.65"

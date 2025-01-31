@@ -187,7 +187,7 @@ impl<'ws> Workspace<'ws> {
 
     pub fn new_empty(locale: &str, tz: &str) -> Result<Self> {
         Ok(Self::new(
-            Book::new(Model::new_empty("", locale, tz).map_err(|e| anyhow!("{}", e))?),
+            Book::from_model(Model::new_empty("", locale, tz).map_err(|e| anyhow!("{}", e))?),
             PathBuf::default(),
         ))
     }
