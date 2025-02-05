@@ -3,10 +3,7 @@ use std::cmp::max;
 use anyhow::{anyhow, Result};
 use ironcalc::{
     base::{
-        expressions::types::Area,
-        types::{Border, Col, Fill, Font, Row, SheetData, Style, Worksheet},
-        worksheet::WorksheetDimension,
-        Model, UserModel,
+        calc_result::Range, expressions::types::Area, types::{Border, Col, Fill, Font, Row, SheetData, Style, Worksheet}, worksheet::WorksheetDimension, Model, UserModel
     },
     export::save_xlsx_to_writer,
     import::load_from_xlsx,
@@ -150,12 +147,13 @@ impl Book {
     }
 
     pub fn new_sheet(&mut self, sheet_name: Option<&str>) -> Result<()> {
-        todo!("We need to figure out how to find the new sheet index so we can rename it");
-        //let (_, idx) = self.model.new_sheet();
-        //if let Some(name) = sheet_name {
-        //    self.set_sheet_name(idx as usize, name)?;
-        //}
-        //Ok(())
+        self.model.new_sheet().map_err(|e| anyhow!(e))?;
+        let idx = self.model.get_selected_sheet();
+        if let Some(name) = sheet_name {
+            self.set_sheet_name(idx as usize, name)?;
+        }
+        self.model.set_selected_sheet(self.current_sheet).map_err(|e| anyhow!(e))?;
+        Ok(())
     }
 
     /// Get the sheet data for the current worksheet.
@@ -347,11 +345,12 @@ impl Book {
         }
     }
 
-    pub fn set_cell_style(&mut self, style: &Style, sheet: u32, cell: &Address) -> Result<()> {
-        todo!()
-        //self.model.set_cell_style(sheet, cell.row as i32, cell.col as i32, style)
-        //    .map_err(|s| anyhow!("Unable to format cell {}", s))?;
-        //Ok(())
+    pub fn set_cell_style(&mut self, style: &[(&str, &str)], area: &Area) -> Result<()> {
+        for (path, val) in style {
+            self.model.update_range_style(area, path, val)
+                .map_err(|s| anyhow!("Unable to format cell {}", s))?;
+        }
+        Ok(())
     }
 
     pub fn set_col_style(&mut self, style: &Style, sheet: u32, col: usize) -> Result<()> {
@@ -582,6 +581,7 @@ impl Book {
             .map_err(|s| anyhow!("Invalid Worksheet: {}", s))?
             .name)
     }
+
     pub(crate) fn get_sheet_by_idx_mut(&mut self, idx: usize) -> Result<&mut Worksheet> {
         todo!("Is there a clean way to do this with UserModel?")
         //Ok(self

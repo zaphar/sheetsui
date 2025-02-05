@@ -5,7 +5,7 @@ use crate::book::{AddressRange, Book};
 
 use anyhow::{anyhow, Result};
 use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
-use ironcalc::base::Model;
+use ironcalc::base::{expressions::types::Area, Model};
 use ratatui::{
     buffer::Buffer,
     layout::{Constraint, Flex, Layout},
@@ -494,25 +494,26 @@ impl<'ws> Workspace<'ws> {
                 Ok(None)
             }
             Ok(Some(Cmd::ColorCell(color))) => {
-                if let Some((start, end)) = self.state.range_select.get_range() {
-                    for ri in start.row..=end.row {
-                        for ci in start.col..=end.col {
-                            let address = Address { row: ri, col: ci };
-                            let sheet = self.book.current_sheet;
-                            let mut style = self.book.get_cell_style(sheet, &address)
-                                .expect("I think this should be impossible.").clone();
-                            style.fill.bg_color = Some(color.to_string());
-                            self.book.set_cell_style(&style, sheet, &address)?;
-                        }
+                let sheet = self.book.current_sheet;
+                let area = if let Some((start, end)) = self.state.range_select.get_range() {
+                    Area {
+                        sheet,
+                        row: start.row as i32,
+                        column: start.col as i32,
+                        width: (end.col - start.col) as i32,
+                        height: (end.row - start.row) as i32
                     }
                 } else {
                     let address = self.book.location.clone();
-                    let sheet = self.book.current_sheet;
-                    let mut style = self.book.get_cell_style(sheet, &address)
-                        .expect("I think this should be impossible.").clone();
-                    style.fill.bg_color = Some(color.to_string());
-                    self.book.set_cell_style(&style, sheet, &address)?;
-                }
+                    Area {
+                        sheet,
+                        row: address.row as i32,
+                        column: address.col as i32,
+                        width: 1,
+                        height: 1
+                    }
+                };
+                self.book.set_cell_style(&[("fill.bg_color", color)], &area)?;
                 Ok(None)
             }
             Ok(None) => {
