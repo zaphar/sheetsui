@@ -445,11 +445,11 @@ impl<'ws> Workspace<'ws> {
             Ok(Some(Cmd::RenameSheet(idx, name))) => {
                 match idx {
                     Some(idx) => {
-                        self.book.set_sheet_name(idx, name)?;
+                        self.book.set_sheet_name(idx as u32, name)?;
                     }
                     _ => {
                         self.book
-                            .set_sheet_name(self.book.current_sheet as usize, name)?;
+                            .set_sheet_name(self.book.current_sheet, name)?;
                     }
                 }
                 Ok(None)

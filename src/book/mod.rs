@@ -141,8 +141,8 @@ impl Book {
         Ok(&self.get_sheet()?.name)
     }
 
-    pub fn set_sheet_name(&mut self, idx: usize, sheet_name: &str) -> Result<()> {
-        self.get_sheet_by_idx_mut(idx)?.set_name(sheet_name);
+    pub fn set_sheet_name(&mut self, idx: u32, sheet_name: &str) -> Result<()> {
+        self.model.rename_sheet(idx, sheet_name).map_err(|e| anyhow!(e))?;
         Ok(())
     }
 
@@ -150,7 +150,7 @@ impl Book {
         self.model.new_sheet().map_err(|e| anyhow!(e))?;
         let idx = self.model.get_selected_sheet();
         if let Some(name) = sheet_name {
-            self.set_sheet_name(idx as usize, name)?;
+            self.set_sheet_name(idx, name)?;
         }
         self.model.set_selected_sheet(self.current_sheet).map_err(|e| anyhow!(e))?;
         Ok(())
@@ -353,7 +353,7 @@ impl Book {
         Ok(())
     }
 
-    pub fn set_col_style(&mut self, style: &Style, sheet: u32, col: usize) -> Result<()> {
+    pub fn set_col_style(&mut self, style: &[(&str, &str)], sheet: u32, col: usize) -> Result<()> {
         todo!()
         //let idx = self.create_or_get_style_idx(style);
         //let sheet = self.model.workbook.worksheet_mut(sheet)
@@ -367,7 +367,7 @@ impl Book {
         //Ok(())
     }
 
-    pub fn set_row_style(&mut self, style: &Style, sheet: u32, row: usize) -> Result<()> {
+    pub fn set_row_style(&mut self, style: &[(&str, &str)], sheet: u32, row: usize) -> Result<()> {
         todo!()
         //let idx = self.create_or_get_style_idx(style);
         //self.model.workbook.worksheet_mut(sheet)
@@ -466,16 +466,21 @@ impl Book {
 
     /// Get column size
     pub fn get_col_size(&self, idx: usize) -> Result<usize> {
-        Ok((self
-            .get_sheet()?
-            .get_column_width(idx as i32)
+        self.get_column_size_for_sheet(self.current_sheet, idx)
+    }
+
+    pub fn get_column_size_for_sheet(&self, sheet: u32, idx: usize) -> std::result::Result<usize, anyhow::Error> {
+        Ok((self.model.get_column_width(sheet, idx as i32)
             .map_err(|e| anyhow!("Error getting column width: {:?}", e))?
             / COL_PIXELS) as usize)
     }
 
-    pub fn set_col_size(&mut self, idx: usize, cols: usize) -> Result<()> {
-        self.get_sheet_mut()?
-            .set_column_width(idx as i32, cols as f64 * COL_PIXELS)
+    pub fn set_col_size(&mut self, col: usize, width: usize) -> Result<()> {
+        self.set_column_size_for_sheet(self.current_sheet, col, width)
+    }
+
+    pub fn set_column_size_for_sheet(&mut self, sheet: u32, col: usize, width: usize) -> std::result::Result<(), anyhow::Error> {
+        self.model.set_column_width(sheet, col as i32, width as f64 * COL_PIXELS)
             .map_err(|e| anyhow!("Error setting column width: {:?}", e))?;
         Ok(())
     }
@@ -563,15 +568,6 @@ impl Book {
             .map_err(|s| anyhow!("Invalid Worksheet id: {}: error: {}", self.current_sheet, s))?)
     }
 
-    pub(crate) fn get_sheet_mut(&mut self) -> Result<&mut Worksheet> {
-        todo!("Is there a clean way to do this with UserModel?")
-        //Ok(self
-        //    .model.get_model()
-        //    .workbook
-        //    .worksheet_mut(self.current_sheet)
-        //    .map_err(|s| anyhow!("Invalid Worksheet: {}", s))?)
-    }
-
     pub(crate) fn get_sheet_name_by_idx(&self, idx: usize) -> Result<&str> {
         // TODO(jwall): Is there a cleaner way to do this with UserModel?
         Ok(&self
@@ -580,15 +576,6 @@ impl Book {
             .worksheet(idx as u32)
             .map_err(|s| anyhow!("Invalid Worksheet: {}", s))?
             .name)
-    }
-
-    pub(crate) fn get_sheet_by_idx_mut(&mut self, idx: usize) -> Result<&mut Worksheet> {
-        todo!("Is there a clean way to do this with UserModel?")
-        //Ok(self
-        //    .model
-        //    .workbook
-        //    .worksheet_mut(idx as u32)
-        //    .map_err(|s| anyhow!("Invalid Worksheet: {}", s))?)
     }
 }
 
