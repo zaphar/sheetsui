@@ -7,9 +7,9 @@ pub enum Cmd<'a> {
     Write(Option<&'a str>),
     InsertRows(usize),
     InsertColumns(usize),
-    ColorRows(Option<usize>, &'a str),
-    ColorColumns(Option<usize>, &'a str),
-    ColorCell(&'a str),
+    ColorRows(Option<usize>, String),
+    ColorColumns(Option<usize>, String),
+    ColorCell(String),
     RenameSheet(Option<usize>, &'a str),
     NewSheet(Option<&'a str>),
     SelectSheet(&'a str),
@@ -165,10 +165,7 @@ fn try_consume_color_cell<'cmd, 'i: 'cmd>(
     if input.remaining() > 0 && !is_ws(&mut input) {
         return Err("Invalid command: Did you mean to type `color-cell <color>`?");
     }
-    let arg = input.span(0..).trim();
-    if arg.len() == 0 {
-        return Err("Invalid command: Did you mean to type `color-cell <color>`?");
-    }
+    let arg = parse_color(input.span(0..).trim())?;
     return Ok(Some(Cmd::ColorCell(arg)));
 }
 
@@ -330,10 +327,7 @@ fn try_consume_color_rows<'cmd, 'i: 'cmd>(
         return Err("Invalid command: Did you mean to type `color-rows [count] <color>`?");
     }
     let (idx, rest) = try_consume_usize(input.clone());
-    let arg = rest.span(0..).trim();
-    if arg.is_empty() {
-        return Err("Invalid command: `color-rows` requires a color argument");
-    }
+    let arg = parse_color(rest.span(0..).trim())?;
     return Ok(Some(Cmd::ColorRows(idx, arg)));
 }
 
@@ -350,19 +344,59 @@ fn try_consume_color_columns<'cmd, 'i: 'cmd>(
         return Err("Invalid command: Did you mean to type `color-columns [count] <color>`?");
     }
     let (idx, rest) = try_consume_usize(input.clone());
-    let arg = rest.span(0..).trim();
-    if arg.is_empty() {
-        return Err("Invalid command: `color-columns` requires a color argument");
-    }
+    let arg = parse_color(rest.span(0..).trim())?;
     return Ok(Some(Cmd::ColorColumns(idx, arg)));
 }
 
-fn try_consume_usize<'cmd, 'i: 'cmd>(
-    mut input: StrCursor<'i>,
-) -> (Option<usize>, StrCursor<'i>) {
+pub(crate) fn parse_color(color: &str) -> Result<String, &'static str> {
+    use colorsys::{Ansi256, Rgb};
+    if color.is_empty() {
+        return Err("Invalid command: `color-columns` requires a color argument");
+    }
+    let parsed = match color.to_lowercase().as_str() {
+        "black" => Ansi256::new(0).as_rgb().to_hex_string(),
+        "red" => Ansi256::new(1).as_rgb().to_hex_string(),
+        "green" => Ansi256::new(2).as_rgb().to_hex_string(),
+        "yellow" => Ansi256::new(3).as_rgb().to_hex_string(),
+        "blue" => Ansi256::new(4).as_rgb().to_hex_string(),
+        "magenta" => Ansi256::new(5).as_rgb().to_hex_string(),
+        "cyan" => Ansi256::new(6).as_rgb().to_hex_string(),
+        "gray" | "grey" => Ansi256::new(7).as_rgb().to_hex_string(),
+        "darkgrey" | "darkgray" => Ansi256::new(8).as_rgb().to_hex_string(),
+        "lightred" => Ansi256::new(9).as_rgb().to_hex_string(),
+        "lightgreen" => Ansi256::new(10).as_rgb().to_hex_string(),
+        "lightyellow" => Ansi256::new(11).as_rgb().to_hex_string(),
+        "lightblue" => Ansi256::new(12).as_rgb().to_hex_string(),
+        "lightmagenta" => Ansi256::new(13).as_rgb().to_hex_string(),
+        "lightcyan" => Ansi256::new(14).as_rgb().to_hex_string(),
+        "white" => Ansi256::new(15).as_rgb().to_hex_string(),
+        candidate => {
+            if candidate.starts_with("#") {
+                candidate.to_string()
+            } else if candidate.starts_with("rgb(") {
+                if let Ok(rgb) = <Rgb as std::str::FromStr>::from_str(candidate) {
+                    // Note that the colorsys rgb model clamps the f64 values to no more
+                    // than 255.0 so the below casts are safe.
+                    rgb.to_hex_string()
+                } else {
+                    return Err("Invalid color");
+                }
+            } else {
+                    return Err("Invalid color");
+            }
+        }
+    };
+    Ok(parsed)
+}
+
+fn try_consume_usize<'cmd, 'i: 'cmd>(mut input: StrCursor<'i>) -> (Option<usize>, StrCursor<'i>) {
     let mut out = String::new();
     let original_input = input.clone();
-    while input.peek_next().map(|c| (*c as char).is_ascii_digit()).unwrap_or(false) {
+    while input
+        .peek_next()
+        .map(|c| (*c as char).is_ascii_digit())
+        .unwrap_or(false)
+    {
         out.push(*input.next().unwrap() as char);
     }
     if out.len() > 0 {

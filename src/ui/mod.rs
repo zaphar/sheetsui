@@ -469,7 +469,7 @@ impl<'ws> Workspace<'ws> {
                 let row_count = _count.unwrap_or(1);
                 let row = self.book.location.row;
                 for r in row..(row+row_count) {
-                    self.book.set_row_style(&[("fill.bg_color", color)], self.book.current_sheet, r)?;
+                    self.book.set_row_style(&[("fill.bg_color", &color)], self.book.current_sheet, r)?;
                 }
                 Ok(None)
             }
@@ -477,7 +477,7 @@ impl<'ws> Workspace<'ws> {
                 let col_count = _count.unwrap_or(1);
                 let col = self.book.location.col;
                 for c in col..(col+col_count) {
-                    self.book.set_col_style(&[("fill.bg_color", color)], self.book.current_sheet, c)?;
+                    self.book.set_col_style(&[("fill.bg_color", &color)], self.book.current_sheet, c)?;
                 }
                 Ok(None)
             }
@@ -488,8 +488,8 @@ impl<'ws> Workspace<'ws> {
                         sheet,
                         row: start.row as i32,
                         column: start.col as i32,
-                        width: (end.col - start.col) as i32,
-                        height: (end.row - start.row) as i32
+                        width: (end.col - start.col + 1) as i32,
+                        height: (end.row - start.row + 1) as i32
                     }
                 } else {
                     let address = self.book.location.clone();
@@ -501,7 +501,7 @@ impl<'ws> Workspace<'ws> {
                         height: 1
                     }
                 };
-                self.book.set_cell_style(&[("fill.bg_color", color)], &area)?;
+                self.book.set_cell_style(&[("fill.bg_color", &color)], &area)?;
                 Ok(None)
             }
             Ok(None) => {

@@ -2,6 +2,7 @@ use std::process::ExitCode;
 
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
 
+use crate::ui::cmd::parse_color;
 use crate::ui::{Address, Modality};
 
 use super::cmd::{parse, Cmd};
@@ -33,6 +34,10 @@ impl InputScript {
         self.event(construct_key_event(KeyCode::Tab))
     }
 
+    pub fn enter(self) -> Self {
+        self.event(construct_key_event(KeyCode::Enter))
+    }
+
     pub fn modified_char(self, c: char, mods: KeyModifiers) -> Self {
         self.event(construct_modified_key_event(KeyCode::Char(c), mods))
     }
@@ -40,10 +45,6 @@ impl InputScript {
     pub fn event(mut self, evt: Event) -> Self {
         self.events.push(evt);
         self
-    }
-
-    pub fn enter(self) -> Self {
-        self.event(construct_key_event(KeyCode::Enter))
     }
 
     pub fn esc(self) -> Self {
@@ -267,7 +268,7 @@ fn test_cmd_color_rows_with_color() {
     let output = result.unwrap();
     assert!(output.is_some());
     let cmd = output.unwrap();
-    assert_eq!(cmd, Cmd::ColorRows(None, "red"));
+    assert_eq!(cmd, Cmd::ColorRows(None, parse_color("red").unwrap()));
 }
 
 #[test]
@@ -278,7 +279,7 @@ fn test_cmd_color_rows_with_idx_and_color() {
     let output = result.unwrap();
     assert!(output.is_some());
     let cmd = output.unwrap();
-    assert_eq!(cmd, Cmd::ColorRows(Some(1), "red"));
+    assert_eq!(cmd, Cmd::ColorRows(Some(1), parse_color("red").unwrap()));
 }
 
 #[test]
@@ -289,7 +290,7 @@ fn test_cmd_color_columns_with_color() {
     let output = result.unwrap();
     assert!(output.is_some());
     let cmd = output.unwrap();
-    assert_eq!(cmd, Cmd::ColorColumns(None, "red"));
+    assert_eq!(cmd, Cmd::ColorColumns(None, parse_color("red").unwrap()));
 }
 
 #[test]
@@ -300,7 +301,7 @@ fn test_cmd_color_columns_with_idx_and_color() {
     let output = result.unwrap();
     assert!(output.is_some());
     let cmd = output.unwrap();
-    assert_eq!(cmd, Cmd::ColorColumns(Some(1), "red"));
+    assert_eq!(cmd, Cmd::ColorColumns(Some(1), parse_color("red").unwrap()));
 }
 
 
@@ -1150,6 +1151,25 @@ fn test_extend_to_range() {
     let extended_cell = ws.book.get_cell_addr_contents(&Address { row: 2, col: 1 })
         .expect("Failed to get cell contents");
     assert_eq!("=B2+1".to_string(), extended_cell);
+}
+
+#[test]
+fn test_color_cells() {
+    let mut ws = new_workspace();
+    script()
+        .char('v')
+        .chars("jjll")
+        .char(':')
+        .chars("color-cell red")
+        .enter()
+        .run(&mut ws)
+        .expect("Unable to run script");
+    for ri in 1..=3 {
+        for ci in 1..=3 {
+            let style = ws.book.get_cell_style(ws.book.current_sheet, &Address { row: ri, col: ci }).expect("failed to get style");
+            assert_eq!("#800000", style.fill.bg_color.expect(&format!("No background color set for {}:{}", ri, ci)).as_str());
+        }
+    }
 }
 
 fn new_workspace<'a>() -> Workspace<'a> {
