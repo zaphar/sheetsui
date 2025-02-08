@@ -3,7 +3,10 @@ use std::cmp::max;
 use anyhow::{anyhow, Result};
 use ironcalc::{
     base::{
-        expressions::types::Area, types::{Border, Col, Fill, Font, Row, SheetData, Style, Worksheet}, worksheet::WorksheetDimension, Model, UserModel
+        expressions::types::Area,
+        types::{Border, Col, Fill, Font, Row, SheetData, Style, Worksheet},
+        worksheet::WorksheetDimension,
+        Model, UserModel,
     },
     export::save_xlsx_to_writer,
     import::load_from_xlsx,
@@ -141,7 +144,9 @@ impl Book {
     }
 
     pub fn set_sheet_name(&mut self, idx: u32, sheet_name: &str) -> Result<()> {
-        self.model.rename_sheet(idx, sheet_name).map_err(|e| anyhow!(e))?;
+        self.model
+            .rename_sheet(idx, sheet_name)
+            .map_err(|e| anyhow!(e))?;
         Ok(())
     }
 
@@ -151,7 +156,9 @@ impl Book {
         if let Some(name) = sheet_name {
             self.set_sheet_name(idx, name)?;
         }
-        self.model.set_selected_sheet(self.current_sheet).map_err(|e| anyhow!(e))?;
+        self.model
+            .set_selected_sheet(self.current_sheet)
+            .map_err(|e| anyhow!(e))?;
         Ok(())
     }
 
@@ -249,7 +256,8 @@ impl Book {
 
     pub fn clear_cell_range_all(&mut self, sheet: u32, start: Address, end: Address) -> Result<()> {
         let area = calculate_area(sheet, start, end);
-        self.model.range_clear_all(&area)
+        self.model
+            .range_clear_all(&area)
             .map_err(|s| anyhow!("Unable to clear cell contents {}", s))?;
         Ok(())
     }
@@ -263,7 +271,10 @@ impl Book {
         // TODO(jwall): This is modeled a little weird. We should probably record
         // the error *somewhere* but for the user there is nothing to be done except
         // not use a style.
-        match self.model.get_model().get_style_for_cell(sheet, cell.row as i32, cell.col as i32)
+        match self
+            .model
+            .get_model()
+            .get_style_for_cell(sheet, cell.row as i32, cell.col as i32)
         {
             Err(_) => None,
             Ok(s) => Some(s),
@@ -271,13 +282,25 @@ impl Book {
     }
 
     fn get_column(&self, sheet: u32, col: usize) -> Result<Option<&Col>> {
-        Ok(self.model.get_model().workbook.worksheet(sheet)
-            .map_err(|e| anyhow!("{}", e))?.cols.get(col))
+        Ok(self
+            .model
+            .get_model()
+            .workbook
+            .worksheet(sheet)
+            .map_err(|e| anyhow!("{}", e))?
+            .cols
+            .get(col))
     }
 
     fn get_row(&self, sheet: u32, col: usize) -> Result<Option<&Row>> {
-        Ok(self.model.get_model().workbook.worksheet(sheet)
-            .map_err(|e| anyhow!("{}", e))?.rows.get(col))
+        Ok(self
+            .model
+            .get_model()
+            .workbook
+            .worksheet(sheet)
+            .map_err(|e| anyhow!("{}", e))?
+            .rows
+            .get(col))
     }
 
     pub fn get_column_style(&self, sheet: u32, col: usize) -> Result<Option<Style>> {
@@ -336,7 +359,8 @@ impl Book {
 
     pub fn set_cell_style(&mut self, style: &[(&str, &str)], area: &Area) -> Result<()> {
         for (path, val) in style {
-            self.model.update_range_style(area, path, val)
+            self.model
+                .update_range_style(area, path, val)
                 .map_err(|s| anyhow!("Unable to format cell {}", s))?;
         }
         Ok(())
@@ -458,8 +482,14 @@ impl Book {
         self.get_column_size_for_sheet(self.current_sheet, idx)
     }
 
-    pub fn get_column_size_for_sheet(&self, sheet: u32, idx: usize) -> std::result::Result<usize, anyhow::Error> {
-        Ok((self.model.get_column_width(sheet, idx as i32)
+    pub fn get_column_size_for_sheet(
+        &self,
+        sheet: u32,
+        idx: usize,
+    ) -> std::result::Result<usize, anyhow::Error> {
+        Ok((self
+            .model
+            .get_column_width(sheet, idx as i32)
             .map_err(|e| anyhow!("Error getting column width: {:?}", e))?
             / COL_PIXELS) as usize)
     }
@@ -468,8 +498,14 @@ impl Book {
         self.set_column_size_for_sheet(self.current_sheet, col, width)
     }
 
-    pub fn set_column_size_for_sheet(&mut self, sheet: u32, col: usize, width: usize) -> std::result::Result<(), anyhow::Error> {
-        self.model.set_column_width(sheet, col as i32, width as f64 * COL_PIXELS)
+    pub fn set_column_size_for_sheet(
+        &mut self,
+        sheet: u32,
+        col: usize,
+        width: usize,
+    ) -> std::result::Result<(), anyhow::Error> {
+        self.model
+            .set_column_width(sheet, col as i32, width as f64 * COL_PIXELS)
             .map_err(|e| anyhow!("Error setting column width: {:?}", e))?;
         Ok(())
     }
@@ -491,7 +527,8 @@ impl Book {
     /// Select a sheet by name.
     pub fn select_sheet_by_name(&mut self, name: &str) -> bool {
         if let Some((idx, _sheet)) = self
-            .model.get_model()
+            .model
+            .get_model()
             .workbook
             .worksheets
             .iter()
@@ -515,7 +552,9 @@ impl Book {
         if next == len {
             next = 0;
         }
-        self.model.set_selected_sheet(next).expect("Unexpected error selecting sheet");
+        self.model
+            .set_selected_sheet(next)
+            .expect("Unexpected error selecting sheet");
         self.current_sheet = next;
     }
 
@@ -526,21 +565,26 @@ impl Book {
         } else {
             self.current_sheet - 1
         };
-        self.model.set_selected_sheet(next).expect("Unexpected error selecting sheet");
+        self.model
+            .set_selected_sheet(next)
+            .expect("Unexpected error selecting sheet");
         self.current_sheet = next;
     }
 
     /// Select a sheet by id.
     pub fn select_sheet_by_id(&mut self, id: u32) -> bool {
         if let Some((idx, _sheet)) = self
-            .model.get_model()
+            .model
+            .get_model()
             .workbook
             .worksheets
             .iter()
             .enumerate()
             .find(|(_idx, sheet)| sheet.sheet_id == id)
         {
-            self.model.set_selected_sheet(idx as u32).expect("Unexpected error selecting sheet");
+            self.model
+                .set_selected_sheet(idx as u32)
+                .expect("Unexpected error selecting sheet");
             self.current_sheet = idx as u32;
             return true;
         }
@@ -553,7 +597,8 @@ impl Book {
         // Looks like it should be done with:
         // https://docs.rs/ironcalc_base/latest/ironcalc_base/struct.UserModel.html#method.get_worksheets_properties
         Ok(self
-            .model.get_model()
+            .model
+            .get_model()
             .workbook
             .worksheet(self.current_sheet)
             .map_err(|s| anyhow!("Invalid Worksheet id: {}: error: {}", self.current_sheet, s))?)
@@ -564,7 +609,8 @@ impl Book {
         // Looks like it should be done with:
         // https://docs.rs/ironcalc_base/latest/ironcalc_base/struct.UserModel.html#method.get_worksheets_properties
         Ok(&self
-            .model.get_model()
+            .model
+            .get_model()
             .workbook
             .worksheet(idx as u32)
             .map_err(|s| anyhow!("Invalid Worksheet: {}", s))?

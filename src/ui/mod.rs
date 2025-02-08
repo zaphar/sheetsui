@@ -244,10 +244,13 @@ impl<'ws> Workspace<'ws> {
 
     /// Move to the top row without changing columns
     pub fn move_to_top(&mut self) -> Result<()> {
-        self.book.move_to(&Address { row: 1, col: self.book.location.col })?;
+        self.book.move_to(&Address {
+            row: 1,
+            col: self.book.location.col,
+        })?;
         Ok(())
     }
-    
+
     /// Move a row up in the current sheet.
     pub fn move_up(&mut self) -> Result<()> {
         let mut loc = self.book.location.clone();
@@ -320,7 +323,8 @@ impl<'ws> Workspace<'ws> {
                 "Edit Mode:".to_string(),
                 "* ENTER/RETURN: Exit edit mode and save changes".to_string(),
                 "* Ctrl-r: Enter Range Selection mode".to_string(),
-                "* v: Enter Range Selection mode with the start of the range already selected".to_string(),
+                "* v: Enter Range Selection mode with the start of the range already selected"
+                    .to_string(),
                 "* ESC: Exit edit mode and discard changes".to_string(),
                 "Otherwise edit as normal".to_string(),
             ],
@@ -448,8 +452,7 @@ impl<'ws> Workspace<'ws> {
                         self.book.set_sheet_name(idx as u32, name)?;
                     }
                     _ => {
-                        self.book
-                            .set_sheet_name(self.book.current_sheet, name)?;
+                        self.book.set_sheet_name(self.book.current_sheet, name)?;
                     }
                 }
                 Ok(None)
@@ -462,22 +465,28 @@ impl<'ws> Workspace<'ws> {
                 self.book.select_sheet_by_name(name);
                 Ok(None)
             }
-            Ok(Some(Cmd::Quit)) => {
-                Ok(Some(ExitCode::SUCCESS))
-            }
+            Ok(Some(Cmd::Quit)) => Ok(Some(ExitCode::SUCCESS)),
             Ok(Some(Cmd::ColorRows(_count, color))) => {
                 let row_count = _count.unwrap_or(1);
                 let row = self.book.location.row;
-                for r in row..(row+row_count) {
-                    self.book.set_row_style(&[("fill.bg_color", &color)], self.book.current_sheet, r)?;
+                for r in row..(row + row_count) {
+                    self.book.set_row_style(
+                        &[("fill.bg_color", &color)],
+                        self.book.current_sheet,
+                        r,
+                    )?;
                 }
                 Ok(None)
             }
             Ok(Some(Cmd::ColorColumns(_count, color))) => {
                 let col_count = _count.unwrap_or(1);
                 let col = self.book.location.col;
-                for c in col..(col+col_count) {
-                    self.book.set_col_style(&[("fill.bg_color", &color)], self.book.current_sheet, c)?;
+                for c in col..(col + col_count) {
+                    self.book.set_col_style(
+                        &[("fill.bg_color", &color)],
+                        self.book.current_sheet,
+                        c,
+                    )?;
                 }
                 Ok(None)
             }
@@ -489,7 +498,7 @@ impl<'ws> Workspace<'ws> {
                         row: start.row as i32,
                         column: start.col as i32,
                         width: (end.col - start.col + 1) as i32,
-                        height: (end.row - start.row + 1) as i32
+                        height: (end.row - start.row + 1) as i32,
                     }
                 } else {
                     let address = self.book.location.clone();
@@ -498,10 +507,11 @@ impl<'ws> Workspace<'ws> {
                         row: address.row as i32,
                         column: address.col as i32,
                         width: 1,
-                        height: 1
+                        height: 1,
                     }
                 };
-                self.book.set_cell_style(&[("fill.bg_color", &color)], &area)?;
+                self.book
+                    .set_cell_style(&[("fill.bg_color", &color)], &area)?;
                 Ok(None)
             }
             Ok(None) => {
@@ -611,11 +621,7 @@ impl<'ws> Workspace<'ws> {
                     })?;
                     self.state.range_select.sheet = Some(self.book.current_sheet);
                 }
-                KeyCode::Char('C')
-                    if key
-                        .modifiers
-                        .contains(KeyModifiers::CONTROL) =>
-                {
+                KeyCode::Char('C') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                     self.copy_range(true)?;
                     self.exit_range_select_mode()?;
                 }
@@ -632,7 +638,10 @@ impl<'ws> Workspace<'ws> {
                     self.exit_range_select_mode()?;
                 }
                 KeyCode::Char('x') => {
-                    if let (Some(from), Some(to)) = (self.state.range_select.start.as_ref(), self.state.range_select.end.as_ref()) {
+                    if let (Some(from), Some(to)) = (
+                        self.state.range_select.start.as_ref(),
+                        self.state.range_select.end.as_ref(),
+                    ) {
                         self.book.extend_to(from, to)?;
                     }
                     self.exit_range_select_mode()?;
@@ -651,20 +660,15 @@ impl<'ws> Workspace<'ws> {
     fn copy_range(&mut self, formatted: bool) -> Result<(), anyhow::Error> {
         self.update_range_selection()?;
         match &self.state.range_select.get_range() {
-            Some((
-                start,
-                end,
-            )) => {
+            Some((start, end)) => {
                 let mut rows = Vec::new();
-                for row in (AddressRange { start, end, }).as_rows() {
+                for row in (AddressRange { start, end }).as_rows() {
                     let mut cols = Vec::new();
                     for cell in row {
                         cols.push(if formatted {
-                            self.book
-                                .get_cell_addr_rendered(&cell)?
+                            self.book.get_cell_addr_rendered(&cell)?
                         } else {
-                            self.book
-                                .get_cell_addr_contents(&cell)?
+                            self.book.get_cell_addr_contents(&cell)?
                         });
                     }
                     rows.push(cols);
@@ -673,11 +677,9 @@ impl<'ws> Workspace<'ws> {
             }
             None => {
                 self.state.clipboard = Some(ClipboardContents::Cell(if formatted {
-                    self.book
-                        .get_current_cell_rendered()?
+                    self.book.get_current_cell_rendered()?
                 } else {
-                    self.book
-                        .get_current_cell_contents()?
+                    self.book.get_current_cell_contents()?
                 }));
             }
         }
@@ -743,11 +745,7 @@ impl<'ws> Workspace<'ws> {
                         self.book.get_current_cell_rendered()?,
                     ));
                 }
-                KeyCode::Char('C')
-                    if key
-                        .modifiers
-                        .contains(KeyModifiers::CONTROL) =>
-                {
+                KeyCode::Char('C') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                     self.state.clipboard = Some(ClipboardContents::Cell(
                         self.book.get_current_cell_rendered()?,
                     ));
@@ -861,7 +859,13 @@ impl<'ws> Workspace<'ws> {
                 }
                 KeyCode::Char('g') => {
                     // TODO(zaphar): This really needs a better state machine.
-                    if self.state.char_queue.first().map(|c| *c == 'g').unwrap_or(false) {
+                    if self
+                        .state
+                        .char_queue
+                        .first()
+                        .map(|c| *c == 'g')
+                        .unwrap_or(false)
+                    {
                         self.state.char_queue.pop();
                         self.move_to_top()?;
                     } else {

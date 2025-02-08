@@ -382,7 +382,7 @@ pub(crate) fn parse_color(color: &str) -> Result<String, &'static str> {
                     return Err("Invalid color");
                 }
             } else {
-                    return Err("Invalid color");
+                return Err("Invalid color");
             }
         }
     };
