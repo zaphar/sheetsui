@@ -469,13 +469,7 @@ impl<'ws> Workspace<'ws> {
                 let row_count = _count.unwrap_or(1);
                 let row = self.book.location.row;
                 for r in row..(row+row_count) {
-                    let mut style = if let Some(style) = self.book.get_row_style(self.book.current_sheet, r)? {
-                        style
-                    } else {
-                        self.book.create_style()
-                    };
-                    style.fill.bg_color = Some(color.to_string());
-                    self.book.set_row_style(&style, self.book.current_sheet, r)?;
+                    self.book.set_row_style(&[("fill.bg_color", color)], self.book.current_sheet, r)?;
                 }
                 Ok(None)
             }
@@ -483,13 +477,7 @@ impl<'ws> Workspace<'ws> {
                 let col_count = _count.unwrap_or(1);
                 let col = self.book.location.col;
                 for c in col..(col+col_count) {
-                    let mut style = if let Some(style) = self.book.get_column_style(self.book.current_sheet, c)? {
-                        style
-                    } else {
-                        self.book.create_style()
-                    };
-                    style.fill.bg_color = Some(color.to_string());
-                    self.book.set_col_style(&style, self.book.current_sheet, c)?;
+                    self.book.set_col_style(&[("fill.bg_color", color)], self.book.current_sheet, c)?;
                 }
                 Ok(None)
             }
@@ -628,7 +616,6 @@ impl<'ws> Workspace<'ws> {
                         .modifiers
                         .contains(KeyModifiers::CONTROL) =>
                 {
-                    // TODO(zaphar): Share the algorithm below between both copies
                     self.copy_range(true)?;
                     self.exit_range_select_mode()?;
                 }

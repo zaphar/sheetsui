@@ -248,7 +248,6 @@ pub(crate) fn map_color(color: Option<&String>, otherwise: Color) -> Color {
             candidate => {
                 // TODO(jeremy): Should we support more syntaxes than hex string?
                 // hsl(...) ??
-                // rgb(...) ??
                 if candidate.starts_with("#") {
                     if let Ok(rgb) = colorsys::Rgb::from_hex_str(candidate) {
                         // Note that the colorsys rgb model clamps the f64 values to no more

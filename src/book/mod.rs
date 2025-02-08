@@ -3,7 +3,7 @@ use std::cmp::max;
 use anyhow::{anyhow, Result};
 use ironcalc::{
     base::{
-        calc_result::Range, expressions::types::Area, types::{Border, Col, Fill, Font, Row, SheetData, Style, Worksheet}, worksheet::WorksheetDimension, Model, UserModel
+        expressions::types::Area, types::{Border, Col, Fill, Font, Row, SheetData, Style, Worksheet}, worksheet::WorksheetDimension, Model, UserModel
     },
     export::save_xlsx_to_writer,
     import::load_from_xlsx,
@@ -110,7 +110,6 @@ impl Book {
         self.model.evaluate();
     }
 
-    // TODO(zaphar): Should I support ICalc?
     /// Construct a new book from a path.
     pub fn new_from_xlsx_with_locale(path: &str, locale: &str, tz: &str) -> Result<Self> {
         Ok(Self::from_model(load_from_xlsx(path, locale, tz)?))
@@ -180,6 +179,8 @@ impl Book {
         .skip(1)
         {
             // TODO(jeremy): Is there a better way to do this using UserModel?
+            // Looks like this is the recommended way:
+            // https://docs.rs/ironcalc_base/latest/ironcalc_base/struct.UserModel.html#method.auto_fill_columns
             let contents = self
                 .model
                 .get_model()
@@ -407,21 +408,21 @@ impl Book {
 
     /// Update the current cell in a book.
     /// This update won't be reflected until you call `Book::evaluate`.
-    pub fn edit_current_cell<S: Into<String>>(&mut self, value: S) -> Result<()> {
+    pub fn edit_current_cell<S: AsRef<str>>(&mut self, value: S) -> Result<()> {
         self.update_cell(&self.location.clone(), value)?;
         Ok(())
     }
 
     /// Update an entry in the current sheet for a book.
     /// This update won't be reflected until you call `Book::evaluate`.
-    pub fn update_cell<S: Into<String>>(&mut self, location: &Address, value: S) -> Result<()> {
+    pub fn update_cell<S: AsRef<str>>(&mut self, location: &Address, value: S) -> Result<()> {
         self.model
             .set_user_input(
                 self.current_sheet,
                 location.row as i32,
                 location.col as i32,
                 // TODO(jwall): This could probably be made more efficient
-                &value.into(),
+                value.as_ref(),
             )
             .map_err(|e| anyhow!("Invalid cell contents: {}", e))?;
         Ok(())
@@ -521,29 +522,28 @@ impl Book {
     }
 
     pub fn select_next_sheet(&mut self) {
-        // TODO(jwall): Is there a cleaner way to do this with UserModel?
         let len = self.model.get_model().workbook.worksheets.len() as u32;
         let mut next = self.current_sheet + 1;
         if next == len {
             next = 0;
         }
+        self.model.set_selected_sheet(next).expect("Unexpected error selecting sheet");
         self.current_sheet = next;
     }
 
     pub fn select_prev_sheet(&mut self) {
-        // TODO(jwall): Is there a cleaner way to do this with UserModel?
         let len = self.model.get_model().workbook.worksheets.len() as u32;
         let next = if self.current_sheet == 0 {
             len - 1
         } else {
             self.current_sheet - 1
         };
+        self.model.set_selected_sheet(next).expect("Unexpected error selecting sheet");
         self.current_sheet = next;
     }
 
     /// Select a sheet by id.
     pub fn select_sheet_by_id(&mut self, id: u32) -> bool {
-        // TODO(jwall): Is there a cleaner way to do this with UserModel?
         if let Some((idx, _sheet)) = self
             .model.get_model()
             .workbook
@@ -552,6 +552,7 @@ impl Book {
             .enumerate()
             .find(|(_idx, sheet)| sheet.sheet_id == id)
         {
+            self.model.set_selected_sheet(idx as u32).expect("Unexpected error selecting sheet");
             self.current_sheet = idx as u32;
             return true;
         }
@@ -561,6 +562,8 @@ impl Book {
     /// Get the current `Worksheet`.
     pub(crate) fn get_sheet(&self) -> Result<&Worksheet> {
         // TODO(jwall): Is there a cleaner way to do this with UserModel?
+        // Looks like it should be done with:
+        // https://docs.rs/ironcalc_base/latest/ironcalc_base/struct.UserModel.html#method.get_worksheets_properties
         Ok(self
             .model.get_model()
             .workbook
@@ -570,6 +573,8 @@ impl Book {
 
     pub(crate) fn get_sheet_name_by_idx(&self, idx: usize) -> Result<&str> {
         // TODO(jwall): Is there a cleaner way to do this with UserModel?
+        // Looks like it should be done with:
+        // https://docs.rs/ironcalc_base/latest/ironcalc_base/struct.UserModel.html#method.get_worksheets_properties
         Ok(&self
             .model.get_model()
             .workbook
