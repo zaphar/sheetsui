@@ -227,13 +227,7 @@ impl Book {
     }
 
     pub fn clear_cell_range(&mut self, sheet: u32, start: Address, end: Address) -> Result<()> {
-        let area = Area {
-            sheet,
-            row: start.row as i32,
-            column: start.col as i32,
-            width: (end.row - start.row) as i32,
-            height: (end.col - end.row) as i32,
-        };
+        let area = calculate_area(sheet, start, end);
         self.model
             .range_clear_contents(&area)
             .map_err(|s| anyhow!("Unable to clear cell contents {}", s))?;
@@ -254,13 +248,7 @@ impl Book {
     }
 
     pub fn clear_cell_range_all(&mut self, sheet: u32, start: Address, end: Address) -> Result<()> {
-        let area = Area {
-            sheet,
-            row: start.row as i32,
-            column: start.col as i32,
-            width: (end.row - start.row) as i32,
-            height: (end.col - end.row) as i32,
-        };
+        let area = calculate_area(sheet, start, end);
         self.model.range_clear_all(&area)
             .map_err(|s| anyhow!("Unable to clear cell contents {}", s))?;
         Ok(())
@@ -582,6 +570,17 @@ impl Book {
             .map_err(|s| anyhow!("Invalid Worksheet: {}", s))?
             .name)
     }
+}
+
+fn calculate_area(sheet: u32, start: Address, end: Address) -> Area {
+    let area = Area {
+        sheet,
+        row: start.row as i32,
+        column: start.col as i32,
+        height: (end.row - start.row + 1) as i32,
+        width: (end.col - start.col + 1) as i32,
+    };
+    area
 }
 
 impl Default for Book {

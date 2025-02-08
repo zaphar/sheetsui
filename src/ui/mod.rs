@@ -131,7 +131,7 @@ impl<'ws> AppState<'ws> {
     }
 }
 
-// TODO(jwall): This should probably move to a different module.
+// TODO(jwall): Should we just be using `Area` for this?.
 /// The Address in a Table.
 #[derive(Debug, PartialEq, PartialOrd, Ord, Eq, Clone)]
 pub struct Address {
@@ -539,7 +539,7 @@ impl<'ws> Workspace<'ws> {
                     self.handle_numeric_prefix(d);
                 }
                 KeyCode::Char('D') => {
-                    if let Some((start, end)) = self.state.range_select.get_range() {
+                    if let Some((start, end)) = dbg!(self.state.range_select.get_range()) {
                         self.book.clear_cell_range_all(
                             self.state
                                 .range_select
