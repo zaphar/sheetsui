@@ -4,7 +4,7 @@ use anyhow::{anyhow, Result};
 use ironcalc::{
     base::{
         expressions::types::Area,
-        types::{Border, Col, Fill, Font, Row, SheetData, Style, Worksheet},
+        types::{SheetData, Style, Worksheet},
         worksheet::WorksheetDimension,
         Model, UserModel,
     },
@@ -17,7 +17,12 @@ use crate::ui::Address;
 #[cfg(test)]
 mod test;
 
-const COL_PIXELS: f64 = 5.0;
+pub(crate) const COL_PIXELS: f64 = 5.0;
+// NOTE(zaphar): This is stolen from ironcalc but ironcalc doesn't expose it
+// publically.
+pub(crate) const LAST_COLUMN: i32 = 16_384;
+pub(crate) const LAST_ROW: i32 = 1_048_576;
+
 
 #[derive(Debug, Clone)]
 pub struct AddressRange<'book> {
@@ -281,82 +286,6 @@ impl Book {
         }
     }
 
-    fn get_column(&self, sheet: u32, col: usize) -> Result<Option<&Col>> {
-        Ok(self
-            .model
-            .get_model()
-            .workbook
-            .worksheet(sheet)
-            .map_err(|e| anyhow!("{}", e))?
-            .cols
-            .get(col))
-    }
-
-    fn get_row(&self, sheet: u32, col: usize) -> Result<Option<&Row>> {
-        Ok(self
-            .model
-            .get_model()
-            .workbook
-            .worksheet(sheet)
-            .map_err(|e| anyhow!("{}", e))?
-            .rows
-            .get(col))
-    }
-
-    pub fn get_column_style(&self, sheet: u32, col: usize) -> Result<Option<Style>> {
-        // TODO(jwall): This is modeled a little weird. We should probably record
-        // the error *somewhere* but for the user there is nothing to be done except
-        // not use a style.
-        if let Some(col) = self.get_column(sheet, col)? {
-            if let Some(style_idx) = col.style.map(|idx| idx as usize) {
-                let styles = &self.model.get_model().workbook.styles;
-                if styles.cell_style_xfs.len() <= style_idx {
-                    return Ok(Some(Style {
-                        alignment: None,
-                        num_fmt: styles.num_fmts[style_idx].format_code.clone(),
-                        fill: styles.fills[style_idx].clone(),
-                        font: styles.fonts[style_idx].clone(),
-                        border: styles.borders[style_idx].clone(),
-                        quote_prefix: false,
-                    }));
-                }
-            }
-        }
-        return Ok(None);
-    }
-
-    pub fn get_row_style(&self, sheet: u32, row: usize) -> Result<Option<Style>> {
-        // TODO(jwall): This is modeled a little weird. We should probably record
-        // the error *somewhere* but for the user there is nothing to be done except
-        // not use a style.
-        if let Some(row) = self.get_row(sheet, row)? {
-            let style_idx = row.s as usize;
-            let styles = &self.model.get_model().workbook.styles;
-            if styles.cell_style_xfs.len() <= style_idx {
-                return Ok(Some(Style {
-                    alignment: None,
-                    num_fmt: styles.num_fmts[style_idx].format_code.clone(),
-                    fill: styles.fills[style_idx].clone(),
-                    font: styles.fonts[style_idx].clone(),
-                    border: styles.borders[style_idx].clone(),
-                    quote_prefix: false,
-                }));
-            }
-        }
-        return Ok(None);
-    }
-
-    pub fn create_style(&mut self) -> Style {
-        Style {
-            alignment: None,
-            num_fmt: String::new(),
-            fill: Fill::default(),
-            font: Font::default(),
-            border: Border::default(),
-            quote_prefix: false,
-        }
-    }
-
     pub fn set_cell_style(&mut self, style: &[(&str, &str)], area: &Area) -> Result<()> {
         for (path, val) in style {
             self.model
@@ -366,28 +295,56 @@ impl Book {
         Ok(())
     }
 
-    pub fn set_col_style(&mut self, style: &[(&str, &str)], sheet: u32, col: usize) -> Result<()> {
-        todo!()
-        //let idx = self.create_or_get_style_idx(style);
-        //let sheet = self.model.workbook.worksheet_mut(sheet)
-        //    .map_err(|e| anyhow!("{}", e))?;
-        //let width = sheet.get_column_width(col as i32)
-        //    .map_err(|e| anyhow!("{}", e))?;
-        //sheet.set_column_style(col as i32, idx)
-        //    .map_err(|e| anyhow!("{}", e))?;
-        //sheet.set_column_width(col as i32, width)
-        //    .map_err(|e| anyhow!("{}", e))?;
-        //Ok(())
+    fn get_col_range(&self, sheet: u32, col_idx: usize) -> Area {
+        Area {
+            sheet,
+            row: 1,
+            column: col_idx as i32,
+            width: 1,
+            height: LAST_ROW,
+        }
     }
 
-    pub fn set_row_style(&mut self, style: &[(&str, &str)], sheet: u32, row: usize) -> Result<()> {
-        todo!()
-        //let idx = self.create_or_get_style_idx(style);
-        //self.model.workbook.worksheet_mut(sheet)
-        //    .map_err(|e| anyhow!("{}", e))?
-        //    .set_row_style(row as i32, idx)
-        //    .map_err(|e| anyhow!("{}", e))?;
-        //Ok(())
+    fn get_row_range(&self, sheet: u32, row_idx: usize) -> Area {
+        Area {
+            sheet,
+            row: row_idx as i32,
+            column: 1,
+            width: LAST_COLUMN,
+            height: 1,
+        }
+    }
+
+    pub fn set_col_style(
+        &mut self,
+        style: &[(&str, &str)],
+        sheet: u32,
+        col_idx: usize,
+    ) -> Result<()> {
+        // TODO(jeremy): This is a little hacky and the underlying model
+        // supports a better mechanism but UserModel doesn't support it yet.
+        // https://github.com/ironcalc/IronCalc/issues/273
+        // https://github.com/ironcalc/IronCalc/pull/276 is the coming fix.
+        // NOTE(jwall): Because of the number of cells required to modify
+        // this is crazy slow
+        let area = self.get_col_range(sheet, col_idx);
+        self.set_cell_style(style, &area)?;
+        Ok(())
+    }
+
+    pub fn set_row_style(
+        &mut self,
+        style: &[(&str, &str)],
+        sheet: u32,
+        row_idx: usize,
+    ) -> Result<()> {
+        // TODO(jeremy): This is a little hacky and the underlying model
+        // supports a better mechanism but UserModel doesn't support it yet.
+        // https://github.com/ironcalc/IronCalc/issues/273
+        // https://github.com/ironcalc/IronCalc/pull/276 is the coming fix.
+        let area = self.get_row_range(sheet, row_idx);
+        self.set_cell_style(style, &area)?;
+        Ok(())
     }
 
     /// Get a cells rendered content for display.

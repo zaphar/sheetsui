@@ -1,7 +1,7 @@
 //! Ui rendering logic
 use std::{path::PathBuf, process::ExitCode};
 
-use crate::book::{AddressRange, Book};
+use crate::book::{self, AddressRange, Book};
 
 use anyhow::{anyhow, Result};
 use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
@@ -235,7 +235,7 @@ impl<'ws> Workspace<'ws> {
     /// Move a row down in the current sheet.
     pub fn move_down(&mut self) -> Result<()> {
         let mut loc = self.book.location.clone();
-        if loc.row < render::viewport::LAST_ROW {
+        if loc.row < (book::LAST_ROW as usize) {
             loc.row += 1;
             self.book.move_to(&loc)?;
         }
@@ -274,7 +274,7 @@ impl<'ws> Workspace<'ws> {
     /// Move a column to the left in the current sheet.
     pub fn move_right(&mut self) -> Result<()> {
         let mut loc = self.book.location.clone();
-        if loc.col < render::viewport::LAST_COLUMN {
+        if loc.col < (book::LAST_COLUMN as usize) {
             loc.col += 1;
             self.book.move_to(&loc)?;
         }
@@ -466,8 +466,8 @@ impl<'ws> Workspace<'ws> {
                 Ok(None)
             }
             Ok(Some(Cmd::Quit)) => Ok(Some(ExitCode::SUCCESS)),
-            Ok(Some(Cmd::ColorRows(_count, color))) => {
-                let row_count = _count.unwrap_or(1);
+            Ok(Some(Cmd::ColorRows(count, color))) => {
+                let row_count = count.unwrap_or(1);
                 let row = self.book.location.row;
                 for r in row..(row + row_count) {
                     self.book.set_row_style(
@@ -478,8 +478,8 @@ impl<'ws> Workspace<'ws> {
                 }
                 Ok(None)
             }
-            Ok(Some(Cmd::ColorColumns(_count, color))) => {
-                let col_count = _count.unwrap_or(1);
+            Ok(Some(Cmd::ColorColumns(count, color))) => {
+                let col_count = count.unwrap_or(1);
                 let col = self.book.location.col;
                 for c in col..(col + col_count) {
                     self.book.set_col_style(

@@ -2,6 +2,7 @@ use std::process::ExitCode;
 
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
 
+use crate::book;
 use crate::ui::cmd::parse_color;
 use crate::ui::{Address, Modality};
 
@@ -1220,6 +1221,57 @@ fn test_color_cells() {
         }
     }
 }
+
+#[test]
+fn test_color_row() {
+    let mut ws = new_workspace();
+    script()
+        .char(':')
+        .chars("color-rows red")
+        .enter()
+        .run(&mut ws)
+        .expect("Unable to run script");
+    for ci in [1, book::LAST_COLUMN] {
+        let style = ws
+            .book
+            .get_cell_style(ws.book.current_sheet, &Address { row: 1, col: ci as usize })
+            .expect("failed to get style");
+        assert_eq!(
+            "#800000",
+            style
+                .fill
+                .bg_color
+                .expect(&format!("No background color set for {}:{}", 1, ci))
+                .as_str()
+        );
+    }
+}
+
+#[test]
+fn test_color_col() {
+    let mut ws = new_workspace();
+    script()
+        .char(':')
+        .chars("color-columns red")
+        .enter()
+        .run(&mut ws)
+        .expect("Unable to run script");
+    for ri in [1, book::LAST_ROW] {
+        let style = ws
+            .book
+            .get_cell_style(ws.book.current_sheet, &Address { row: ri as usize, col: 1 })
+            .expect("failed to get style");
+        assert_eq!(
+            "#800000",
+            style
+                .fill
+                .bg_color
+                .expect(&format!("No background color set for {}:{}", ri, 1))
+                .as_str()
+        );
+    }
+}
+
 
 fn new_workspace<'a>() -> Workspace<'a> {
     Workspace::new_empty("en", "America/New_York").expect("Failed to get empty workbook")
