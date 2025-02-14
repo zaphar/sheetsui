@@ -278,14 +278,26 @@ impl Book {
         // not use a style.
         match self
             .model
-            .get_model()
-            .get_style_for_cell(sheet, cell.row as i32, cell.col as i32)
+            .get_cell_style(sheet, cell.row as i32, cell.col as i32)
         {
             Err(_) => None,
             Ok(s) => Some(s),
         }
     }
 
+    /// Set the cell style
+    /// Valid style paths are:
+    /// * fill.bg_color background color
+    /// * fill.fg_color foreground color
+    /// * font.b bold
+    /// * font.i italicize
+    /// * font.strike strikethrough
+    /// * font.color font color
+    /// * num_fmt number format
+    /// * alignment turn off alignment
+    /// * alignment.horizontal make alignment horzontal
+    /// * alignment.vertical make alignment vertical
+    /// * alignment.wrap_text wrap cell text
     pub fn set_cell_style(&mut self, style: &[(&str, &str)], area: &Area) -> Result<()> {
         for (path, val) in style {
             self.model
@@ -315,6 +327,19 @@ impl Book {
         }
     }
 
+    /// Set the column style.
+    /// Valid style paths are:
+    /// * fill.bg_color background color
+    /// * fill.fg_color foreground color
+    /// * font.b bold
+    /// * font.i italicize
+    /// * font.strike strikethrough
+    /// * font.color font color
+    /// * num_fmt number format
+    /// * alignment turn off alignment
+    /// * alignment.horizontal make alignment horzontal
+    /// * alignment.vertical make alignment vertical
+    /// * alignment.wrap_text wrap cell text
     pub fn set_col_style(
         &mut self,
         style: &[(&str, &str)],
@@ -332,6 +357,19 @@ impl Book {
         Ok(())
     }
 
+    /// Set the row style
+    /// Valid style paths are:
+    /// * fill.bg_color background color
+    /// * fill.fg_color foreground color
+    /// * font.b bold
+    /// * font.i italicize
+    /// * font.strike strikethrough
+    /// * font.color font color
+    /// * num_fmt number format
+    /// * alignment turn off alignment
+    /// * alignment.horizontal make alignment horzontal
+    /// * alignment.vertical make alignment vertical
+    /// * alignment.wrap_text wrap cell text
     pub fn set_row_style(
         &mut self,
         style: &[(&str, &str)],

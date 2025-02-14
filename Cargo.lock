@@ -841,7 +841,7 @@ dependencies = [
 [[package]]
 name = "ironcalc"
 version = "0.3.0"
-source = "git+https://github.com/ironcalc/IronCalc?rev=264fcac63cc93b08a4b4a6764815e0c0adf6a53c#99125f1fea1c8c72c61f8cba94d847ed3471a4af"
+source = "git+https://github.com/ironcalc/IronCalc?rev=264fcac63cc93b08a4b4a6764815e0c0adf6a53c#7e54cb6aa27f6d02fc3b090de4fb127c67900dc8"
 dependencies = [
  "bitcode",
  "chrono",
@@ -857,7 +857,7 @@ dependencies = [
 [[package]]
 name = "ironcalc_base"
 version = "0.3.0"
-source = "git+https://github.com/ironcalc/IronCalc?rev=264fcac63cc93b08a4b4a6764815e0c0adf6a53c#99125f1fea1c8c72c61f8cba94d847ed3471a4af"
+source = "git+https://github.com/ironcalc/IronCalc?rev=264fcac63cc93b08a4b4a6764815e0c0adf6a53c#7e54cb6aa27f6d02fc3b090de4fb127c67900dc8"
 dependencies = [
  "bitcode",
  "chrono",
