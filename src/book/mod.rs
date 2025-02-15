@@ -239,7 +239,7 @@ impl Book {
     }
 
     pub fn clear_cell_range(&mut self, sheet: u32, start: Address, end: Address) -> Result<()> {
-        let area = calculate_area(sheet, start, end);
+        let area = calculate_area(sheet, &start, &end);
         self.model
             .range_clear_contents(&area)
             .map_err(|s| anyhow!("Unable to clear cell contents {}", s))?;
@@ -260,7 +260,7 @@ impl Book {
     }
 
     pub fn clear_cell_range_all(&mut self, sheet: u32, start: Address, end: Address) -> Result<()> {
-        let area = calculate_area(sheet, start, end);
+        let area = calculate_area(sheet, &start, &end);
         self.model
             .range_clear_all(&area)
             .map_err(|s| anyhow!("Unable to clear cell contents {}", s))?;
@@ -613,7 +613,7 @@ impl Book {
     }
 }
 
-fn calculate_area(sheet: u32, start: Address, end: Address) -> Area {
+fn calculate_area(sheet: u32, start: &Address, end: &Address) -> Area {
     let area = Area {
         sheet,
         row: start.row as i32,
