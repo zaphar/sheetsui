@@ -190,9 +190,6 @@ impl Book {
         .iter()
         .skip(1)
         {
-            // TODO(jeremy): Is there a better way to do this using UserModel?
-            // Looks like this is the recommended way:
-            // https://docs.rs/ironcalc_base/latest/ironcalc_base/struct.UserModel.html#method.auto_fill_columns
             let contents = self
                 .model
                 .get_model()
