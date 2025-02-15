@@ -11,7 +11,7 @@ clap = { version = "4.5.20", features = ["derive"] }
 crossterm = { version = "0.28.1", features = ["event-stream", "serde"] }
 csvx = "0.1.17"
 # this revision introduces a way to get the Model back out of the UserModel
-ironcalc = { git = "https://github.com/ironcalc/IronCalc?rev=b2c5027f56a16a0c606b01a071b816b941972aef" }
+ironcalc = { git = "https://github.com/ironcalc/IronCalc" }
 futures = "0.3.31"
 ratatui = "0.29.0"
 thiserror = "1.0.65"
