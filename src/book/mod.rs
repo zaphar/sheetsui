@@ -3,9 +3,10 @@ use std::cmp::max;
 use anyhow::{anyhow, Result};
 use ironcalc::{
     base::{
-        types::{Border, Col, Fill, Font, Row, SheetData, Style, Worksheet},
+        expressions::types::Area,
+        types::{SheetData, Style, Worksheet},
         worksheet::WorksheetDimension,
-        Model,
+        Model, UserModel,
     },
     export::save_xlsx_to_writer,
     import::load_from_xlsx,
@@ -16,7 +17,12 @@ use crate::ui::Address;
 #[cfg(test)]
 mod test;
 
-const COL_PIXELS: f64 = 5.0;
+pub(crate) const COL_PIXELS: f64 = 5.0;
+// NOTE(zaphar): This is stolen from ironcalc but ironcalc doesn't expose it
+// publically.
+pub(crate) const LAST_COLUMN: i32 = 16_384;
+pub(crate) const LAST_ROW: i32 = 1_048_576;
+
 
 #[derive(Debug, Clone)]
 pub struct AddressRange<'book> {
@@ -37,7 +43,7 @@ impl<'book> AddressRange<'book> {
         }
         rows
     }
-    
+
     pub fn as_series(&self) -> Vec<Address> {
         let (row_range, col_range) = self.get_ranges();
         let mut rows = Vec::with_capacity(row_range.len() * col_range.len());
@@ -78,14 +84,14 @@ impl<'book> AddressRange<'book> {
 
 /// A spreadsheet book with some internal state tracking.
 pub struct Book {
-    pub(crate) model: Model,
+    pub(crate) model: UserModel,
     pub current_sheet: u32,
     pub location: crate::ui::Address,
 }
 
 impl Book {
     /// Construct a new book from a Model
-    pub fn new(model: Model) -> Self {
+    pub fn new(model: UserModel) -> Self {
         Self {
             model,
             current_sheet: 0,
@@ -93,9 +99,17 @@ impl Book {
         }
     }
 
+    pub fn from_model(model: Model) -> Self {
+        Self::new(UserModel::from_model(model))
+    }
+
     /// Construct a new book from an xlsx file.
     pub fn new_from_xlsx(path: &str) -> Result<Self> {
-        Ok(Self::new(load_from_xlsx(path, "en", "America/New_York")?))
+        Ok(Self::from_model(load_from_xlsx(
+            path,
+            "en",
+            "America/New_York",
+        )?))
     }
 
     /// Evaluate the spreadsheet calculating formulas and style changes.
@@ -104,10 +118,9 @@ impl Book {
         self.model.evaluate();
     }
 
-    // TODO(zaphar): Should I support ICalc?
     /// Construct a new book from a path.
     pub fn new_from_xlsx_with_locale(path: &str, locale: &str, tz: &str) -> Result<Self> {
-        Ok(Self::new(load_from_xlsx(path, locale, tz)?))
+        Ok(Self::from_model(load_from_xlsx(path, locale, tz)?))
     }
 
     /// Save book to an xlsx file.
@@ -116,7 +129,7 @@ impl Book {
         let file_path = std::path::Path::new(path);
         let file = std::fs::File::create(file_path)?;
         let writer = std::io::BufWriter::new(file);
-        save_xlsx_to_writer(&self.model, writer)?;
+        save_xlsx_to_writer(self.model.get_model(), writer)?;
         Ok(())
     }
 
@@ -124,10 +137,9 @@ impl Book {
     /// is the sheet name and the u32 is the sheet index.
     pub fn get_all_sheets_identifiers(&self) -> Vec<(String, u32)> {
         self.model
-            .workbook
-            .worksheets
+            .get_worksheets_properties()
             .iter()
-            .map(|sheet| (sheet.get_name(), sheet.get_sheet_id()))
+            .map(|sheet| (sheet.name.to_owned(), sheet.sheet_id))
             .collect()
     }
 
@@ -136,16 +148,22 @@ impl Book {
         Ok(&self.get_sheet()?.name)
     }
 
-    pub fn set_sheet_name(&mut self, idx: usize, sheet_name: &str) -> Result<()> {
-        self.get_sheet_by_idx_mut(idx)?.set_name(sheet_name);
+    pub fn set_sheet_name(&mut self, idx: u32, sheet_name: &str) -> Result<()> {
+        self.model
+            .rename_sheet(idx, sheet_name)
+            .map_err(|e| anyhow!(e))?;
         Ok(())
     }
 
     pub fn new_sheet(&mut self, sheet_name: Option<&str>) -> Result<()> {
-        let (_, idx) = self.model.new_sheet();
+        self.model.new_sheet().map_err(|e| anyhow!(e))?;
+        let idx = self.model.get_selected_sheet();
         if let Some(name) = sheet_name {
-            self.set_sheet_name(idx as usize, name)?;
+            self.set_sheet_name(idx, name)?;
         }
+        self.model
+            .set_selected_sheet(self.current_sheet)
+            .map_err(|e| anyhow!(e))?;
         Ok(())
     }
 
@@ -174,6 +192,7 @@ impl Book {
         {
             let contents = self
                 .model
+                .get_model()
                 .extend_to(
                     self.current_sheet,
                     from.row as i32,
@@ -187,7 +206,7 @@ impl Book {
                     self.current_sheet,
                     cell.row as i32,
                     cell.col as i32,
-                    contents,
+                    &contents,
                 )
                 .map_err(|e| anyhow!(e))?;
         }
@@ -206,32 +225,42 @@ impl Book {
     pub fn clear_cell_contents(&mut self, sheet: u32, Address { row, col }: Address) -> Result<()> {
         Ok(self
             .model
-            .cell_clear_contents(sheet, row as i32, col as i32)
+            .range_clear_contents(&Area {
+                sheet,
+                row: row as i32,
+                column: col as i32,
+                width: 1,
+                height: 1,
+            })
             .map_err(|s| anyhow!("Unable to clear cell contents {}", s))?)
     }
 
     pub fn clear_cell_range(&mut self, sheet: u32, start: Address, end: Address) -> Result<()> {
-        for row in start.row..=end.row {
-            for col in start.col..=end.col {
-                self.clear_cell_contents(sheet, Address { row, col })?;
-            }
-        }
+        let area = calculate_area(sheet, &start, &end);
+        self.model
+            .range_clear_contents(&area)
+            .map_err(|s| anyhow!("Unable to clear cell contents {}", s))?;
         Ok(())
     }
 
     pub fn clear_cell_all(&mut self, sheet: u32, Address { row, col }: Address) -> Result<()> {
         Ok(self
             .model
-            .cell_clear_all(sheet, row as i32, col as i32)
+            .range_clear_all(&Area {
+                sheet,
+                row: row as i32,
+                column: col as i32,
+                width: 1,
+                height: 1,
+            })
             .map_err(|s| anyhow!("Unable to clear cell contents {}", s))?)
     }
 
     pub fn clear_cell_range_all(&mut self, sheet: u32, start: Address, end: Address) -> Result<()> {
-        for row in start.row..=end.row {
-            for col in start.col..=end.col {
-                self.clear_cell_all(sheet, Address { row, col })?;
-            }
-        }
+        let area = calculate_area(sheet, &start, &end);
+        self.model
+            .range_clear_all(&area)
+            .map_err(|s| anyhow!("Unable to clear cell contents {}", s))?;
         Ok(())
     }
 
@@ -244,112 +273,113 @@ impl Book {
         // TODO(jwall): This is modeled a little weird. We should probably record
         // the error *somewhere* but for the user there is nothing to be done except
         // not use a style.
-        match self.model.get_style_for_cell(sheet, cell.row as i32, cell.col as i32)
+        match self
+            .model
+            .get_cell_style(sheet, cell.row as i32, cell.col as i32)
         {
             Err(_) => None,
             Ok(s) => Some(s),
         }
     }
 
-    fn get_column(&self, sheet: u32, col: usize) -> Result<Option<&Col>> {
-        Ok(self.model.workbook.worksheet(sheet)
-            .map_err(|e| anyhow!("{}", e))?.cols.get(col))
-    }
-
-    fn get_row(&self, sheet: u32, col: usize) -> Result<Option<&Row>> {
-        Ok(self.model.workbook.worksheet(sheet)
-            .map_err(|e| anyhow!("{}", e))?.rows.get(col))
-    }
-
-    pub fn get_column_style(&self, sheet: u32, col: usize) -> Result<Option<Style>> {
-        // TODO(jwall): This is modeled a little weird. We should probably record
-        // the error *somewhere* but for the user there is nothing to be done except
-        // not use a style.
-        if let Some(col) = self.get_column(sheet, col)? {
-            if let Some(style_idx) = col.style.map(|idx| idx as usize) {
-                let styles = &self.model.workbook.styles;
-                if styles.cell_style_xfs.len() <= style_idx {
-                    return Ok(Some(Style {
-                        alignment: None,
-                        num_fmt: styles.num_fmts[style_idx].format_code.clone(),
-                        fill: styles.fills[style_idx].clone(),
-                        font: styles.fonts[style_idx].clone(),
-                        border: styles.borders[style_idx].clone(),
-                        quote_prefix: false,
-                    }));
-                }
-            }
+    /// Set the cell style
+    /// Valid style paths are:
+    /// * fill.bg_color background color
+    /// * fill.fg_color foreground color
+    /// * font.b bold
+    /// * font.i italicize
+    /// * font.strike strikethrough
+    /// * font.color font color
+    /// * num_fmt number format
+    /// * alignment turn off alignment
+    /// * alignment.horizontal make alignment horzontal
+    /// * alignment.vertical make alignment vertical
+    /// * alignment.wrap_text wrap cell text
+    pub fn set_cell_style(&mut self, style: &[(&str, &str)], area: &Area) -> Result<()> {
+        for (path, val) in style {
+            self.model
+                .update_range_style(area, path, val)
+                .map_err(|s| anyhow!("Unable to format cell {}", s))?;
         }
-        return Ok(None);
-    }
-
-    pub fn get_row_style(&self, sheet: u32, row: usize) -> Result<Option<Style>> {
-        // TODO(jwall): This is modeled a little weird. We should probably record
-        // the error *somewhere* but for the user there is nothing to be done except
-        // not use a style.
-        if let Some(row) = self.get_row(sheet, row)? {
-            let style_idx = row.s as usize;
-            let styles = &self.model.workbook.styles;
-            if styles.cell_style_xfs.len() <= style_idx {
-                return Ok(Some(Style {
-                    alignment: None,
-                    num_fmt: styles.num_fmts[style_idx].format_code.clone(),
-                    fill: styles.fills[style_idx].clone(),
-                    font: styles.fonts[style_idx].clone(),
-                    border: styles.borders[style_idx].clone(),
-                    quote_prefix: false,
-                }));
-            }
-        }
-        return Ok(None);
-    }
-
-    pub fn create_style(&mut self) -> Style {
-        Style {
-            alignment: None,
-            num_fmt: String::new(),
-            fill: Fill::default(),
-            font: Font::default(),
-            border: Border::default(),
-            quote_prefix: false,
-        }
-    }
-
-    pub fn set_cell_style(&mut self, style: &Style, sheet: u32, cell: &Address) -> Result<()> {
-        self.model.set_cell_style(sheet, cell.row as i32, cell.col as i32, style)
-            .map_err(|s| anyhow!("Unable to format cell {}", s))?;
         Ok(())
     }
 
-    pub fn set_col_style(&mut self, style: &Style, sheet: u32, col: usize) -> Result<()> {
-        let idx = self.create_or_get_style_idx(style);
-        let sheet = self.model.workbook.worksheet_mut(sheet)
-            .map_err(|e| anyhow!("{}", e))?;
-        let width = sheet.get_column_width(col as i32)
-            .map_err(|e| anyhow!("{}", e))?;
-        sheet.set_column_style(col as i32, idx)
-            .map_err(|e| anyhow!("{}", e))?;
-        sheet.set_column_width(col as i32, width)
-            .map_err(|e| anyhow!("{}", e))?;
+    fn get_col_range(&self, sheet: u32, col_idx: usize) -> Area {
+        Area {
+            sheet,
+            row: 1,
+            column: col_idx as i32,
+            width: 1,
+            height: LAST_ROW,
+        }
+    }
+
+    fn get_row_range(&self, sheet: u32, row_idx: usize) -> Area {
+        Area {
+            sheet,
+            row: row_idx as i32,
+            column: 1,
+            width: LAST_COLUMN,
+            height: 1,
+        }
+    }
+
+    /// Set the column style.
+    /// Valid style paths are:
+    /// * fill.bg_color background color
+    /// * fill.fg_color foreground color
+    /// * font.b bold
+    /// * font.i italicize
+    /// * font.strike strikethrough
+    /// * font.color font color
+    /// * num_fmt number format
+    /// * alignment turn off alignment
+    /// * alignment.horizontal make alignment horzontal
+    /// * alignment.vertical make alignment vertical
+    /// * alignment.wrap_text wrap cell text
+    pub fn set_col_style(
+        &mut self,
+        style: &[(&str, &str)],
+        sheet: u32,
+        col_idx: usize,
+    ) -> Result<()> {
+        // TODO(jeremy): This is a little hacky and the underlying model
+        // supports a better mechanism but UserModel doesn't support it yet.
+        // https://github.com/ironcalc/IronCalc/issues/273
+        // https://github.com/ironcalc/IronCalc/pull/276 is the coming fix.
+        // NOTE(jwall): Because of the number of cells required to modify
+        // this is crazy slow
+        let area = self.get_col_range(sheet, col_idx);
+        self.set_cell_style(style, &area)?;
         Ok(())
     }
 
-    pub fn set_row_style(&mut self, style: &Style, sheet: u32, row: usize) -> Result<()> {
-        let idx = self.create_or_get_style_idx(style);
-        self.model.workbook.worksheet_mut(sheet)
-            .map_err(|e| anyhow!("{}", e))?
-            .set_row_style(row as i32, idx)
-            .map_err(|e| anyhow!("{}", e))?;
+    /// Set the row style
+    /// Valid style paths are:
+    /// * fill.bg_color background color
+    /// * fill.fg_color foreground color
+    /// * font.b bold
+    /// * font.i italicize
+    /// * font.strike strikethrough
+    /// * font.color font color
+    /// * num_fmt number format
+    /// * alignment turn off alignment
+    /// * alignment.horizontal make alignment horzontal
+    /// * alignment.vertical make alignment vertical
+    /// * alignment.wrap_text wrap cell text
+    pub fn set_row_style(
+        &mut self,
+        style: &[(&str, &str)],
+        sheet: u32,
+        row_idx: usize,
+    ) -> Result<()> {
+        // TODO(jeremy): This is a little hacky and the underlying model
+        // supports a better mechanism but UserModel doesn't support it yet.
+        // https://github.com/ironcalc/IronCalc/issues/273
+        // https://github.com/ironcalc/IronCalc/pull/276 is the coming fix.
+        let area = self.get_row_range(sheet, row_idx);
+        self.set_cell_style(style, &area)?;
         Ok(())
-    }
-
-    fn create_or_get_style_idx(&mut self, style: &Style) -> i32 {
-        let idx = if let Some(style_idx) = self.model.workbook.styles.get_style_index(style) {
-            style_idx
-        } else {
-            self.model.workbook.styles.create_new_style(style)
-        };
-        idx
     }
 
     /// Get a cells rendered content for display.
@@ -382,20 +412,21 @@ impl Book {
 
     /// Update the current cell in a book.
     /// This update won't be reflected until you call `Book::evaluate`.
-    pub fn edit_current_cell<S: Into<String>>(&mut self, value: S) -> Result<()> {
+    pub fn edit_current_cell<S: AsRef<str>>(&mut self, value: S) -> Result<()> {
         self.update_cell(&self.location.clone(), value)?;
         Ok(())
     }
 
     /// Update an entry in the current sheet for a book.
     /// This update won't be reflected until you call `Book::evaluate`.
-    pub fn update_cell<S: Into<String>>(&mut self, location: &Address, value: S) -> Result<()> {
+    pub fn update_cell<S: AsRef<str>>(&mut self, location: &Address, value: S) -> Result<()> {
         self.model
             .set_user_input(
                 self.current_sheet,
                 location.row as i32,
                 location.col as i32,
-                value.into(),
+                // TODO(jwall): This could probably be made more efficient
+                value.as_ref(),
             )
             .map_err(|e| anyhow!("Invalid cell contents: {}", e))?;
         Ok(())
@@ -403,9 +434,11 @@ impl Book {
 
     /// Insert `count` rows at a `row_idx`.
     pub fn insert_rows(&mut self, row_idx: usize, count: usize) -> Result<()> {
-        self.model
-            .insert_rows(self.current_sheet, row_idx as i32, count as i32)
-            .map_err(|e| anyhow!("Unable to insert row(s): {}", e))?;
+        for i in 0..count {
+            self.model
+                .insert_row(self.current_sheet, (row_idx + i) as i32)
+                .map_err(|e| anyhow!("Unable to insert row(s): {}", e))?;
+        }
         if self.location.row >= row_idx {
             self.move_to(&Address {
                 row: self.location.row + count,
@@ -417,9 +450,11 @@ impl Book {
 
     /// Insert `count` columns at a `col_idx`.
     pub fn insert_columns(&mut self, col_idx: usize, count: usize) -> Result<()> {
-        self.model
-            .insert_columns(self.current_sheet, col_idx as i32, count as i32)
-            .map_err(|e| anyhow!("Unable to insert column(s): {}", e))?;
+        for i in 0..count {
+            self.model
+                .insert_column(self.current_sheet, (col_idx + i) as i32)
+                .map_err(|e| anyhow!("Unable to insert column(s): {}", e))?;
+        }
         if self.location.col >= col_idx {
             self.move_to(&Address {
                 row: self.location.row,
@@ -436,16 +471,33 @@ impl Book {
 
     /// Get column size
     pub fn get_col_size(&self, idx: usize) -> Result<usize> {
+        self.get_column_size_for_sheet(self.current_sheet, idx)
+    }
+
+    pub fn get_column_size_for_sheet(
+        &self,
+        sheet: u32,
+        idx: usize,
+    ) -> std::result::Result<usize, anyhow::Error> {
         Ok((self
-            .get_sheet()?
-            .get_column_width(idx as i32)
+            .model
+            .get_column_width(sheet, idx as i32)
             .map_err(|e| anyhow!("Error getting column width: {:?}", e))?
             / COL_PIXELS) as usize)
     }
 
-    pub fn set_col_size(&mut self, idx: usize, cols: usize) -> Result<()> {
-        self.get_sheet_mut()?
-            .set_column_width(idx as i32, cols as f64 * COL_PIXELS)
+    pub fn set_col_size(&mut self, col: usize, width: usize) -> Result<()> {
+        self.set_column_size_for_sheet(self.current_sheet, col, width)
+    }
+
+    pub fn set_column_size_for_sheet(
+        &mut self,
+        sheet: u32,
+        col: usize,
+        width: usize,
+    ) -> std::result::Result<(), anyhow::Error> {
+        self.model
+            .set_column_width(sheet, col as i32, width as f64 * COL_PIXELS)
             .map_err(|e| anyhow!("Error setting column width: {:?}", e))?;
         Ok(())
     }
@@ -468,6 +520,7 @@ impl Book {
     pub fn select_sheet_by_name(&mut self, name: &str) -> bool {
         if let Some((idx, _sheet)) = self
             .model
+            .get_model()
             .workbook
             .worksheets
             .iter()
@@ -482,25 +535,31 @@ impl Book {
 
     /// Get all sheet names
     pub fn get_sheet_names(&self) -> Vec<String> {
-        self.model.workbook.get_worksheet_names()
+        self.model.get_model().workbook.get_worksheet_names()
     }
 
     pub fn select_next_sheet(&mut self) {
-        let len = self.model.workbook.worksheets.len() as u32;
+        let len = self.model.get_model().workbook.worksheets.len() as u32;
         let mut next = self.current_sheet + 1;
         if next == len {
             next = 0;
         }
+        self.model
+            .set_selected_sheet(next)
+            .expect("Unexpected error selecting sheet");
         self.current_sheet = next;
     }
 
     pub fn select_prev_sheet(&mut self) {
-        let len = self.model.workbook.worksheets.len() as u32;
+        let len = self.model.get_model().workbook.worksheets.len() as u32;
         let next = if self.current_sheet == 0 {
             len - 1
         } else {
             self.current_sheet - 1
         };
+        self.model
+            .set_selected_sheet(next)
+            .expect("Unexpected error selecting sheet");
         self.current_sheet = next;
     }
 
@@ -508,12 +567,16 @@ impl Book {
     pub fn select_sheet_by_id(&mut self, id: u32) -> bool {
         if let Some((idx, _sheet)) = self
             .model
+            .get_model()
             .workbook
             .worksheets
             .iter()
             .enumerate()
             .find(|(_idx, sheet)| sheet.sheet_id == id)
         {
+            self.model
+                .set_selected_sheet(idx as u32)
+                .expect("Unexpected error selecting sheet");
             self.current_sheet = idx as u32;
             return true;
         }
@@ -522,42 +585,46 @@ impl Book {
 
     /// Get the current `Worksheet`.
     pub(crate) fn get_sheet(&self) -> Result<&Worksheet> {
+        // TODO(jwall): Is there a cleaner way to do this with UserModel?
+        // Looks like it should be done with:
+        // https://docs.rs/ironcalc_base/latest/ironcalc_base/struct.UserModel.html#method.get_worksheets_properties
         Ok(self
             .model
+            .get_model()
             .workbook
             .worksheet(self.current_sheet)
             .map_err(|s| anyhow!("Invalid Worksheet id: {}: error: {}", self.current_sheet, s))?)
     }
 
-    pub(crate) fn get_sheet_mut(&mut self) -> Result<&mut Worksheet> {
-        Ok(self
-            .model
-            .workbook
-            .worksheet_mut(self.current_sheet)
-            .map_err(|s| anyhow!("Invalid Worksheet: {}", s))?)
-    }
-
     pub(crate) fn get_sheet_name_by_idx(&self, idx: usize) -> Result<&str> {
+        // TODO(jwall): Is there a cleaner way to do this with UserModel?
+        // Looks like it should be done with:
+        // https://docs.rs/ironcalc_base/latest/ironcalc_base/struct.UserModel.html#method.get_worksheets_properties
         Ok(&self
             .model
+            .get_model()
             .workbook
             .worksheet(idx as u32)
             .map_err(|s| anyhow!("Invalid Worksheet: {}", s))?
             .name)
     }
-    pub(crate) fn get_sheet_by_idx_mut(&mut self, idx: usize) -> Result<&mut Worksheet> {
-        Ok(self
-            .model
-            .workbook
-            .worksheet_mut(idx as u32)
-            .map_err(|s| anyhow!("Invalid Worksheet: {}", s))?)
-    }
+}
+
+fn calculate_area(sheet: u32, start: &Address, end: &Address) -> Area {
+    let area = Area {
+        sheet,
+        row: start.row as i32,
+        column: start.col as i32,
+        height: (end.row - start.row + 1) as i32,
+        width: (end.col - start.col + 1) as i32,
+    };
+    area
 }
 
 impl Default for Book {
     fn default() -> Self {
         let mut book =
-            Book::new(Model::new_empty("default_name", "en", "America/New_York").unwrap());
+            Book::new(UserModel::new_empty("default_name", "en", "America/New_York").unwrap());
         book.update_cell(&Address { row: 1, col: 1 }, "").unwrap();
         book
     }

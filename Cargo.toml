@@ -10,13 +10,14 @@ anyhow = { version = "1.0.91", features = ["backtrace"] }
 clap = { version = "4.5.20", features = ["derive"] }
 crossterm = { version = "0.28.1", features = ["event-stream", "serde"] }
 csvx = "0.1.17"
+# this revision introduces a way to get the Model back out of the UserModel
 ironcalc = { git = "https://github.com/ironcalc/IronCalc" }
 futures = "0.3.31"
 ratatui = "0.29.0"
 thiserror = "1.0.65"
 tui-textarea = "0.7.0"
 tui-prompts = "0.5.0"
-slice-utils = { git = "https://dev.zaphar.net/zaphar/slice-cursor-rs.git", ref = "main" }
+slice-utils = { git = "https://dev.zaphar.net/zaphar/slice-cursor-rs.git" }
 tui-popup = "0.6.0"
 serde_json = "1.0.133"
 colorsys = "0.6.7"

@@ -7,13 +7,8 @@ use ratatui::{
     widgets::{Block, Cell, Row, StatefulWidget, Table, Widget},
 };
 
+use crate::book;
 use super::{Address, Book, RangeSelection};
-
-// TODO(zaphar): Move this to the book module.
-// NOTE(zaphar): This is stolen from ironcalc but ironcalc doesn't expose it
-// publically.
-pub(crate) const LAST_COLUMN: usize = 16_384;
-pub(crate) const LAST_ROW: usize = 1_048_576;
 
 /// A visible column to show in our Viewport.
 #[derive(Clone, Debug)]
@@ -68,7 +63,7 @@ impl<'ws> Viewport<'ws> {
         let start_row = std::cmp::min(self.selected.row, state.prev_corner.row);
         let mut start = start_row;
         let mut end = start_row;
-        for row_idx in start_row..=LAST_ROW {
+        for row_idx in start_row..=(book::LAST_ROW as usize) {
             let updated_length = length + 1;
             if updated_length <= height {
                 length = updated_length;
@@ -95,7 +90,7 @@ impl<'ws> Viewport<'ws> {
         // We start out with a length of 5 already reserved
         let mut length = 5;
         let start_idx = std::cmp::min(self.selected.col, state.prev_corner.col);
-        for idx in start_idx..=LAST_COLUMN {
+        for idx in start_idx..=(book::LAST_COLUMN as usize) {
             let size = self.book.get_col_size(idx)? as u16;
             let updated_length = length + size;
             let col = VisibleColumn { idx, length: size };
@@ -248,7 +243,6 @@ pub(crate) fn map_color(color: Option<&String>, otherwise: Color) -> Color {
             candidate => {
                 // TODO(jeremy): Should we support more syntaxes than hex string?
                 // hsl(...) ??
-                // rgb(...) ??
                 if candidate.starts_with("#") {
                     if let Ok(rgb) = colorsys::Rgb::from_hex_str(candidate) {
                         // Note that the colorsys rgb model clamps the f64 values to no more
