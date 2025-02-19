@@ -7,14 +7,12 @@ use anyhow::{anyhow, Result};
 use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
 use ironcalc::base::{expressions::types::Area, Model};
 use ratatui::{
-    buffer::Buffer,
-    layout::{Constraint, Flex, Layout},
-    style::{Modifier, Style},
-    widgets::Block,
+    buffer::Buffer, layout::{Constraint, Flex, Layout}, style::{Modifier, Style}, text::{Line, Text}, widgets::Block
 };
 use tui_prompts::{State, Status, TextPrompt, TextState};
 use tui_textarea::{CursorMove, TextArea};
 
+mod help;
 mod cmd;
 pub mod render;
 #[cfg(test)]
@@ -81,7 +79,7 @@ pub struct AppState<'ws> {
     pub char_queue: Vec<char>,
     pub range_select: RangeSelection,
     dirty: bool,
-    popup: Vec<String>,
+    popup: Text<'ws>,
     clipboard: Option<ClipboardContents>,
 }
 
@@ -296,55 +294,16 @@ impl<'ws> Workspace<'ws> {
         Ok(None)
     }
 
-    fn render_help_text(&self) -> Vec<String> {
+    fn render_help_text(&self) -> Text<'static> {
         // TODO(zaphar): We should be sourcing these from our actual help documentation.
         // Ideally we would also render the markdown content properly.
         // https://github.com/zaphar/sheetsui/issues/22
         match self.state.modality() {
-            Modality::Navigate => vec![
-                "Navigate Mode:".to_string(),
-                "* e,i: Enter edit mode for current cell".to_string(),
-                "* ENTER/RETURN: Go down one cell".to_string(),
-                "* TAB: Go over one cell".to_string(),
-                "* h,j,k,l: vim style navigation".to_string(),
-                "* d: clear cell contents leaving style untouched".to_string(),
-                "* D: clear cell contents including style".to_string(),
-                "* CTRl-r: Add a row".to_string(),
-                "* CTRl-c: Add a column".to_string(),
-                "* CTRl-l: Grow column width by 1".to_string(),
-                "* CTRl-h: Shrink column width by 1".to_string(),
-                "* CTRl-n: Next sheet. Starts over at beginning if at end.".to_string(),
-                "* CTRl-p: Previous sheet. Starts over at end if at beginning.".to_string(),
-                "* ALT-h: Previous sheet. Starts over at end if at beginning.".to_string(),
-                "* q exit".to_string(),
-                "* Ctrl-S Save sheet".to_string(),
-            ],
-            Modality::CellEdit => vec![
-                "Edit Mode:".to_string(),
-                "* ENTER/RETURN: Exit edit mode and save changes".to_string(),
-                "* Ctrl-r: Enter Range Selection mode".to_string(),
-                "* v: Enter Range Selection mode with the start of the range already selected"
-                    .to_string(),
-                "* ESC: Exit edit mode and discard changes".to_string(),
-                "Otherwise edit as normal".to_string(),
-            ],
-            Modality::Command => vec![
-                "Command Mode:".to_string(),
-                "* ESC: Exit command mode".to_string(),
-                "* CTRL-?: Exit command mode".to_string(),
-                "* ENTER/RETURN: run command and exit command mode".to_string(),
-            ],
-            Modality::RangeSelect => vec![
-                "Range Selection Mode:".to_string(),
-                "* ESC: Exit command mode".to_string(),
-                "* h,j,k,l: vim style navigation".to_string(),
-                "* d: delete the contents of the range leaving style untouched".to_string(),
-                "* D: clear cell contents including style".to_string(),
-                "* Spacebar: Select start and end of range".to_string(),
-                "* CTRl-n: Next sheet. Starts over at beginning if at end.".to_string(),
-                "* CTRl-p: Previous sheet. Starts over at end if at beginning.".to_string(),
-            ],
-            _ => vec!["General help".to_string()],
+            Modality::Navigate => help::render_topic("navigate"),
+            Modality::CellEdit => help::render_topic("edit"),
+            Modality::Command => help::render_topic("command"),
+            Modality::RangeSelect => help::render_topic("visual"),
+            _ => help::render_topic(""),
         }
     }
 
@@ -424,8 +383,8 @@ impl<'ws> Workspace<'ws> {
                 self.load_into(path)?;
                 Ok(None)
             }
-            Ok(Some(Cmd::Help(_maybe_topic))) => {
-                self.enter_dialog_mode(vec!["TODO help topic".to_owned()]);
+            Ok(Some(Cmd::Help(maybe_topic))) => {
+                self.enter_dialog_mode(help::render_topic(maybe_topic.unwrap_or("")));
                 Ok(None)
             }
             Ok(Some(Cmd::Write(maybe_path))) => {
@@ -515,11 +474,11 @@ impl<'ws> Workspace<'ws> {
                 Ok(None)
             }
             Ok(None) => {
-                self.enter_dialog_mode(vec![format!("Unrecognized commmand {}", cmd_text)]);
+                self.enter_dialog_mode(vec![Line::from(format!("Unrecognized commmand {}", cmd_text))]);
                 Ok(None)
             }
             Err(msg) => {
-                self.enter_dialog_mode(vec![msg.to_owned()]);
+                self.enter_dialog_mode(vec![Line::from(msg.to_owned())]);
                 Ok(None)
             }
         }
@@ -931,8 +890,8 @@ impl<'ws> Workspace<'ws> {
         self.state.command_state.focus();
     }
 
-    fn enter_dialog_mode(&mut self, msg: Vec<String>) {
-        self.state.popup = msg;
+    fn enter_dialog_mode<T: Into<Text<'ws>>>(&mut self, msg: T) {
+        self.state.popup = msg.into();
         self.state.modality_stack.push(Modality::Dialog);
     }
 
