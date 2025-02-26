@@ -320,7 +320,7 @@ fn test_input_navitation_enter_key() {
 #[test]
 fn test_input_navitation_tab_key() {
     let mut ws = new_workspace();
-    let col = dbg!(ws.book.location.col);
+    let col = ws.book.location.col;
     assert_eq!(Some(&Modality::Navigate), ws.state.modality_stack.last());
     script()
         .tab()
@@ -352,7 +352,7 @@ fn test_input_navitation_shift_enter_key() {
 #[test]
 fn test_input_navitation_shift_tab_key() {
     let mut ws = new_workspace();
-    let col = dbg!(ws.book.location.col);
+    let col = ws.book.location.col;
     assert_eq!(Some(&Modality::Navigate), ws.state.modality_stack.last());
     script()
         .tab()
@@ -931,7 +931,6 @@ fn test_edit_mode_paste() {
     assert_eq!(Some(&Modality::Navigate), ws.state.modality_stack.last());
     ws.state.range_select.start = Some(Address { row: 1, col: 1 });
     ws.state.range_select.end = Some(Address { row: 2, col: 2 });
-    dbg!(ws.selected_range_to_string());
     script()
         .char('e')
         .ctrl('p')
@@ -1130,7 +1129,6 @@ macro_rules! assert_range_copy {
             Some(&Modality::RangeSelect),
             ws.state.modality_stack.iter().last()
         );
-        dbg!(ws.state.range_select.get_range());
         $script.run(&mut ws).expect("failed to run script");
         assert!(ws.state.clipboard.is_some());
         match ws.state.clipboard.unwrap() {
@@ -1234,7 +1232,13 @@ fn test_color_row() {
     for ci in [1, book::LAST_COLUMN] {
         let style = ws
             .book
-            .get_cell_style(ws.book.current_sheet, &Address { row: 1, col: ci as usize })
+            .get_cell_style(
+                ws.book.current_sheet,
+                &Address {
+                    row: 1,
+                    col: ci as usize,
+                },
+            )
             .expect("failed to get style");
         assert_eq!(
             "#800000",
@@ -1259,7 +1263,13 @@ fn test_color_col() {
     for ri in [1, book::LAST_ROW] {
         let style = ws
             .book
-            .get_cell_style(ws.book.current_sheet, &Address { row: ri as usize, col: 1 })
+            .get_cell_style(
+                ws.book.current_sheet,
+                &Address {
+                    row: ri as usize,
+                    col: 1,
+                },
+            )
             .expect("failed to get style");
         assert_eq!(
             "#800000",
