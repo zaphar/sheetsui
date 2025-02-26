@@ -1291,7 +1291,7 @@ fn test_bold_text() {
         .expect("Failed to get style");
     assert!(!before_style.font.b);
     script()
-        .char('b')
+        .ctrl('b')
         .run(&mut ws)
         .expect("Unable to run script");
     let style = ws
@@ -1299,6 +1299,25 @@ fn test_bold_text() {
         .get_cell_style(0, &Address { row: 1, col: 1 })
         .expect("Failed to get style");
     assert!(style.font.b);
+}
+
+#[test]
+fn test_italic_text() {
+    let mut ws = new_workspace();
+    let before_style = ws
+        .book
+        .get_cell_style(0, &Address { row: 1, col: 1 })
+        .expect("Failed to get style");
+    assert!(!before_style.font.i);
+    script()
+        .ctrl('i')
+        .run(&mut ws)
+        .expect("Unable to run script");
+    let style = ws
+        .book
+        .get_cell_style(0, &Address { row: 1, col: 1 })
+        .expect("Failed to get style");
+    assert!(style.font.i);
 }
 
 fn new_workspace<'a>() -> Workspace<'a> {

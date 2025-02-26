@@ -669,6 +669,30 @@ impl<'ws> Workspace<'ws> {
                     self.state.reset_n_prefix();
                     self.state.char_queue.clear();
                 }
+                KeyCode::Char('b') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                    let address = self.book.location.clone();
+                    self.book.set_cell_style(
+                        &[("font.b", "true")],
+                        &Area {
+                        sheet: self.book.current_sheet,
+                        row: address.row as i32,
+                        column: address.col as i32,
+                        width: 1,
+                        height: 1,
+                    })?;
+                }
+                KeyCode::Char('i') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                    let address = self.book.location.clone();
+                    self.book.set_cell_style(
+                        &[("font.i", "true")],
+                        &Area {
+                        sheet: self.book.current_sheet,
+                        row: address.row as i32,
+                        column: address.col as i32,
+                        width: 1,
+                        height: 1,
+                    })?;
+                }
                 KeyCode::Char(d) if d.is_ascii_digit() => {
                     self.handle_numeric_prefix(d);
                 }
@@ -830,18 +854,6 @@ impl<'ws> Workspace<'ws> {
                     } else {
                         self.state.char_queue.push('g');
                     }
-                }
-                KeyCode::Char('b') => {
-                    let address = self.book.location.clone();
-                    self.book.set_cell_style(
-                        &[("font.b", "true")],
-                        &Area {
-                        sheet: self.book.current_sheet,
-                        row: address.row as i32,
-                        column: address.col as i32,
-                        width: 1,
-                        height: 1,
-                    })?;
                 }
                 _ => {
                     // noop
