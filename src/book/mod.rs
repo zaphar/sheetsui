@@ -343,12 +343,6 @@ impl Book {
         sheet: u32,
         col_idx: usize,
     ) -> Result<()> {
-        // TODO(jeremy): This is a little hacky and the underlying model
-        // supports a better mechanism but UserModel doesn't support it yet.
-        // https://github.com/ironcalc/IronCalc/issues/273
-        // https://github.com/ironcalc/IronCalc/pull/276 is the coming fix.
-        // NOTE(jwall): Because of the number of cells required to modify
-        // this is crazy slow
         let area = self.get_col_range(sheet, col_idx);
         self.set_cell_style(style, &area)?;
         Ok(())
@@ -373,10 +367,6 @@ impl Book {
         sheet: u32,
         row_idx: usize,
     ) -> Result<()> {
-        // TODO(jeremy): This is a little hacky and the underlying model
-        // supports a better mechanism but UserModel doesn't support it yet.
-        // https://github.com/ironcalc/IronCalc/issues/273
-        // https://github.com/ironcalc/IronCalc/pull/276 is the coming fix.
         let area = self.get_row_range(sheet, row_idx);
         self.set_cell_style(style, &area)?;
         Ok(())

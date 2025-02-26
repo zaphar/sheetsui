@@ -1272,6 +1272,24 @@ fn test_color_col() {
     }
 }
 
+#[test]
+fn test_bold_text() {
+    let mut ws = new_workspace();
+    let before_style = ws
+        .book
+        .get_cell_style(0, &Address { row: 1, col: 1 })
+        .expect("Failed to get style");
+    assert!(!before_style.font.b);
+    script()
+        .char('b')
+        .run(&mut ws)
+        .expect("Unable to run script");
+    let style = ws
+        .book
+        .get_cell_style(0, &Address { row: 1, col: 1 })
+        .expect("Failed to get style");
+    assert!(style.font.b);
+}
 
 fn new_workspace<'a>() -> Workspace<'a> {
     Workspace::new_empty("en", "America/New_York").expect("Failed to get empty workbook")

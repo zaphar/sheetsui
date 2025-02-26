@@ -831,6 +831,18 @@ impl<'ws> Workspace<'ws> {
                         self.state.char_queue.push('g');
                     }
                 }
+                KeyCode::Char('b') => {
+                    let address = self.book.location.clone();
+                    self.book.set_cell_style(
+                        &[("font.b", "true")],
+                        &Area {
+                        sheet: self.book.current_sheet,
+                        row: address.row as i32,
+                        column: address.col as i32,
+                        width: 1,
+                        height: 1,
+                    })?;
+                }
                 _ => {
                     // noop
                     self.state.char_queue.clear();
