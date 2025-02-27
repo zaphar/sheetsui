@@ -29,6 +29,7 @@ will clear the numeric prefix if you want to cancel it.
 **Modifying the Sheet or Cells**
 
 * `e` or `i` will enter CellEdit mode for the current cell.
+* 'I' will toggle italic on the cell. 'B' will toggle bold.
 * `Ctrl-h` will shorten the width of the column you are on.
 * `Ctrl-l` will lengthen the width of the column you are on.
 
