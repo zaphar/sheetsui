@@ -669,6 +669,16 @@ impl<'ws> Workspace<'ws> {
                     self.state.reset_n_prefix();
                     self.state.char_queue.clear();
                 }
+                KeyCode::Char('B') => {
+                    let address = self.book.location.clone();
+                    let style = self.book.get_cell_style(self.book.current_sheet, &address).map(|s| s.font.b);
+                    self.toggle_bool_style(style, "font.b", &address)?;
+                }
+                KeyCode::Char('I') => {
+                    let address = self.book.location.clone();
+                    let style = self.book.get_cell_style(self.book.current_sheet, &address).map(|s| s.font.i);
+                    self.toggle_bool_style(style, "font.i", &address)?;
+                }
                 KeyCode::Char(d) if d.is_ascii_digit() => {
                     self.handle_numeric_prefix(d);
                 }
@@ -838,6 +848,24 @@ impl<'ws> Workspace<'ws> {
             }
         }
         return Ok(None);
+    }
+
+    fn toggle_bool_style(&mut self, current_val: Option<bool>, path: &str, address: &Address) -> Result<(), anyhow::Error> {
+        let value = if let Some(b_val) = current_val {
+            if b_val { "false" } else { "true" }
+        } else {
+            "true"
+        };
+        self.book.set_cell_style(
+            &[(path, value)],
+            &Area {
+            sheet: self.book.current_sheet,
+            row: address.row as i32,
+            column: address.col as i32,
+            width: 1,
+            height: 1,
+        })?;
+        Ok(())
     }
 
     fn paste_range(&mut self) -> Result<(), anyhow::Error> {

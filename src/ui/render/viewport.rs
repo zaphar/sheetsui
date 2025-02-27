@@ -193,15 +193,28 @@ impl<'ws> Viewport<'ws> {
         ci: usize,
         mut cell: Cell<'widget>,
     ) -> Cell<'widget> {
-        let style = self
+        // TODO(zaphar): Should probably create somekind of formatter abstraction.
+        if let Some(style) = self
             .book
-            .get_cell_style(self.book.current_sheet, &Address { row: ri, col: ci });
+            .get_cell_style(self.book.current_sheet, &Address { row: ri, col: ci }) {
+            cell = self.compute_cell_colors(&style, ri, ci, cell);
+            cell = if style.font.b {
+                cell.bold()
+            } else { cell };
+            cell = if style.font.i {
+                cell.italic()
+            } else { cell };
+        }
+        cell
+    }
+
+    fn compute_cell_colors<'widget>(&self, style: &ironcalc::base::types::Style, ri: usize, ci: usize, mut cell: Cell<'widget>) -> Cell<'widget> {
         let bg_color = map_color(
-            style.as_ref().map(|s| s.fill.bg_color.as_ref()).flatten(),
+            style.fill.bg_color.as_ref(),
             Color::Rgb(35, 33, 54),
         );
         let fg_color = map_color(
-            style.as_ref().map(|s| s.fill.fg_color.as_ref()).flatten(),
+            style.fill.fg_color.as_ref(),
             Color::White,
         );
         if let Some((start, end)) = &self.range_selection.map_or(None, |r| r.get_range()) {
@@ -212,12 +225,12 @@ impl<'ws> Viewport<'ws> {
         } else {
             cell = cell.bg(bg_color).fg(fg_color);
         }
-        match (self.book.location.row == ri, self.book.location.col == ci) {
+        cell = match (self.book.location.row == ri, self.book.location.col == ci) {
             (true, true) => cell.fg(Color::White).bg(Color::Rgb(57, 61, 71)),
             // TODO(zaphar): Support ironcalc style options
             _ => cell,
-        }
-        .bold()
+        };
+        cell
     }
 }
 
