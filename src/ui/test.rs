@@ -542,8 +542,9 @@ fn test_range_copy() {
     let mut ws = new_workspace();
     assert_eq!(Some(&Modality::Navigate), ws.state.modality_stack.last());
 
+    let address = Address::default();
     ws.book
-        .move_to(&Address { row: 1, col: 1 })
+        .move_to(&address)
         .expect("Failed to move to row");
     let original_loc = ws.book.location.clone();
     script()
@@ -564,7 +565,7 @@ fn test_range_copy() {
         .run(&mut ws)
         .expect("Failed to handle key sequence");
     assert_eq!(
-        Some(Address { row: 1, col: 2 }),
+        Some(Address { sheet: 0, row: 1, col: 2 }),
         ws.state.range_select.start
     );
 
@@ -576,18 +577,18 @@ fn test_range_copy() {
 
     assert!(ws.state.range_select.original_location.is_none());
     assert_eq!(
-        Some(Address { row: 1, col: 2 }),
+        Some(Address { sheet: 0, row: 1, col: 2 }),
         ws.state.range_select.start
     );
-    assert_eq!(Some(Address { row: 2, col: 2 }), ws.state.range_select.end);
+    assert_eq!(Some(Address { sheet: 0, row: 2, col: 2 }), ws.state.range_select.end);
     assert_eq!(original_loc, ws.book.location);
     assert_eq!(Some(&Modality::Navigate), ws.state.modality_stack.last());
 
     ws.book
-        .move_to(&Address { row: 5, col: 5 })
+        .move_to(&Address { sheet: 0, row: 5, col: 5 })
         .expect("Failed to move to row");
     let original_loc_2 = ws.book.location.clone();
-    assert_eq!(Address { row: 5, col: 5 }, original_loc_2);
+    assert_eq!(Address { sheet: 0, row: 5, col: 5 }, original_loc_2);
 
     script()
         .char('v')
@@ -607,7 +608,7 @@ fn test_range_copy() {
         .run(&mut ws)
         .expect("Failed to handle key sequence");
     assert_eq!(
-        Some(Address { row: 5, col: 5 }),
+        Some(Address { sheet: 0, row: 5, col: 5 }),
         ws.state.range_select.start
     );
 
@@ -619,11 +620,11 @@ fn test_range_copy() {
 
     assert!(ws.state.range_select.original_location.is_none());
     assert_eq!(
-        Some(Address { row: 5, col: 5 }),
+        Some(Address { sheet: 0, row: 5, col: 5 }),
         ws.state.range_select.start
     );
-    assert_eq!(Some(Address { row: 5, col: 4 }), ws.state.range_select.end);
-    assert_eq!(Address { row: 4, col: 5 }, ws.book.location);
+    assert_eq!(Some(Address { sheet: 0, row: 5, col: 4 }), ws.state.range_select.end);
+    assert_eq!(Address { sheet: 0, row: 4, col: 5 }, ws.book.location);
     assert_eq!(Some(&Modality::Navigate), ws.state.modality_stack.last());
 }
 
@@ -652,14 +653,14 @@ fn test_gg_movement() {
         .char('j')
         .run(&mut ws)
         .expect("failed to handle event sequence");
-    assert_eq!(ws.book.location, Address { row: 3, col: 1 });
+    assert_eq!(ws.book.location, Address { sheet: 0, row: 3, col: 1 });
     script()
         .char('l')
         .char('g')
         .char('g')
         .run(&mut ws)
         .expect("failed to handle event sequence");
-    assert_eq!(ws.book.location, Address { row: 1, col: 2 });
+    assert_eq!(ws.book.location, Address { sheet: 0, row: 1, col: 2 });
 }
 
 #[test]
@@ -672,14 +673,14 @@ fn test_h_j_k_l_movement() {
         .char('l')
         .run(&mut ws)
         .expect("failed to handle event sequence");
-    assert_eq!(ws.book.location, Address { row: 3, col: 2 });
+    assert_eq!(ws.book.location, Address { sheet: 0, row: 3, col: 2 });
     script()
         .char('h')
         .char('2')
         .char('k')
         .run(&mut ws)
         .expect("failed to handle event sequence");
-    assert_eq!(ws.book.location, Address { row: 1, col: 1 });
+    assert_eq!(ws.book.location, Address { sheet: 0, row: 1, col: 1 });
 }
 
 macro_rules! assert_copy_paste {
@@ -929,8 +930,8 @@ fn test_command_mode_enter() {
 fn test_edit_mode_paste() {
     let mut ws = new_workspace();
     assert_eq!(Some(&Modality::Navigate), ws.state.modality_stack.last());
-    ws.state.range_select.start = Some(Address { row: 1, col: 1 });
-    ws.state.range_select.end = Some(Address { row: 2, col: 2 });
+    ws.state.range_select.start = Some(Address { sheet: 0, row: 1, col: 1 });
+    ws.state.range_select.end = Some(Address { sheet: 0, row: 2, col: 2 });
     dbg!(ws.selected_range_to_string());
     script()
         .char('e')
@@ -979,8 +980,8 @@ macro_rules! assert_range_clear {
     ($script : expr) => {{
         let mut ws = new_workspace();
         assert_eq!(Some(&Modality::Navigate), ws.state.modality_stack.last());
-        let first_corner = Address { row: 1, col: 1 };
-        let second_corner = Address { row: 2, col: 2 };
+        let first_corner = Address { sheet: 0, row: 1, col: 1 };
+        let second_corner = Address { sheet: 0, row: 2, col: 2 };
         ws.book
             .update_cell(&first_corner, "foo")
             .expect("Failed to update cell");
@@ -1050,18 +1051,17 @@ fn test_range_select_movement() {
         .char('k')
         .run(&mut ws)
         .expect("failed to run script");
-    assert_eq!(&Address { row: 3, col: 3 }, &ws.book.location);
-    assert_eq!(0, ws.book.current_sheet);
+    assert_eq!(&Address { sheet: 0, row: 3, col: 3 }, &ws.book.location);
     script()
         .ctrl('n')
         .run(&mut ws)
         .expect("Unable to run script");
-    assert_eq!(1, ws.book.current_sheet);
+    assert_eq!(1, ws.book.location.sheet);
     script()
         .ctrl('p')
         .run(&mut ws)
         .expect("Unable to run script");
-    assert_eq!(0, ws.book.current_sheet);
+    assert_eq!(0, ws.book.location.sheet);
 }
 
 #[test]
@@ -1072,8 +1072,8 @@ fn test_range_select_clear_lower_d() {
 macro_rules! assert_range_copy {
     ($script: expr) => {{
         let mut ws = new_workspace();
-        let top_left_addr = Address { row: 2, col: 2 };
-        let bot_right_addr = Address { row: 4, col: 4 };
+        let top_left_addr = Address { sheet: 0, row: 2, col: 2 };
+        let bot_right_addr = Address { sheet: 0, row: 4, col: 4 };
         ws.book
             .update_cell(&top_left_addr, "top_left")
             .expect("Failed to update top left");
@@ -1112,7 +1112,7 @@ macro_rules! assert_range_copy {
                 .expect("Didn't find a start of range")
         );
         assert_eq!(
-            &Address { row: 1, col: 1 },
+            &Address { sheet: 0, row: 1, col: 1 },
             ws.state
                 .range_select
                 .original_location
@@ -1188,7 +1188,7 @@ fn test_extend_to_range() {
         .expect("Unable to run script");
     let extended_cell = ws
         .book
-        .get_cell_addr_contents(&Address { row: 2, col: 1 })
+        .get_cell_addr_contents(&Address { sheet: 0, row: 2, col: 1 })
         .expect("Failed to get cell contents");
     assert_eq!("=B2+1".to_string(), extended_cell);
 }
@@ -1208,7 +1208,7 @@ fn test_color_cells() {
         for ci in 1..=3 {
             let style = ws
                 .book
-                .get_cell_style(ws.book.current_sheet, &Address { row: ri, col: ci })
+                .get_cell_style(&Address { sheet: ws.book.location.sheet, row: ri, col: ci })
                 .expect("failed to get style");
             assert_eq!(
                 "#800000",
@@ -1234,7 +1234,7 @@ fn test_color_row() {
     for ci in [1, book::LAST_COLUMN] {
         let style = ws
             .book
-            .get_cell_style(ws.book.current_sheet, &Address { row: 1, col: ci as usize })
+            .get_cell_style(&Address { sheet: ws.book.location.sheet, row: 1, col: ci as usize })
             .expect("failed to get style");
         assert_eq!(
             "#800000",
@@ -1259,7 +1259,7 @@ fn test_color_col() {
     for ri in [1, book::LAST_ROW] {
         let style = ws
             .book
-            .get_cell_style(ws.book.current_sheet, &Address { row: ri as usize, col: 1 })
+            .get_cell_style(&Address { sheet: ws.book.location.sheet, row: ri as usize, col: 1 })
             .expect("failed to get style");
         assert_eq!(
             "#800000",

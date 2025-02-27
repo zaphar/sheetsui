@@ -152,7 +152,7 @@ impl<'ws> Viewport<'ws> {
                         |VisibleColumn { idx: ci, length: _ }| {
                             let content = self
                                 .book
-                                .get_cell_addr_rendered(&Address { row: ri, col: *ci })
+                                .get_cell_addr_rendered(&Address { row: ri, col: *ci, sheet: self.book.location.sheet})
                                 .unwrap();
                             self.compute_cell_style(ri, *ci, Cell::new(Text::raw(content)))
                         },
@@ -195,7 +195,7 @@ impl<'ws> Viewport<'ws> {
     ) -> Cell<'widget> {
         let style = self
             .book
-            .get_cell_style(self.book.current_sheet, &Address { row: ri, col: ci });
+            .get_cell_style(&Address { sheet: self.book.location.sheet, row: ri, col: ci });
         let bg_color = map_color(
             style.as_ref().map(|s| s.fill.bg_color.as_ref()).flatten(),
             Color::Rgb(35, 33, 54),

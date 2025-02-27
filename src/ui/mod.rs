@@ -45,10 +45,12 @@ impl RangeSelection {
         if let (Some(start), Some(end)) = (&self.start, &self.end) {
             return Some((
                 Address {
+                    sheet: start.sheet,
                     row: std::cmp::min(start.row, end.row),
                     col: std::cmp::min(start.col, end.col),
                 },
                 Address {
+                    sheet: end.sheet,
                     row: std::cmp::max(start.row, end.row),
                     col: std::cmp::max(start.col, end.col),
                 },
@@ -133,13 +135,14 @@ impl<'ws> AppState<'ws> {
 /// The Address in a Table.
 #[derive(Debug, PartialEq, PartialOrd, Ord, Eq, Clone)]
 pub struct Address {
+    pub sheet: u32,
     pub row: usize,
     pub col: usize,
 }
 
 impl Address {
     pub fn new(row: usize, col: usize) -> Self {
-        Self { row, col }
+        Self { sheet: 0, row, col }
     }
 
     pub fn to_range_part(&self) -> String {
@@ -215,7 +218,7 @@ impl<'ws> Workspace<'ws> {
                 format!(":{}", end.to_range_part())
             );
             if let Some(range_sheet) = state.range_select.sheet {
-                if range_sheet != self.book.current_sheet {
+                if range_sheet != self.book.location.sheet {
                     return format!(
                         "{}!{}",
                         self.book
@@ -243,6 +246,7 @@ impl<'ws> Workspace<'ws> {
     /// Move to the top row without changing columns
     pub fn move_to_top(&mut self) -> Result<()> {
         self.book.move_to(&Address {
+            sheet: self.book.location.sheet,
             row: 1,
             col: self.book.location.col,
         })?;
@@ -411,7 +415,7 @@ impl<'ws> Workspace<'ws> {
                         self.book.set_sheet_name(idx as u32, name)?;
                     }
                     _ => {
-                        self.book.set_sheet_name(self.book.current_sheet, name)?;
+                        self.book.set_sheet_name(self.book.location.sheet, name)?;
                     }
                 }
                 Ok(None)
@@ -431,7 +435,7 @@ impl<'ws> Workspace<'ws> {
                 for r in row..(row + row_count) {
                     self.book.set_row_style(
                         &[("fill.bg_color", &color)],
-                        self.book.current_sheet,
+                        self.book.location.sheet,
                         r,
                     )?;
                 }
@@ -443,14 +447,14 @@ impl<'ws> Workspace<'ws> {
                 for c in col..(col + col_count) {
                     self.book.set_col_style(
                         &[("fill.bg_color", &color)],
-                        self.book.current_sheet,
+                        self.book.location.sheet,
                         c,
                     )?;
                 }
                 Ok(None)
             }
             Ok(Some(Cmd::ColorCell(color))) => {
-                let sheet = self.book.current_sheet;
+                let sheet = self.book.location.sheet;
                 let area = if let Some((start, end)) = self.state.range_select.get_range() {
                     Area {
                         sheet,
@@ -510,10 +514,6 @@ impl<'ws> Workspace<'ws> {
                 KeyCode::Char('D') => {
                     if let Some((start, end)) = dbg!(self.state.range_select.get_range()) {
                         self.book.clear_cell_range_all(
-                            self.state
-                                .range_select
-                                .sheet
-                                .unwrap_or_else(|| self.book.current_sheet),
                             start,
                             end,
                         )?;
@@ -522,10 +522,6 @@ impl<'ws> Workspace<'ws> {
                 KeyCode::Char('d') => {
                     if let Some((start, end)) = self.state.range_select.get_range() {
                         self.book.clear_cell_range(
-                            self.state
-                                .range_select
-                                .sheet
-                                .unwrap_or_else(|| self.book.current_sheet),
                             start,
                             end,
                         )?;
@@ -570,7 +566,7 @@ impl<'ws> Workspace<'ws> {
                         ws.book.select_next_sheet();
                         Ok(())
                     })?;
-                    self.state.range_select.sheet = Some(self.book.current_sheet);
+                    self.state.range_select.sheet = Some(self.book.location.sheet);
                 }
                 KeyCode::Char('p') if key.modifiers == KeyModifiers::CONTROL => {
                     self.state.range_select.reset_range_selection();
@@ -578,7 +574,7 @@ impl<'ws> Workspace<'ws> {
                         ws.book.select_prev_sheet();
                         Ok(())
                     })?;
-                    self.state.range_select.sheet = Some(self.book.current_sheet);
+                    self.state.range_select.sheet = Some(self.book.location.sheet);
                 }
                 KeyCode::Char('C') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                     self.copy_range(true)?;
@@ -741,7 +737,7 @@ impl<'ws> Workspace<'ws> {
                 }
                 KeyCode::Char('l') if key.modifiers == KeyModifiers::CONTROL => {
                     self.run_with_prefix(|ws: &mut Workspace<'_>| -> Result<()> {
-                        let Address { row: _, col } = &ws.book.location;
+                        let Address { sheet: _, row: _, col } = &ws.book.location;
                         ws.book
                             .set_col_size(*col, ws.book.get_col_size(*col)? + 1)?;
                         Ok(())
@@ -749,7 +745,7 @@ impl<'ws> Workspace<'ws> {
                 }
                 KeyCode::Char('h') if key.modifiers == KeyModifiers::CONTROL => {
                     self.run_with_prefix(|ws: &mut Workspace<'_>| -> Result<()> {
-                        let Address { row: _, col } = &ws.book.location;
+                        let Address { sheet: _, row: _, col } = &ws.book.location;
                         let curr_size = ws.book.get_col_size(*col)?;
                         if curr_size > 1 {
                             ws.book.set_col_size(*col, curr_size - 1)?;
@@ -847,7 +843,7 @@ impl<'ws> Workspace<'ws> {
                 self.book.evaluate();
             }
             Some(ClipboardContents::Range(ref rows)) => {
-                let Address { row, col } = self.book.location.clone();
+                let Address { sheet, row, col } = self.book.location.clone();
                 let row_len = rows.len();
                 for ri in 0..row_len {
                     let columns = &rows[ri];
@@ -855,6 +851,7 @@ impl<'ws> Workspace<'ws> {
                     for ci in 0..col_len {
                         self.book.update_cell(
                             &Address {
+                                sheet,
                                 row: ri + row,
                                 col: ci + col,
                             },
@@ -896,8 +893,8 @@ impl<'ws> Workspace<'ws> {
     }
 
     fn enter_range_select_mode(&mut self, init_start: bool) {
-        self.state.range_select.sheet = Some(self.book.current_sheet);
-        self.state.range_select.original_sheet = Some(self.book.current_sheet);
+        self.state.range_select.sheet = Some(self.book.location.sheet);
+        self.state.range_select.original_sheet = Some(self.book.location.sheet);
         self.state.range_select.original_location = Some(self.book.location.clone());
         if init_start {
             self.state.range_select.start = Some(self.book.location.clone());
@@ -932,7 +929,7 @@ impl<'ws> Workspace<'ws> {
     }
 
     fn exit_range_select_mode(&mut self) -> Result<()> {
-        self.book.current_sheet = self
+        self.book.location.sheet = self
             .state
             .range_select
             .original_sheet

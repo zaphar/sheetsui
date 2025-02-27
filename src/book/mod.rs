@@ -37,7 +37,7 @@ impl<'book> AddressRange<'book> {
         for ri in row_range.iter() {
             let mut row = Vec::with_capacity(col_range.len());
             for ci in col_range.iter() {
-                row.push(Address { row: *ri, col: *ci });
+                row.push(Address { sheet: self.start.sheet, row: *ri, col: *ci });
             }
             rows.push(row);
         }
@@ -49,7 +49,7 @@ impl<'book> AddressRange<'book> {
         let mut rows = Vec::with_capacity(row_range.len() * col_range.len());
         for ri in row_range.iter() {
             for ci in col_range.iter() {
-                rows.push(Address { row: *ri, col: *ci });
+                rows.push(Address { sheet: self.start.sheet, row: *ri, col: *ci });
             }
         }
         rows
@@ -85,7 +85,6 @@ impl<'book> AddressRange<'book> {
 /// A spreadsheet book with some internal state tracking.
 pub struct Book {
     pub(crate) model: UserModel,
-    pub current_sheet: u32,
     pub location: crate::ui::Address,
 }
 
@@ -94,7 +93,6 @@ impl Book {
     pub fn new(model: UserModel) -> Self {
         Self {
             model,
-            current_sheet: 0,
             location: Address::default(),
         }
     }
@@ -162,7 +160,7 @@ impl Book {
             self.set_sheet_name(idx, name)?;
         }
         self.model
-            .set_selected_sheet(self.current_sheet)
+            .set_selected_sheet(self.location.sheet)
             .map_err(|e| anyhow!(e))?;
         Ok(())
     }
@@ -173,7 +171,7 @@ impl Book {
     }
 
     /// Move to a specific sheet location in the current sheet
-    pub fn move_to(&mut self, Address { row, col }: &Address) -> Result<()> {
+    pub fn move_to(&mut self, Address { sheet: _, row, col }: &Address) -> Result<()> {
         // FIXME(zaphar): Check that this is safe first.
         self.location.row = *row;
         self.location.col = *col;
@@ -194,7 +192,7 @@ impl Book {
                 .model
                 .get_model()
                 .extend_to(
-                    self.current_sheet,
+                    self.location.sheet,
                     from.row as i32,
                     from.col as i32,
                     cell.row as i32,
@@ -203,7 +201,7 @@ impl Book {
                 .map_err(|e| anyhow!(e))?;
             self.model
                 .set_user_input(
-                    self.current_sheet,
+                    self.location.sheet,
                     cell.row as i32,
                     cell.col as i32,
                     &contents,
@@ -215,14 +213,14 @@ impl Book {
     }
 
     pub fn clear_current_cell(&mut self) -> Result<()> {
-        self.clear_cell_contents(self.current_sheet as u32, self.location.clone())
+        self.clear_cell_contents(self.location.clone())
     }
 
     pub fn clear_current_cell_all(&mut self) -> Result<()> {
-        self.clear_cell_all(self.current_sheet as u32, self.location.clone())
+        self.clear_cell_all(self.location.clone())
     }
 
-    pub fn clear_cell_contents(&mut self, sheet: u32, Address { row, col }: Address) -> Result<()> {
+    pub fn clear_cell_contents(&mut self, Address { sheet, row, col }: Address) -> Result<()> {
         Ok(self
             .model
             .range_clear_contents(&Area {
@@ -235,15 +233,15 @@ impl Book {
             .map_err(|s| anyhow!("Unable to clear cell contents {}", s))?)
     }
 
-    pub fn clear_cell_range(&mut self, sheet: u32, start: Address, end: Address) -> Result<()> {
-        let area = calculate_area(sheet, &start, &end);
+    pub fn clear_cell_range(&mut self, start: Address, end: Address) -> Result<()> {
+        let area = calculate_area(start.sheet, &start, &end);
         self.model
             .range_clear_contents(&area)
             .map_err(|s| anyhow!("Unable to clear cell contents {}", s))?;
         Ok(())
     }
 
-    pub fn clear_cell_all(&mut self, sheet: u32, Address { row, col }: Address) -> Result<()> {
+    pub fn clear_cell_all(&mut self, Address { sheet, row, col }: Address) -> Result<()> {
         Ok(self
             .model
             .range_clear_all(&Area {
@@ -256,8 +254,8 @@ impl Book {
             .map_err(|s| anyhow!("Unable to clear cell contents {}", s))?)
     }
 
-    pub fn clear_cell_range_all(&mut self, sheet: u32, start: Address, end: Address) -> Result<()> {
-        let area = calculate_area(sheet, &start, &end);
+    pub fn clear_cell_range_all(&mut self, start: Address, end: Address) -> Result<()> {
+        let area = calculate_area(start.sheet, &start, &end);
         self.model
             .range_clear_all(&area)
             .map_err(|s| anyhow!("Unable to clear cell contents {}", s))?;
@@ -269,13 +267,13 @@ impl Book {
         Ok(self.get_cell_addr_rendered(&self.location)?)
     }
 
-    pub fn get_cell_style(&self, sheet: u32, cell: &Address) -> Option<Style> {
+    pub fn get_cell_style(&self, cell: &Address) -> Option<Style> {
         // TODO(jwall): This is modeled a little weird. We should probably record
         // the error *somewhere* but for the user there is nothing to be done except
         // not use a style.
         match self
             .model
-            .get_cell_style(sheet, cell.row as i32, cell.col as i32)
+            .get_cell_style(cell.sheet, cell.row as i32, cell.col as i32)
         {
             Err(_) => None,
             Ok(s) => Some(s),
@@ -383,18 +381,18 @@ impl Book {
     }
 
     /// Get a cells rendered content for display.
-    pub fn get_cell_addr_rendered(&self, Address { row, col }: &Address) -> Result<String> {
+    pub fn get_cell_addr_rendered(&self, Address { sheet, row, col }: &Address) -> Result<String> {
         Ok(self
             .model
-            .get_formatted_cell_value(self.current_sheet, *row as i32, *col as i32)
+            .get_formatted_cell_value(*sheet, *row as i32, *col as i32)
             .map_err(|s| anyhow!("Unable to format cell {}", s))?)
     }
 
     /// Get a cells actual content unformatted as a string.
-    pub fn get_cell_addr_contents(&self, Address { row, col }: &Address) -> Result<String> {
+    pub fn get_cell_addr_contents(&self, Address { sheet, row, col }: &Address) -> Result<String> {
         Ok(self
             .model
-            .get_cell_content(self.current_sheet, *row as i32, *col as i32)
+            .get_cell_content(*sheet, *row as i32, *col as i32)
             .map_err(|s| anyhow!("Unable to format cell {}", s))?)
     }
 
@@ -403,7 +401,7 @@ impl Book {
         Ok(self
             .model
             .get_cell_content(
-                self.current_sheet,
+                self.location.sheet,
                 self.location.row as i32,
                 self.location.col as i32,
             )
@@ -422,7 +420,7 @@ impl Book {
     pub fn update_cell<S: AsRef<str>>(&mut self, location: &Address, value: S) -> Result<()> {
         self.model
             .set_user_input(
-                self.current_sheet,
+                location.sheet,
                 location.row as i32,
                 location.col as i32,
                 // TODO(jwall): This could probably be made more efficient
@@ -436,11 +434,12 @@ impl Book {
     pub fn insert_rows(&mut self, row_idx: usize, count: usize) -> Result<()> {
         for i in 0..count {
             self.model
-                .insert_row(self.current_sheet, (row_idx + i) as i32)
+                .insert_row(self.location.sheet, (row_idx + i) as i32)
                 .map_err(|e| anyhow!("Unable to insert row(s): {}", e))?;
         }
         if self.location.row >= row_idx {
             self.move_to(&Address {
+                sheet: self.location.sheet,
                 row: self.location.row + count,
                 col: self.location.col,
             })?;
@@ -452,11 +451,12 @@ impl Book {
     pub fn insert_columns(&mut self, col_idx: usize, count: usize) -> Result<()> {
         for i in 0..count {
             self.model
-                .insert_column(self.current_sheet, (col_idx + i) as i32)
+                .insert_column(self.location.sheet, (col_idx + i) as i32)
                 .map_err(|e| anyhow!("Unable to insert column(s): {}", e))?;
         }
         if self.location.col >= col_idx {
             self.move_to(&Address {
+                sheet: self.location.sheet,
                 row: self.location.row,
                 col: self.location.col + count,
             })?;
@@ -471,7 +471,7 @@ impl Book {
 
     /// Get column size
     pub fn get_col_size(&self, idx: usize) -> Result<usize> {
-        self.get_column_size_for_sheet(self.current_sheet, idx)
+        self.get_column_size_for_sheet(self.location.sheet, idx)
     }
 
     pub fn get_column_size_for_sheet(
@@ -487,7 +487,7 @@ impl Book {
     }
 
     pub fn set_col_size(&mut self, col: usize, width: usize) -> Result<()> {
-        self.set_column_size_for_sheet(self.current_sheet, col, width)
+        self.set_column_size_for_sheet(self.location.sheet, col, width)
     }
 
     pub fn set_column_size_for_sheet(
@@ -527,7 +527,7 @@ impl Book {
             .enumerate()
             .find(|(_idx, sheet)| sheet.name == name)
         {
-            self.current_sheet = idx as u32;
+            self.location.sheet = idx as u32;
             return true;
         }
         false
@@ -540,27 +540,27 @@ impl Book {
 
     pub fn select_next_sheet(&mut self) {
         let len = self.model.get_model().workbook.worksheets.len() as u32;
-        let mut next = self.current_sheet + 1;
+        let mut next = self.location.sheet + 1;
         if next == len {
             next = 0;
         }
         self.model
             .set_selected_sheet(next)
             .expect("Unexpected error selecting sheet");
-        self.current_sheet = next;
+        self.location.sheet = next;
     }
 
     pub fn select_prev_sheet(&mut self) {
         let len = self.model.get_model().workbook.worksheets.len() as u32;
-        let next = if self.current_sheet == 0 {
+        let next = if self.location.sheet == 0 {
             len - 1
         } else {
-            self.current_sheet - 1
+            self.location.sheet - 1
         };
         self.model
             .set_selected_sheet(next)
             .expect("Unexpected error selecting sheet");
-        self.current_sheet = next;
+        self.location.sheet = next;
     }
 
     /// Select a sheet by id.
@@ -577,7 +577,7 @@ impl Book {
             self.model
                 .set_selected_sheet(idx as u32)
                 .expect("Unexpected error selecting sheet");
-            self.current_sheet = idx as u32;
+            self.location.sheet = idx as u32;
             return true;
         }
         false
@@ -592,8 +592,8 @@ impl Book {
             .model
             .get_model()
             .workbook
-            .worksheet(self.current_sheet)
-            .map_err(|s| anyhow!("Invalid Worksheet id: {}: error: {}", self.current_sheet, s))?)
+            .worksheet(self.location.sheet)
+            .map_err(|s| anyhow!("Invalid Worksheet id: {}: error: {}", self.location.sheet, s))?)
     }
 
     pub(crate) fn get_sheet_name_by_idx(&self, idx: usize) -> Result<&str> {
@@ -625,7 +625,7 @@ impl Default for Book {
     fn default() -> Self {
         let mut book =
             Book::new(UserModel::new_empty("default_name", "en", "America/New_York").unwrap());
-        book.update_cell(&Address { row: 1, col: 1 }, "").unwrap();
+        book.update_cell(&Address { sheet: 0, row: 1, col: 1 }, "").unwrap();
         book
     }
 }

@@ -36,7 +36,7 @@ impl<'ws> Workspace<'ws> {
                         .map(|(idx, name)| format!("{} {}", name, idx))
                         .collect::<Vec<String>>(),
                 )
-                .select(Some(ws.book.current_sheet as usize));
+                .select(Some(ws.book.location.sheet as usize));
                 tabs.render(rect, buf);
             }),
             Box::new(|rect: Rect, buf: &mut Buffer, ws: &mut Self| {
