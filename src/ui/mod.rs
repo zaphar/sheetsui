@@ -669,12 +669,12 @@ impl<'ws> Workspace<'ws> {
                     self.state.reset_n_prefix();
                     self.state.char_queue.clear();
                 }
-                KeyCode::Char('b') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                KeyCode::Char('B') => {
                     let address = self.book.location.clone();
                     let style = self.book.get_cell_style(self.book.current_sheet, &address).map(|s| s.font.b);
                     self.toggle_bool_style(style, "font.b", &address)?;
                 }
-                KeyCode::Char('i') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                KeyCode::Char('I') => {
                     let address = self.book.location.clone();
                     let style = self.book.get_cell_style(self.book.current_sheet, &address).map(|s| s.font.i);
                     self.toggle_bool_style(style, "font.i", &address)?;

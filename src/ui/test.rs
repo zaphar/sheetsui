@@ -1291,7 +1291,7 @@ fn test_bold_text() {
         .expect("Failed to get style");
     assert!(!before_style.font.b);
     script()
-        .ctrl('b')
+        .char('B')
         .run(&mut ws)
         .expect("Unable to run script");
     let style = ws
@@ -1300,7 +1300,7 @@ fn test_bold_text() {
         .expect("Failed to get style");
     assert!(style.font.b);
     script()
-        .ctrl('b')
+        .char('B')
         .run(&mut ws)
         .expect("Unable to run script");
     assert!(!before_style.font.b);
@@ -1315,7 +1315,7 @@ fn test_italic_text() {
         .expect("Failed to get style");
     assert!(!before_style.font.i);
     script()
-        .ctrl('i')
+        .char('I')
         .run(&mut ws)
         .expect("Unable to run script");
     let style = ws
@@ -1324,7 +1324,7 @@ fn test_italic_text() {
         .expect("Failed to get style");
     assert!(style.font.i);
     script()
-        .ctrl('i')
+        .char('I')
         .run(&mut ws)
         .expect("Unable to run script");
     assert!(!before_style.font.i);
