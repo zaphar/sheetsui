@@ -72,8 +72,6 @@ impl<'ws> Viewport<'ws> {
                 start = start + 1;
                 end = row_idx;
             } else {
-                //dbg!(&start);
-                //dbg!(&end);
                 break;
             }
         }
@@ -152,7 +150,7 @@ impl<'ws> Viewport<'ws> {
                         |VisibleColumn { idx: ci, length: _ }| {
                             let content = self
                                 .book
-                                .get_cell_addr_rendered(&Address { row: ri, col: *ci })
+                                .get_cell_addr_rendered(&Address { row: ri, col: *ci, sheet: self.book.location.sheet})
                                 .unwrap();
                             self.compute_cell_style(ri, *ci, Cell::new(Text::raw(content)))
                         },
@@ -196,7 +194,7 @@ impl<'ws> Viewport<'ws> {
         // TODO(zaphar): Should probably create somekind of formatter abstraction.
         if let Some(style) = self
             .book
-            .get_cell_style(self.book.current_sheet, &Address { row: ri, col: ci }) {
+            .get_cell_style(&Address { sheet: self.book.location.sheet, row: ri, col: ci }) {
             cell = self.compute_cell_colors(&style, ri, ci, cell);
             cell = if style.font.b {
                 cell.bold()
