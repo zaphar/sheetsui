@@ -1299,6 +1299,11 @@ fn test_bold_text() {
         .get_cell_style(0, &Address { row: 1, col: 1 })
         .expect("Failed to get style");
     assert!(style.font.b);
+    script()
+        .ctrl('b')
+        .run(&mut ws)
+        .expect("Unable to run script");
+    assert!(!before_style.font.b);
 }
 
 #[test]
@@ -1318,6 +1323,11 @@ fn test_italic_text() {
         .get_cell_style(0, &Address { row: 1, col: 1 })
         .expect("Failed to get style");
     assert!(style.font.i);
+    script()
+        .ctrl('i')
+        .run(&mut ws)
+        .expect("Unable to run script");
+    assert!(!before_style.font.i);
 }
 
 fn new_workspace<'a>() -> Workspace<'a> {

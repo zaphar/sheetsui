@@ -670,28 +670,10 @@ impl<'ws> Workspace<'ws> {
                     self.state.char_queue.clear();
                 }
                 KeyCode::Char('b') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                    let address = self.book.location.clone();
-                    self.book.set_cell_style(
-                        &[("font.b", "true")],
-                        &Area {
-                        sheet: self.book.current_sheet,
-                        row: address.row as i32,
-                        column: address.col as i32,
-                        width: 1,
-                        height: 1,
-                    })?;
+                    self.toggle_bold()?;
                 }
                 KeyCode::Char('i') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                    let address = self.book.location.clone();
-                    self.book.set_cell_style(
-                        &[("font.i", "true")],
-                        &Area {
-                        sheet: self.book.current_sheet,
-                        row: address.row as i32,
-                        column: address.col as i32,
-                        width: 1,
-                        height: 1,
-                    })?;
+                    self.toggle_italic()?;
                 }
                 KeyCode::Char(d) if d.is_ascii_digit() => {
                     self.handle_numeric_prefix(d);
@@ -862,6 +844,44 @@ impl<'ws> Workspace<'ws> {
             }
         }
         return Ok(None);
+    }
+
+    fn toggle_italic(&mut self) -> Result<(), anyhow::Error> {
+        let address = self.book.location.clone();
+        let value = if let Some(style) = self.book.get_cell_style(self.book.current_sheet, &address) {
+            if style.font.i { "false" } else { "true" }
+        } else {
+            "true"
+        };
+        self.book.set_cell_style(
+            &[("font.i", value)],
+            &Area {
+            sheet: self.book.current_sheet,
+            row: address.row as i32,
+            column: address.col as i32,
+            width: 1,
+            height: 1,
+        })?;
+        Ok(())
+    }
+
+    fn toggle_bold(&mut self) -> Result<(), anyhow::Error> {
+        let address = self.book.location.clone();
+        let value = if let Some(style) = self.book.get_cell_style(self.book.current_sheet, &address) {
+            if style.font.b { "false" } else { "true" }
+        } else {
+            "true"
+        };
+        self.book.set_cell_style(
+            &[("font.b", value)],
+            &Area {
+            sheet: self.book.current_sheet,
+            row: address.row as i32,
+            column: address.col as i32,
+            width: 1,
+            height: 1,
+        })?;
+        Ok(())
     }
 
     fn paste_range(&mut self) -> Result<(), anyhow::Error> {
