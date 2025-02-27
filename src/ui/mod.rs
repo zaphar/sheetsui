@@ -34,8 +34,6 @@ pub enum Modality {
 #[derive(Debug, Default)]
 pub struct RangeSelection {
     pub original_location: Option<Address>,
-    pub original_sheet: Option<u32>,
-    pub sheet: Option<u32>,
     pub start: Option<Address>,
     pub end: Option<Address>,
 }
@@ -62,7 +60,6 @@ impl RangeSelection {
     pub fn reset_range_selection(&mut self) {
         self.start = None;
         self.end = None;
-        self.sheet = None;
     }
 }
 
@@ -217,12 +214,12 @@ impl<'ws> Workspace<'ws> {
                 start.to_range_part(),
                 format!(":{}", end.to_range_part())
             );
-            if let Some(range_sheet) = state.range_select.sheet {
-                if range_sheet != self.book.location.sheet {
+            if let Some(ref start_addr) = state.range_select.start {
+                if start_addr.sheet != self.book.location.sheet {
                     return format!(
                         "{}!{}",
                         self.book
-                            .get_sheet_name_by_idx(range_sheet as usize)
+                            .get_sheet_name_by_idx(start_addr.sheet as usize)
                             .expect("No such sheet index"),
                         a1
                     );
@@ -566,7 +563,6 @@ impl<'ws> Workspace<'ws> {
                         ws.book.select_next_sheet();
                         Ok(())
                     })?;
-                    self.state.range_select.sheet = Some(self.book.location.sheet);
                 }
                 KeyCode::Char('p') if key.modifiers == KeyModifiers::CONTROL => {
                     self.state.range_select.reset_range_selection();
@@ -574,7 +570,6 @@ impl<'ws> Workspace<'ws> {
                         ws.book.select_prev_sheet();
                         Ok(())
                     })?;
-                    self.state.range_select.sheet = Some(self.book.location.sheet);
                 }
                 KeyCode::Char('C') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                     self.copy_range(true)?;
@@ -893,8 +888,6 @@ impl<'ws> Workspace<'ws> {
     }
 
     fn enter_range_select_mode(&mut self, init_start: bool) {
-        self.state.range_select.sheet = Some(self.book.location.sheet);
-        self.state.range_select.original_sheet = Some(self.book.location.sheet);
         self.state.range_select.original_location = Some(self.book.location.clone());
         if init_start {
             self.state.range_select.start = Some(self.book.location.clone());
@@ -929,12 +922,6 @@ impl<'ws> Workspace<'ws> {
     }
 
     fn exit_range_select_mode(&mut self) -> Result<()> {
-        self.book.location.sheet = self
-            .state
-            .range_select
-            .original_sheet
-            .clone()
-            .expect("Missing original sheet");
         self.book.location = self
             .state
             .range_select

@@ -1120,13 +1120,6 @@ macro_rules! assert_range_copy {
                 .expect("Expected an original location")
         );
         assert_eq!(
-            0,
-            ws.state
-                .range_select
-                .original_sheet
-                .expect("Expected an original sheet")
-        );
-        assert_eq!(
             Some(&Modality::RangeSelect),
             ws.state.modality_stack.iter().last()
         );
