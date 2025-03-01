@@ -3,7 +3,7 @@ use ratatui::{
     layout::{Constraint, Layout, Rect},
     style::{Color, Style, Stylize},
     text::Text,
-    widgets::{Block, Paragraph, Widget, Wrap},
+    widgets::{Block, Clear, Paragraph, Widget, Wrap},
 };
 
 pub struct Dialog<'w> {
@@ -42,6 +42,7 @@ impl<'w> Widget for Dialog<'w> {
         ])
         .areas(area);
 
+        Clear.render(dialog_area, buf);
         let dialog_block = Block::bordered()
             .title_top(self.title)
             .title_bottom("j,k or up,down to scroll")
