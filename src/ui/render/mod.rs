@@ -98,41 +98,40 @@ impl<'widget, 'ws: 'widget> Widget for &'widget mut Workspace<'ws> {
     where
         Self: Sized,
     {
-
         if self.state.modality() == &Modality::Dialog {
             // Use a popup here.
             let lines = Text::from_iter(self.state.popup.iter().cloned());
-            let popup = dialog::Dialog::new(lines, "Help").scroll((0, 0));
+            let popup = dialog::Dialog::new(lines, "Help").scroll(self.state.dialog_scroll);
             //let popup = Paragraph::new(lines);
             popup.render(area, buf);
         } else {
-        let outer_block = Block::bordered()
-            .title(Line::from(
-                self.name
-                    .file_name()
-                    .map(|p| p.to_string_lossy().to_string())
-                    .unwrap_or_else(|| String::from("Unknown")),
-            ))
-            .title_bottom(match self.state.modality() {
-                Modality::Navigate => "navigate",
-                Modality::CellEdit => "edit",
-                Modality::Command => "command",
-                Modality::Dialog => "",
-                Modality::RangeSelect => "range-copy",
-            })
-            .title_bottom(
-                Line::from(format!(
-                    "{},{}",
-                    self.book.location.row, self.book.location.col
+            let outer_block = Block::bordered()
+                .title(Line::from(
+                    self.name
+                        .file_name()
+                        .map(|p| p.to_string_lossy().to_string())
+                        .unwrap_or_else(|| String::from("Unknown")),
                 ))
-                .right_aligned(),
-            );
+                .title_bottom(match self.state.modality() {
+                    Modality::Navigate => "navigate",
+                    Modality::CellEdit => "edit",
+                    Modality::Command => "command",
+                    Modality::Dialog => "",
+                    Modality::RangeSelect => "range-copy",
+                })
+                .title_bottom(
+                    Line::from(format!(
+                        "{},{}",
+                        self.book.location.row, self.book.location.col
+                    ))
+                    .right_aligned(),
+                );
 
-        for (rect, f) in self.get_render_parts(area.clone()) {
-            f(rect, buf, self);
-        }
+            for (rect, f) in self.get_render_parts(area.clone()) {
+                f(rect, buf, self);
+            }
 
-        outer_block.render(area, buf);
+            outer_block.render(area, buf);
         }
     }
 }

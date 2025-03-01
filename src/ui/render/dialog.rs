@@ -3,7 +3,7 @@ use ratatui::{
     layout::{Constraint, Layout, Rect},
     style::{Color, Style, Stylize},
     text::Text,
-    widgets::{Block, Paragraph, Widget},
+    widgets::{Block, Paragraph, Widget, Wrap},
 };
 
 pub struct Dialog<'w> {
@@ -21,8 +21,8 @@ impl<'w> Dialog<'w> {
         }
     }
 
-    pub fn scroll(mut self, scroll: (u16, u16)) -> Self {
-        self.scroll = scroll;
+    pub fn scroll(mut self, line: u16) -> Self {
+        self.scroll.0 = line;
         self
     }
 }
@@ -44,8 +44,10 @@ impl<'w> Widget for Dialog<'w> {
 
         let dialog_block = Block::bordered()
             .title_top(self.title)
+            .title_bottom("j,k or up,down to scroll")
             .style(Style::default().on_black());
         let dialog = Paragraph::new(self.content.clone())
+            .wrap(Wrap::default())
             .scroll(self.scroll.clone())
             .block(dialog_block)
             .style(Style::default());
