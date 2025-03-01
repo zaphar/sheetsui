@@ -5,12 +5,12 @@ use ratatui::{
     widgets::{Block, Paragraph, Tabs, Widget},
     Frame,
 };
-use tui_popup::Popup;
 
 use super::*;
 
 pub mod viewport;
 pub use viewport::Viewport;
+pub mod dialog;
 
 #[cfg(test)]
 mod test;
@@ -98,6 +98,14 @@ impl<'widget, 'ws: 'widget> Widget for &'widget mut Workspace<'ws> {
     where
         Self: Sized,
     {
+
+        if self.state.modality() == &Modality::Dialog {
+            // Use a popup here.
+            let lines = Text::from_iter(self.state.popup.iter().cloned());
+            let popup = dialog::Dialog::new(lines, "Help").scroll((0, 0));
+            //let popup = Paragraph::new(lines);
+            popup.render(area, buf);
+        } else {
         let outer_block = Block::bordered()
             .title(Line::from(
                 self.name
@@ -125,11 +133,6 @@ impl<'widget, 'ws: 'widget> Widget for &'widget mut Workspace<'ws> {
         }
 
         outer_block.render(area, buf);
-
-        if self.state.modality() == &Modality::Dialog {
-            let lines = Text::from_iter(self.state.popup.iter().cloned());
-            let popup = Popup::new(lines);
-            popup.render(area, buf);
         }
     }
 }
