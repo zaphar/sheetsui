@@ -77,6 +77,7 @@ pub struct AppState<'ws> {
     pub numeric_prefix: Vec<char>,
     pub char_queue: Vec<char>,
     pub range_select: RangeSelection,
+    pub dialog_scroll: u16,
     dirty: bool,
     popup: Text<'ws>,
     clipboard: Option<ClipboardContents>,
@@ -91,6 +92,7 @@ impl<'ws> Default for AppState<'ws> {
             numeric_prefix: Default::default(),
             char_queue: Default::default(),
             range_select: Default::default(),
+            dialog_scroll: 0,
             dirty: Default::default(),
             popup: Default::default(),
             clipboard: Default::default(),
@@ -331,6 +333,12 @@ impl<'ws> Workspace<'ws> {
                 KeyCode::Esc | KeyCode::Enter | KeyCode::Char('q') => self.exit_dialog_mode()?,
                 KeyCode::Char('h') if key.modifiers == KeyModifiers::ALT => {
                     self.exit_dialog_mode()?
+                }
+                KeyCode::Char('j') | KeyCode::Down => {
+                    self.state.dialog_scroll = self.state.dialog_scroll.saturating_add(1);
+                }
+                KeyCode::Char('k') | KeyCode::Up => {
+                    self.state.dialog_scroll = self.state.dialog_scroll.saturating_sub(1);
                 }
                 _ => {
                     // NOOP

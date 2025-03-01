@@ -5,12 +5,12 @@ use ratatui::{
     widgets::{Block, Paragraph, Tabs, Widget},
     Frame,
 };
-use tui_popup::Popup;
 
 use super::*;
 
 pub mod viewport;
 pub use viewport::Viewport;
+pub mod dialog;
 
 #[cfg(test)]
 mod test;
@@ -98,38 +98,40 @@ impl<'widget, 'ws: 'widget> Widget for &'widget mut Workspace<'ws> {
     where
         Self: Sized,
     {
-        let outer_block = Block::bordered()
-            .title(Line::from(
-                self.name
-                    .file_name()
-                    .map(|p| p.to_string_lossy().to_string())
-                    .unwrap_or_else(|| String::from("Unknown")),
-            ))
-            .title_bottom(match self.state.modality() {
-                Modality::Navigate => "navigate",
-                Modality::CellEdit => "edit",
-                Modality::Command => "command",
-                Modality::Dialog => "",
-                Modality::RangeSelect => "range-copy",
-            })
-            .title_bottom(
-                Line::from(format!(
-                    "{},{}",
-                    self.book.location.row, self.book.location.col
-                ))
-                .right_aligned(),
-            );
-
-        for (rect, f) in self.get_render_parts(area.clone()) {
-            f(rect, buf, self);
-        }
-
-        outer_block.render(area, buf);
-
         if self.state.modality() == &Modality::Dialog {
+            // Use a popup here.
             let lines = Text::from_iter(self.state.popup.iter().cloned());
-            let popup = Popup::new(lines);
+            let popup = dialog::Dialog::new(lines, "Help").scroll(self.state.dialog_scroll);
+            //let popup = Paragraph::new(lines);
             popup.render(area, buf);
+        } else {
+            let outer_block = Block::bordered()
+                .title(Line::from(
+                    self.name
+                        .file_name()
+                        .map(|p| p.to_string_lossy().to_string())
+                        .unwrap_or_else(|| String::from("Unknown")),
+                ))
+                .title_bottom(match self.state.modality() {
+                    Modality::Navigate => "navigate",
+                    Modality::CellEdit => "edit",
+                    Modality::Command => "command",
+                    Modality::Dialog => "",
+                    Modality::RangeSelect => "range-copy",
+                })
+                .title_bottom(
+                    Line::from(format!(
+                        "{},{}",
+                        self.book.location.row, self.book.location.col
+                    ))
+                    .right_aligned(),
+                );
+
+            for (rect, f) in self.get_render_parts(area.clone()) {
+                f(rect, buf, self);
+            }
+
+            outer_block.render(area, buf);
         }
     }
 }
