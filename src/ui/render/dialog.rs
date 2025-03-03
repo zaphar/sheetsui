@@ -40,18 +40,29 @@ impl<'w> Widget for Dialog<'w> {
     {
         // First find the center of the area.
         let content_width = self.content.width();
-        let sidebar_width = (area.width - (content_width as u16) + 2) / 2;
-        let [_, dialog_area, _] = Layout::horizontal(vec![
-            Constraint::Length(sidebar_width),
+        let content_height = self.content.height();
+        let vertical_margin = if ((content_height as u16) + 2) <= area.height {
+            area.height.saturating_sub((content_height as u16) + 2).saturating_div(2)
+        } else {
+            area.height - 2
+        };
+        let horizontal_margin = area.width.saturating_sub((content_width as u16) + 2).saturating_div(2);
+        let [_, dialog_vertical, _] = Layout::vertical(vec![
+            Constraint::Length(vertical_margin),
             Constraint::Fill(1),
-            Constraint::Length(sidebar_width),
+            Constraint::Length(vertical_margin),
+        ]).areas(area);
+        let [_, dialog_area, _] = Layout::horizontal(vec![
+            Constraint::Length(horizontal_margin),
+            Constraint::Fill(1),
+            Constraint::Length(horizontal_margin),
         ])
-        .areas(area);
+        .areas(dialog_vertical);
 
         Clear.render(dialog_area, buf);
         let dialog_block = Block::bordered()
             .title_top(self.title)
-            .title_bottom("j,k or up,down to scroll")
+            .title_bottom(self.bottom_title)
             .style(Style::default().on_black());
         let dialog = Paragraph::new(self.content.clone())
             .wrap(Wrap::default())
