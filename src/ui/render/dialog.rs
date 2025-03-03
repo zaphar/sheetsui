@@ -1,7 +1,7 @@
 use ratatui::{
     self,
     layout::{Constraint, Layout, Rect},
-    style::{Color, Style, Stylize},
+    style::{Style, Stylize},
     text::Text,
     widgets::{Block, Clear, Paragraph, Widget, Wrap},
 };
@@ -9,6 +9,7 @@ use ratatui::{
 pub struct Dialog<'w> {
     content: Text<'w>,
     title: &'w str,
+    bottom_title: &'w str,
     scroll: (u16, u16),
 }
 
@@ -17,10 +18,15 @@ impl<'w> Dialog<'w> {
         Self {
             content,
             title,
+            bottom_title: "j,k or up,down to scroll",
             scroll: (0, 0),
         }
     }
 
+    pub fn with_bottom_title(mut self, title: &'w str) -> Self {
+        self.bottom_title = title;
+        self
+    }
     pub fn scroll(mut self, line: u16) -> Self {
         self.scroll.0 = line;
         self

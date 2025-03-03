@@ -86,6 +86,7 @@ impl<'book> AddressRange<'book> {
 pub struct Book {
     pub(crate) model: UserModel,
     pub location: crate::ui::Address,
+    pub dirty: bool,
 }
 
 impl Book {
@@ -94,6 +95,7 @@ impl Book {
         Self {
             model,
             location: Address::default(),
+            dirty: false,
         }
     }
 
@@ -122,12 +124,13 @@ impl Book {
     }
 
     /// Save book to an xlsx file.
-    pub fn save_to_xlsx(&self, path: &str) -> Result<()> {
-        // TODO(zaphar): Currently overwrites. Should we prompty in this case?
+    pub fn save_to_xlsx(&mut self, path: &str) -> Result<()> {
+        // TODO(zaphar): Currently overwrites. Should we prompt in this case?
         let file_path = std::path::Path::new(path);
         let file = std::fs::File::create(file_path)?;
         let writer = std::io::BufWriter::new(file);
         save_xlsx_to_writer(self.model.get_model(), writer)?;
+        self.dirty = false;
         Ok(())
     }
 
@@ -150,6 +153,7 @@ impl Book {
         self.model
             .rename_sheet(idx, sheet_name)
             .map_err(|e| anyhow!(e))?;
+        self.dirty = true;
         Ok(())
     }
 
@@ -162,6 +166,7 @@ impl Book {
         self.model
             .set_selected_sheet(self.location.sheet)
             .map_err(|e| anyhow!(e))?;
+        self.dirty = true;
         Ok(())
     }
 
@@ -175,6 +180,7 @@ impl Book {
         // FIXME(zaphar): Check that this is safe first.
         self.location.row = *row;
         self.location.col = *col;
+        self.dirty = true;
         Ok(())
     }
 
@@ -209,18 +215,22 @@ impl Book {
                 .map_err(|e| anyhow!(e))?;
         }
         self.evaluate();
+        self.dirty = true;
         Ok(())
     }
 
     pub fn clear_current_cell(&mut self) -> Result<()> {
+        self.dirty = true;
         self.clear_cell_contents(self.location.clone())
     }
 
     pub fn clear_current_cell_all(&mut self) -> Result<()> {
+        self.dirty = true;
         self.clear_cell_all(self.location.clone())
     }
 
     pub fn clear_cell_contents(&mut self, Address { sheet, row, col }: Address) -> Result<()> {
+        self.dirty = true;
         Ok(self
             .model
             .range_clear_contents(&Area {
@@ -238,10 +248,12 @@ impl Book {
         self.model
             .range_clear_contents(&area)
             .map_err(|s| anyhow!("Unable to clear cell contents {}", s))?;
+        self.dirty = true;
         Ok(())
     }
 
     pub fn clear_cell_all(&mut self, Address { sheet, row, col }: Address) -> Result<()> {
+        self.dirty = true;
         Ok(self
             .model
             .range_clear_all(&Area {
@@ -259,6 +271,7 @@ impl Book {
         self.model
             .range_clear_all(&area)
             .map_err(|s| anyhow!("Unable to clear cell contents {}", s))?;
+        self.dirty = true;
         Ok(())
     }
 
@@ -299,6 +312,7 @@ impl Book {
                 .update_range_style(area, path, val)
                 .map_err(|s| anyhow!("Unable to format cell {}", s))?;
         }
+        self.dirty = true;
         Ok(())
     }
 
@@ -343,6 +357,7 @@ impl Book {
     ) -> Result<()> {
         let area = self.get_col_range(sheet, col_idx);
         self.set_cell_style(style, &area)?;
+        self.dirty = true;
         Ok(())
     }
 
@@ -367,6 +382,7 @@ impl Book {
     ) -> Result<()> {
         let area = self.get_row_range(sheet, row_idx);
         self.set_cell_style(style, &area)?;
+        self.dirty = true;
         Ok(())
     }
 
@@ -401,6 +417,7 @@ impl Book {
     /// Update the current cell in a book.
     /// This update won't be reflected until you call `Book::evaluate`.
     pub fn edit_current_cell<S: AsRef<str>>(&mut self, value: S) -> Result<()> {
+        self.dirty = true;
         self.update_cell(&self.location.clone(), value)?;
         Ok(())
     }
@@ -417,6 +434,7 @@ impl Book {
                 value.as_ref(),
             )
             .map_err(|e| anyhow!("Invalid cell contents: {}", e))?;
+        self.dirty = true;
         Ok(())
     }
 
@@ -434,6 +452,7 @@ impl Book {
                 col: self.location.col,
             })?;
         }
+        self.dirty = true;
         Ok(())
     }
 
@@ -451,6 +470,7 @@ impl Book {
                 col: self.location.col + count,
             })?;
         }
+        self.dirty = true;
         Ok(())
     }
 
@@ -489,6 +509,7 @@ impl Book {
         self.model
             .set_column_width(sheet, col as i32, width as f64 * COL_PIXELS)
             .map_err(|e| anyhow!("Error setting column width: {:?}", e))?;
+        self.dirty = true;
         Ok(())
     }
 
