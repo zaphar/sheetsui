@@ -862,17 +862,6 @@ fn test_sheet_column_sizing() {
 }
 
 #[test]
-fn test_quit() {
-    let mut ws =
-        Workspace::new_empty("en", "America/New_York").expect("Failed to get empty workbook");
-    let result = script()
-        .char('q')
-        .run(&mut ws)
-        .expect("Failed to run input script");
-    assert!(result.is_some());
-}
-
-#[test]
 fn test_cell_replace() {
     let mut ws = new_workspace();
     ws.book
@@ -1309,6 +1298,63 @@ fn test_italic_text() {
         .run(&mut ws)
         .expect("Unable to run script");
     assert!(!before_style.font.i);
+}
+
+//#[test]
+//fn test_quit() {
+//    let mut ws =
+//        Workspace::new_empty("en", "America/New_York").expect("Failed to get empty workbook");
+//    let result = script()
+//        .char('q')
+//        .run(&mut ws)
+//        .expect("Failed to run input script");
+//    assert!(result.is_some());
+//}
+
+#[test]
+fn test_quit_dialog() {
+    let mut ws = new_workspace();
+    assert!(!ws.book.dirty);
+    let mut result = script()
+        .char('q')
+        .run(&mut ws)
+        .expect("Failed to run input script");
+    assert!(result.is_some());
+    
+    script()
+        .chars("efoo")
+        .enter()
+        .run(&mut ws)
+        .expect("Failed to modify book");
+    assert!(ws.book.dirty);
+    result = script()
+        .char('q')
+        .run(&mut ws)
+        .expect("Failed to run input script");
+    assert!(!result.is_some());
+    assert_eq!(ws.state.modality(), &Modality::Quit);
+    assert!(result.is_some());
+    
+    script()
+        .char('n')
+        .run(&mut ws)
+        .expect("Failed to run input script");
+    assert_eq!(ws.state.modality(), &Modality::default());
+    assert!(ws.book.dirty);
+    script()
+        .char('q')
+        .esc()
+        .run(&mut ws)
+        .expect("Failed to run input script");
+    assert_eq!(ws.state.modality(), &Modality::default());
+    assert!(ws.book.dirty);
+    // TODO(zaphar): The below will write to disk. so commenting it out for now.
+    //script()
+    //    .char('q')
+    //    .char('y')
+    //    .run(&mut ws)
+    //    .expect("Failed to run input script");
+    //assert!(!ws.book.dirty);
 }
 
 fn new_workspace<'a>() -> Workspace<'a> {

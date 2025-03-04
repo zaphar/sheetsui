@@ -1,5 +1,5 @@
 //! Ui rendering logic
-use std::{path::PathBuf, process::ExitCode};
+use std::{path::PathBuf, process::ExitCode, str::FromStr};
 
 use crate::book::{self, AddressRange, Book};
 
@@ -29,6 +29,7 @@ pub enum Modality {
     Command,
     Dialog,
     RangeSelect,
+    Quit,
 }
 
 #[derive(Debug, Default)]
@@ -93,7 +94,7 @@ impl<'ws> Default for AppState<'ws> {
             char_queue: Default::default(),
             range_select: Default::default(),
             dialog_scroll: 0,
-            dirty: Default::default(),
+            dirty: false,
             popup: Default::default(),
             clipboard: Default::default(),
         }
@@ -188,7 +189,7 @@ impl<'ws> Workspace<'ws> {
     pub fn new_empty(locale: &str, tz: &str) -> Result<Self> {
         Ok(Self::new(
             Book::from_model(Model::new_empty("", locale, tz).map_err(|e| anyhow!("{}", e))?),
-            PathBuf::default(),
+            PathBuf::from_str("Untitled.xlsx").unwrap(),
         ))
     }
 
@@ -291,6 +292,7 @@ impl<'ws> Workspace<'ws> {
                 Modality::Command => self.handle_command_input(key)?,
                 Modality::Dialog => self.handle_dialog_input(key)?,
                 Modality::RangeSelect => self.handle_range_select_input(key)?,
+                Modality::Quit => self.handle_quit_dialog(key)?,
             };
             return Ok(result);
         }
@@ -324,6 +326,21 @@ impl<'ws> Workspace<'ws> {
             }
         }
         self.state.command_state.handle_key_event(key);
+        Ok(None)
+    }
+
+    fn handle_quit_dialog(&mut self, key: event::KeyEvent) -> Result<Option<ExitCode>> {
+        if key.kind == KeyEventKind::Press {
+            match key.code {
+                KeyCode::Esc | KeyCode::Char('n') | KeyCode::Char('N') =>  return Ok(Some(ExitCode::SUCCESS)),
+                KeyCode::Char('y') | KeyCode::Char('Y') => {
+                    // We have been asked to save the file first.
+                    self.save_file()?;
+                    return Ok(Some(ExitCode::SUCCESS));
+                },
+                _ => return Ok(None),
+            }
+        }
         Ok(None)
     }
 
@@ -433,7 +450,7 @@ impl<'ws> Workspace<'ws> {
                 self.book.select_sheet_by_name(name);
                 Ok(None)
             }
-            Ok(Some(Cmd::Quit)) => Ok(Some(ExitCode::SUCCESS)),
+            Ok(Some(Cmd::Quit)) => self.quit_app(),
             Ok(Some(Cmd::ColorRows(count, color))) => {
                 let row_count = count.unwrap_or(1);
                 let row = self.book.location.row;
@@ -767,7 +784,7 @@ impl<'ws> Workspace<'ws> {
                     })?;
                 }
                 KeyCode::Char('q') => {
-                    return Ok(Some(ExitCode::SUCCESS));
+                    return self.quit_app();
                 }
                 KeyCode::Char('j') | KeyCode::Down if key.modifiers != KeyModifiers::CONTROL => {
                     self.run_with_prefix(|ws: &mut Workspace<'_>| -> Result<()> {
@@ -911,6 +928,14 @@ impl<'ws> Workspace<'ws> {
         Ok(())
     }
 
+    fn enter_quit_mode(&mut self) -> bool {
+        if self.book.dirty {
+            self.state.modality_stack.push(Modality::Quit);
+            return true;
+        }
+        return false;
+    }
+
     fn enter_command_mode(&mut self) {
         self.state.modality_stack.push(Modality::Command);
         self.state.command_state.truncate();
@@ -944,6 +969,11 @@ impl<'ws> Workspace<'ws> {
         self.text_area.move_cursor(CursorMove::End);
     }
 
+    fn exit_quit_mode(&mut self) -> Result<Option<ExitCode>> {
+        self.state.pop_modality();
+        Ok(None)
+    }
+    
     fn exit_command_mode(&mut self) -> Result<Option<ExitCode>> {
         let cmd = self.state.command_state.value().to_owned();
         self.state.command_state.blur();
@@ -997,16 +1027,24 @@ impl<'ws> Workspace<'ws> {
         self.text_area = reset_text_area(contents);
     }
 
-    fn save_file(&self) -> Result<()> {
+    fn save_file(&mut self) -> Result<()> {
         self.book
             .save_to_xlsx(&self.name.to_string_lossy().to_string())?;
         Ok(())
     }
 
-    fn save_to<S: Into<String>>(&self, path: S) -> Result<()> {
+    fn save_to<S: Into<String>>(&mut self, path: S) -> Result<()> {
         self.book.save_to_xlsx(path.into().as_str())?;
         Ok(())
     }
+    
+    fn quit_app(&mut self) -> std::result::Result<Option<ExitCode>, anyhow::Error> {
+        if self.enter_quit_mode() {
+            return Ok(None);
+        }
+        return Ok(Some(ExitCode::SUCCESS))
+    }
+
 }
 
 fn load_book(path: &PathBuf, locale: &str, tz: &str) -> Result<Book, anyhow::Error> {

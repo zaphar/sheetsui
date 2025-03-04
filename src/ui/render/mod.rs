@@ -99,10 +99,12 @@ impl<'widget, 'ws: 'widget> Widget for &'widget mut Workspace<'ws> {
         Self: Sized,
     {
         if self.state.modality() == &Modality::Dialog {
-            // Use a popup here.
             let lines = Text::from_iter(self.state.popup.iter().cloned());
             let popup = dialog::Dialog::new(lines, "Help").scroll(self.state.dialog_scroll);
-            //let popup = Paragraph::new(lines);
+            popup.render(area, buf);
+        } else if self.state.modality() == &Modality::Quit {
+            let popup = dialog::Dialog::new(Text::raw("File is not yet saved. Save it first?"), "Quit")
+                .with_bottom_title("Y/N");
             popup.render(area, buf);
         } else {
             let outer_block = Block::bordered()
@@ -118,6 +120,7 @@ impl<'widget, 'ws: 'widget> Widget for &'widget mut Workspace<'ws> {
                     Modality::Command => "command",
                     Modality::Dialog => "",
                     Modality::RangeSelect => "range-copy",
+                    Modality::Quit => "",
                 })
                 .title_bottom(
                     Line::from(format!(
