@@ -108,3 +108,21 @@ fn test_book_col_size() {
     book.set_col_size(1, 20).expect("Failed to set column size");
     assert_eq!(20, book.get_col_size(1).expect("Failed to get column size"));
 }
+
+#[test]
+fn test_book_get_exportable_rows() {
+    let mut book = Book::default();
+    book.update_cell(&Address { sheet: 0, row: 1, col: 3 }, "1-3")
+        .expect("failed to edit cell");
+    book.update_cell(&Address { sheet: 0, row: 3, col: 6 }, "3-6")
+        .expect("failed to edit cell");
+
+    let rows = book.get_export_rows().expect("Failed to get export rows");
+    assert_eq!(4, rows.len());
+    assert_eq!(rows, vec![
+        vec!["", "" , "", "", "", "", ""],
+        vec!["", "" , "", "1-3", "", "", ""],
+        vec!["", "" , "", "", "", "", ""],
+        vec!["", "" , "", "", "", "", "3-6"],
+    ]);
+}

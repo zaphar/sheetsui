@@ -23,7 +23,6 @@ pub(crate) const COL_PIXELS: f64 = 5.0;
 pub(crate) const LAST_COLUMN: i32 = 16_384;
 pub(crate) const LAST_ROW: i32 = 1_048_576;
 
-
 #[derive(Debug, Clone)]
 pub struct AddressRange<'book> {
     pub start: &'book Address,
@@ -37,7 +36,11 @@ impl<'book> AddressRange<'book> {
         for ri in row_range.iter() {
             let mut row = Vec::with_capacity(col_range.len());
             for ci in col_range.iter() {
-                row.push(Address { sheet: self.start.sheet, row: *ri, col: *ci });
+                row.push(Address {
+                    sheet: self.start.sheet,
+                    row: *ri,
+                    col: *ci,
+                });
             }
             rows.push(row);
         }
@@ -49,7 +52,11 @@ impl<'book> AddressRange<'book> {
         let mut rows = Vec::with_capacity(row_range.len() * col_range.len());
         for ri in row_range.iter() {
             for ci in col_range.iter() {
-                rows.push(Address { sheet: self.start.sheet, row: *ri, col: *ci });
+                rows.push(Address {
+                    sheet: self.start.sheet,
+                    row: *ri,
+                    col: *ci,
+                });
             }
         }
         rows
@@ -110,6 +117,46 @@ impl Book {
             "en",
             "America/New_York",
         )?))
+    }
+
+    pub fn get_export_rows(&self) -> Result<Vec<Vec<String>>> {
+        let sheet = self.location.sheet;
+        Ok(self.export_rows_for_sheet(sheet)?)
+    }
+
+    pub fn export_rows_for_sheet(&self, sheet: u32) -> Result<Vec<Vec<String>>, anyhow::Error> {
+        let worksheet = self
+            .model
+            .get_model()
+            .workbook
+            .worksheet(sheet)
+            .map_err(|e| anyhow!(e))?;
+        let mut max_row = 0;
+        let mut max_col = 0;
+        for (r, cols) in worksheet.sheet_data.iter() {
+            if max_row <= *r {
+                max_row = *r;
+            }
+            for (c, _) in cols.iter() {
+                if max_col <= *c {
+                    max_col = *c;
+                }
+            }
+        }
+        let mut rows = Vec::new();
+        for ri in 0..=max_row {
+            let mut row = Vec::new();
+            for ci in 0..=max_col {
+                let cell_content = self.get_cell_addr_rendered(&Address {
+                    sheet,
+                    row: ri as usize,
+                    col: ci as usize,
+                })?;
+                row.push(cell_content);
+            }
+            rows.push(row);
+        }
+        Ok(rows)
     }
 
     /// Evaluate the spreadsheet calculating formulas and style changes.
@@ -604,7 +651,13 @@ impl Book {
             .get_model()
             .workbook
             .worksheet(self.location.sheet)
-            .map_err(|s| anyhow!("Invalid Worksheet id: {}: error: {}", self.location.sheet, s))?)
+            .map_err(|s| {
+                anyhow!(
+                    "Invalid Worksheet id: {}: error: {}",
+                    self.location.sheet,
+                    s
+                )
+            })?)
     }
 
     pub(crate) fn get_sheet_name_by_idx(&self, idx: usize) -> Result<&str> {
@@ -636,7 +689,15 @@ impl Default for Book {
     fn default() -> Self {
         let mut book =
             Book::new(UserModel::new_empty("default_name", "en", "America/New_York").unwrap());
-        book.update_cell(&Address { sheet: 0, row: 1, col: 1 }, "").unwrap();
+        book.update_cell(
+            &Address {
+                sheet: 0,
+                row: 1,
+                col: 1,
+            },
+            "",
+        )
+        .unwrap();
         book
     }
 }
