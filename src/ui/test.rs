@@ -1333,7 +1333,6 @@ fn test_quit_dialog() {
         .expect("Failed to run input script");
     assert!(!result.is_some());
     assert_eq!(ws.state.modality(), &Modality::Quit);
-    assert!(result.is_some());
     
     script()
         .char('n')

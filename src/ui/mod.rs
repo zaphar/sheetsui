@@ -332,10 +332,14 @@ impl<'ws> Workspace<'ws> {
     fn handle_quit_dialog(&mut self, key: event::KeyEvent) -> Result<Option<ExitCode>> {
         if key.kind == KeyEventKind::Press {
             match key.code {
-                KeyCode::Esc | KeyCode::Char('n') | KeyCode::Char('N') =>  return Ok(Some(ExitCode::SUCCESS)),
+                KeyCode::Esc | KeyCode::Char('n') | KeyCode::Char('N') =>  {
+                    self.exit_quit_mode()?;
+                    return Ok(Some(ExitCode::SUCCESS))
+                },
                 KeyCode::Char('y') | KeyCode::Char('Y') => {
                     // We have been asked to save the file first.
                     self.save_file()?;
+                    self.exit_quit_mode()?;
                     return Ok(Some(ExitCode::SUCCESS));
                 },
                 _ => return Ok(None),
