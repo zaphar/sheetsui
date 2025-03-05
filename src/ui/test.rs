@@ -225,7 +225,7 @@ fn test_cmd_export() {
     let output = result.unwrap();
     assert!(output.is_some());
     let cmd = output.unwrap();
-    assert_eq!(cmd, Cmd::Export("test.csv"));
+    assert_eq!(cmd, Cmd::ExportCsv("test.csv"));
 }
 
 #[test]
