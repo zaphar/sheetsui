@@ -219,7 +219,7 @@ fn test_cmd_new_sheet_with_name() {
 
 #[test]
 fn test_cmd_export() {
-    let input = "export test.csv";
+    let input = "export-csv test.csv";
     let result = parse(input);
     assert!(result.is_ok());
     let output = result.unwrap();

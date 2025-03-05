@@ -15,7 +15,7 @@ pub enum Cmd<'a> {
     SelectSheet(&'a str),
     Edit(&'a str),
     Help(Option<&'a str>),
-    Export(&'a str),
+    ExportCsv(&'a str),
     Quit,
 }
 
@@ -41,7 +41,7 @@ pub fn parse<'cmd, 'i: 'cmd>(input: &'i str) -> Result<Option<Cmd<'cmd>>, &'stat
         return Ok(Some(cmd));
     }
     // Try consume export
-    if let Some(cmd) = try_consume_export(cursor.clone())? {
+    if let Some(cmd) = try_consume_export_csv(cursor.clone())? {
         return Ok(Some(cmd));
     }
     // try consume edit command.
@@ -114,17 +114,13 @@ fn try_consume_write<'cmd, 'i: 'cmd>(
     })));
 }
 
-fn try_consume_export<'cmd, 'i: 'cmd>(
+fn try_consume_export_csv<'cmd, 'i: 'cmd>(
     mut input: StrCursor<'i>,
 ) -> Result<Option<Cmd<'cmd>>, &'static str> {
-    const SHORT: &'static str = "ex";
-    const LONG: &'static str = "export";
+    const LONG: &'static str = "export-csv";
 
     if compare(input.clone(), LONG) {
         input.seek(LONG.len());
-    } else if compare(input.clone(), SHORT) {
-        input.seek(SHORT.len());
-        // Should we check for whitespace?
     } else {
         return Ok(None);
     }
@@ -132,7 +128,7 @@ fn try_consume_export<'cmd, 'i: 'cmd>(
         return Err("Invalid command: Did you mean to type `export <path>`?");
     }
     let arg = input.span(0..).trim();
-    return Ok(Some(Cmd::Export(arg)));
+    return Ok(Some(Cmd::ExportCsv(arg)));
 }
 
 fn try_consume_new_sheet<'cmd, 'i: 'cmd>(

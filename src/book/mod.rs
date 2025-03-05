@@ -120,7 +120,8 @@ impl Book {
     }
 
     pub fn csv_for_sheet<W>(&self, sheet: u32, sink: W) -> Result<()>
-        where W: std::io::Write,
+    where
+        W: std::io::Write,
     {
         let rows = self.get_export_rows_for_sheet(sheet)?;
         let mut writer = csv::Writer::from_writer(sink);

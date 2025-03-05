@@ -12,6 +12,7 @@ The currently supported commands are:
 * `new-sheet [name]` Creates a new sheet. If the name is provided then uses that. If omitted then uses a default sheet name.
 * `select-sheet <name>` Select a sheet by name.
 * `edit <path>` Edit a new spreadsheet at the current path. `e` is a shorthand alias for this command. 
+* `export-csv <path>` Export the current sheet to a csv file at `<path>`.
 * `quit` Quits the application. `q` is a shorthand alias for this command.
 
 <aside>Note that in the case of `quit` and `edit` that we do not currently

@@ -425,7 +425,7 @@ impl<'ws> Workspace<'ws> {
                 }
                 Ok(None)
             }
-            Ok(Some(Cmd::Export(path))) => {
+            Ok(Some(Cmd::ExportCsv(path))) => {
                 self.book.save_sheet_to_csv(self.book.location.sheet, path)?;
                 Ok(None)
             }
