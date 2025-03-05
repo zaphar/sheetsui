@@ -218,6 +218,17 @@ fn test_cmd_new_sheet_with_name() {
 }
 
 #[test]
+fn test_cmd_export() {
+    let input = "export-csv test.csv";
+    let result = parse(input);
+    assert!(result.is_ok());
+    let output = result.unwrap();
+    assert!(output.is_some());
+    let cmd = output.unwrap();
+    assert_eq!(cmd, Cmd::Export("test.csv"));
+}
+
+#[test]
 fn test_cmd_new_sheet_no_name() {
     let input = "new-sheet";
     let result = parse(input);
