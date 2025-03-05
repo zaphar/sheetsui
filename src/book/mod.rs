@@ -119,12 +119,23 @@ impl Book {
         )?))
     }
 
-    pub fn get_export_rows(&self) -> Result<Vec<Vec<String>>> {
-        let sheet = self.location.sheet;
-        Ok(self.export_rows_for_sheet(sheet)?)
+    pub fn csv_for_sheet<W>(&self, sheet: u32, sink: W) -> Result<()>
+        where W: std::io::Write,
+    {
+        let rows = self.get_export_rows_for_sheet(sheet)?;
+        let mut writer = csv::Writer::from_writer(sink);
+        for row in rows {
+            writer.write_record(row)?;
+        }
+        Ok(())
     }
 
-    pub fn export_rows_for_sheet(&self, sheet: u32) -> Result<Vec<Vec<String>>, anyhow::Error> {
+    pub fn get_export_rows(&self) -> Result<Vec<Vec<String>>> {
+        let sheet = self.location.sheet;
+        Ok(self.get_export_rows_for_sheet(sheet)?)
+    }
+
+    pub fn get_export_rows_for_sheet(&self, sheet: u32) -> Result<Vec<Vec<String>>, anyhow::Error> {
         let worksheet = self
             .model
             .get_model()
@@ -168,6 +179,15 @@ impl Book {
     /// Construct a new book from a path.
     pub fn new_from_xlsx_with_locale(path: &str, locale: &str, tz: &str) -> Result<Self> {
         Ok(Self::from_model(load_from_xlsx(path, locale, tz)?))
+    }
+
+    /// Save a sheet in the book to a csv file
+    pub fn save_sheet_to_csv(&self, sheet: u32, path: &str) -> Result<()> {
+        let file_path = std::path::Path::new(path);
+        let file = std::fs::File::create(file_path)?;
+        let writer = std::io::BufWriter::new(file);
+        self.csv_for_sheet(sheet, writer)?;
+        Ok(())
     }
 
     /// Save book to an xlsx file.
