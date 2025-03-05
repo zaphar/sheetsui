@@ -15,6 +15,7 @@ pub enum Cmd<'a> {
     SelectSheet(&'a str),
     Edit(&'a str),
     Help(Option<&'a str>),
+    Export(&'a str),
     Quit,
 }
 
@@ -35,8 +36,12 @@ pub fn parse<'cmd, 'i: 'cmd>(input: &'i str) -> Result<Option<Cmd<'cmd>>, &'stat
     if let Some(cmd) = try_consume_insert_row(cursor.clone())? {
         return Ok(Some(cmd));
     }
-    //// try consume insert-col command.
+    // try consume insert-col command.
     if let Some(cmd) = try_consume_insert_column(cursor.clone())? {
+        return Ok(Some(cmd));
+    }
+    // Try consume export
+    if let Some(cmd) = try_consume_export(cursor.clone())? {
         return Ok(Some(cmd));
     }
     // try consume edit command.
@@ -99,7 +104,7 @@ fn try_consume_write<'cmd, 'i: 'cmd>(
         return Ok(None);
     }
     if input.remaining() > 0 && !is_ws(&mut input) {
-        return Err("Invalid command: Did you mean to type `write <arg>`?");
+        return Err("Invalid command: Did you mean to type `write <path>`?");
     }
     let arg = input.span(0..).trim();
     return Ok(Some(Cmd::Write(if arg.is_empty() {
@@ -107,6 +112,27 @@ fn try_consume_write<'cmd, 'i: 'cmd>(
     } else {
         Some(arg)
     })));
+}
+
+fn try_consume_export<'cmd, 'i: 'cmd>(
+    mut input: StrCursor<'i>,
+) -> Result<Option<Cmd<'cmd>>, &'static str> {
+    const SHORT: &'static str = "ex";
+    const LONG: &'static str = "export";
+
+    if compare(input.clone(), LONG) {
+        input.seek(LONG.len());
+    } else if compare(input.clone(), SHORT) {
+        input.seek(SHORT.len());
+        // Should we check for whitespace?
+    } else {
+        return Ok(None);
+    }
+    if input.remaining() == 0 || !is_ws(&mut input) {
+        return Err("Invalid command: Did you mean to type `export <path>`?");
+    }
+    let arg = input.span(0..).trim();
+    return Ok(Some(Cmd::Export(arg)));
 }
 
 fn try_consume_new_sheet<'cmd, 'i: 'cmd>(
