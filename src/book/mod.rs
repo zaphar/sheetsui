@@ -575,7 +575,7 @@ impl Book {
         width: usize,
     ) -> std::result::Result<(), anyhow::Error> {
         self.model
-            .set_column_width(sheet, col as i32, width as f64 * COL_PIXELS)
+            .set_columns_width(sheet, col as i32, col as i32, width as f64 * COL_PIXELS)
             .map_err(|e| anyhow!("Error setting column width: {:?}", e))?;
         self.dirty = true;
         Ok(())
