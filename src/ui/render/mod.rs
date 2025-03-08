@@ -11,6 +11,7 @@ use super::*;
 pub mod viewport;
 pub use viewport::Viewport;
 pub mod dialog;
+pub mod markdown;
 
 #[cfg(test)]
 mod test;
