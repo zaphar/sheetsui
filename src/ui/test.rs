@@ -395,7 +395,7 @@ macro_rules! assert_help_dialog {
             .run(&mut ws)
             .expect("Failed to handle 'alt-h' key event");
         assert_eq!(Some(&Modality::Dialog), ws.state.modality_stack.last());
-        assert_eq!(edit_help, ws.state.popup);
+        assert_eq!(Some(edit_help), ws.state.popup);
         $exit.run(&mut ws).expect("Failed to handle key event");
         assert_eq!(Some(&Modality::CellEdit), ws.state.modality_stack.last());
     }};
@@ -431,7 +431,7 @@ fn test_navigation_mode_help_keycode() {
         .run(&mut ws)
         .expect("Failed to handle 'alt-h' key event");
     assert_eq!(Some(&Modality::Dialog), ws.state.modality_stack.last());
-    assert_eq!(help_text, ws.state.popup);
+    assert_eq!(Some(help_text), ws.state.popup);
 }
 
 #[test]
@@ -449,7 +449,7 @@ fn test_command_mode_help_keycode() {
         .run(&mut ws)
         .expect("Failed to handle 'alt-h' key event");
     assert_eq!(Some(&Modality::Dialog), ws.state.modality_stack.last());
-    assert_eq!(edit_help, ws.state.popup);
+    assert_eq!(Some(edit_help), ws.state.popup);
 }
 
 #[test]

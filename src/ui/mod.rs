@@ -7,7 +7,7 @@ use anyhow::{anyhow, Result};
 use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
 use ironcalc::base::{expressions::types::Area, Model};
 use ratatui::{
-    buffer::Buffer, layout::{Constraint, Flex, Layout}, style::{Modifier, Style}, text::{Line, Text}, widgets::Block
+    buffer::Buffer, layout::{Constraint, Flex, Layout}, style::{Modifier, Style}, widgets::Block
 };
 use tui_prompts::{State, Status, TextPrompt, TextState};
 use tui_textarea::{CursorMove, TextArea};
@@ -19,7 +19,7 @@ pub mod render;
 mod test;
 
 use cmd::Cmd;
-use render::viewport::ViewportState;
+use render::{markdown::Markdown, viewport::ViewportState};
 
 #[derive(Default, Debug, PartialEq, Clone)]
 pub enum Modality {
@@ -80,7 +80,7 @@ pub struct AppState<'ws> {
     pub range_select: RangeSelection,
     pub dialog_scroll: u16,
     dirty: bool,
-    popup: Text<'ws>,
+    popup: Option<Markdown>,
     clipboard: Option<ClipboardContents>,
 }
 
@@ -299,16 +299,16 @@ impl<'ws> Workspace<'ws> {
         Ok(None)
     }
 
-    fn render_help_text(&self) -> Text<'static> {
+    fn render_help_text(&self) -> Markdown {
         // TODO(zaphar): We should be sourcing these from our actual help documentation.
         // Ideally we would also render the markdown content properly.
         // https://github.com/zaphar/sheetsui/issues/22
         match self.state.modality() {
-            Modality::Navigate => help::render_topic("navigate"),
-            Modality::CellEdit => help::render_topic("edit"),
-            Modality::Command => help::render_topic("command"),
-            Modality::RangeSelect => help::render_topic("visual"),
-            _ => help::render_topic(""),
+            Modality::Navigate => help::to_widget("navigate"),
+            Modality::CellEdit => help::to_widget("edit"),
+            Modality::Command => help::to_widget("command"),
+            Modality::RangeSelect => help::to_widget("visual"),
+            _ => help::to_widget(""),
         }
     }
 
@@ -361,8 +361,10 @@ impl<'ws> Workspace<'ws> {
                 KeyCode::Char('k') | KeyCode::Up => {
                     self.state.dialog_scroll = self.state.dialog_scroll.saturating_sub(1);
                 }
-                _ => {
-                    // NOOP
+                code => {
+                    if let Some(widget) = &self.state.popup {
+                        widget.handle_input(code);
+                    }
                 }
             }
         }
@@ -414,7 +416,7 @@ impl<'ws> Workspace<'ws> {
                 Ok(None)
             }
             Ok(Some(Cmd::Help(maybe_topic))) => {
-                self.enter_dialog_mode(help::render_topic(maybe_topic.unwrap_or("")));
+                self.enter_dialog_mode(help::to_widget(maybe_topic.unwrap_or("")));
                 Ok(None)
             }
             Ok(Some(Cmd::Write(maybe_path))) => {
@@ -508,11 +510,11 @@ impl<'ws> Workspace<'ws> {
                 Ok(None)
             }
             Ok(None) => {
-                self.enter_dialog_mode(vec![Line::from(format!("Unrecognized commmand {}", cmd_text))]);
+                self.enter_dialog_mode(Markdown::from_str(&format!("Unrecognized commmand {}", cmd_text)));
                 Ok(None)
             }
             Err(msg) => {
-                self.enter_dialog_mode(vec![Line::from(msg.to_owned())]);
+                self.enter_dialog_mode(Markdown::from_str(msg));
                 Ok(None)
             }
         }
@@ -951,8 +953,8 @@ impl<'ws> Workspace<'ws> {
         self.state.command_state.focus();
     }
 
-    fn enter_dialog_mode<T: Into<Text<'ws>>>(&mut self, msg: T) {
-        self.state.popup = msg.into();
+    fn enter_dialog_mode(&mut self, msg: Markdown) {
+        self.state.popup = Some(msg);
         self.state.modality_stack.push(Modality::Dialog);
     }
 

@@ -100,7 +100,7 @@ impl<'widget, 'ws: 'widget> Widget for &'widget mut Workspace<'ws> {
         Self: Sized,
     {
         if self.state.modality() == &Modality::Dialog {
-            let lines = Text::from_iter(self.state.popup.iter().cloned());
+            let lines = self.state.popup.as_ref().map(|md| md.get_text()).unwrap_or_else(|| Text::raw("Popup message here"));
             let popup = dialog::Dialog::new(lines, "Help").scroll(self.state.dialog_scroll);
             popup.render(area, buf);
         } else if self.state.modality() == &Modality::Quit {
