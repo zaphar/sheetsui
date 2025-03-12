@@ -21,3 +21,4 @@ serde_json = "1.0.133"
 colorsys = "0.6.7"
 tui-markdown = { version = "0.3.1", features = [] }
 csv = "1.3.1"
+pulldown-cmark = "0.13.0"
