@@ -7,8 +7,8 @@ use ratatui::{
     widgets::{Block, Cell, Row, StatefulWidget, Table, Widget},
 };
 
-use crate::book;
 use super::{Address, Book, RangeSelection};
+use crate::book;
 
 /// A visible column to show in our Viewport.
 #[derive(Clone, Debug)]
@@ -150,7 +150,11 @@ impl<'ws> Viewport<'ws> {
                         |VisibleColumn { idx: ci, length: _ }| {
                             let content = self
                                 .book
-                                .get_cell_addr_rendered(&Address { row: ri, col: *ci, sheet: self.book.location.sheet})
+                                .get_cell_addr_rendered(&Address {
+                                    row: ri,
+                                    col: *ci,
+                                    sheet: self.book.location.sheet,
+                                })
                                 .unwrap();
                             self.compute_cell_style(ri, *ci, Cell::new(Text::raw(content)))
                         },
@@ -192,29 +196,27 @@ impl<'ws> Viewport<'ws> {
         mut cell: Cell<'widget>,
     ) -> Cell<'widget> {
         // TODO(zaphar): Should probably create somekind of formatter abstraction.
-        if let Some(style) = self
-            .book
-            .get_cell_style(&Address { sheet: self.book.location.sheet, row: ri, col: ci }) {
+        if let Some(style) = self.book.get_cell_style(&Address {
+            sheet: self.book.location.sheet,
+            row: ri,
+            col: ci,
+        }) {
             cell = self.compute_cell_colors(&style, ri, ci, cell);
-            cell = if style.font.b {
-                cell.bold()
-            } else { cell };
-            cell = if style.font.i {
-                cell.italic()
-            } else { cell };
+            cell = if style.font.b { cell.bold() } else { cell };
+            cell = if style.font.i { cell.italic() } else { cell };
         }
         cell
     }
 
-    fn compute_cell_colors<'widget>(&self, style: &ironcalc::base::types::Style, ri: usize, ci: usize, mut cell: Cell<'widget>) -> Cell<'widget> {
-        let bg_color = map_color(
-            style.fill.bg_color.as_ref(),
-            Color::Rgb(35, 33, 54),
-        );
-        let fg_color = map_color(
-            style.fill.fg_color.as_ref(),
-            Color::White,
-        );
+    fn compute_cell_colors<'widget>(
+        &self,
+        style: &ironcalc::base::types::Style,
+        ri: usize,
+        ci: usize,
+        mut cell: Cell<'widget>,
+    ) -> Cell<'widget> {
+        let bg_color = map_color(style.fill.bg_color.as_ref(), Color::Rgb(35, 33, 54));
+        let fg_color = map_color(style.fill.fg_color.as_ref(), Color::White);
         if let Some((start, end)) = &self.range_selection.map_or(None, |r| r.get_range()) {
             if ri >= start.row && ri <= end.row && ci >= start.col && ci <= end.col {
                 // This is a selected range

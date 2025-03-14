@@ -100,12 +100,18 @@ impl<'widget, 'ws: 'widget> Widget for &'widget mut Workspace<'ws> {
         Self: Sized,
     {
         if self.state.modality() == &Modality::Dialog {
-            let lines = self.state.popup.as_ref().map(|md| md.get_text()).unwrap_or_else(|| Text::raw("Popup message here"));
+            let lines = self
+                .state
+                .popup
+                .as_ref()
+                .map(|md| md.get_text())
+                .unwrap_or_else(|| Text::raw("Popup message here"));
             let popup = dialog::Dialog::new(lines, "Help").scroll(self.state.dialog_scroll);
             popup.render(area, buf);
         } else if self.state.modality() == &Modality::Quit {
-            let popup = dialog::Dialog::new(Text::raw("File is not yet saved. Save it first?"), "Quit")
-                .with_bottom_title("Y/N");
+            let popup =
+                dialog::Dialog::new(Text::raw("File is not yet saved. Save it first?"), "Quit")
+                    .with_bottom_title("Y/N");
             popup.render(area, buf);
         } else {
             let outer_block = Block::bordered()
