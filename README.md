@@ -11,7 +11,7 @@ nix profile install github:zaphar/sheetsui
 ### Cargo
 
 ```sh
-cargo install --git https://github.com/zaphar/sheetsui
+cargo install --git https://github.com/zaphar/sheetsui --locked
 ```
 
 ## Running
