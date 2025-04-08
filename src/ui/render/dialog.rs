@@ -1,3 +1,5 @@
+use std::cmp::{max, min};
+
 use ratatui::{
     self,
     layout::{Constraint, Layout, Rect},
@@ -11,6 +13,7 @@ pub struct Dialog<'w> {
     title: &'w str,
     bottom_title: &'w str,
     scroll: (u16, u16),
+    // TODO(zaphar): Have a max margin?
 }
 
 impl<'w> Dialog<'w> {
@@ -39,19 +42,23 @@ impl<'w> Widget for Dialog<'w> {
         Self: Sized,
     {
         // First find the center of the area.
-        let content_width = self.content.width();
-        let content_height = self.content.height();
-        let vertical_margin = if ((content_height as u16) + 2) <= area.height {
+        let content_width = 120 + 2;
+        let content_height = (self.content.height() + 2) as u16;
+        let vertical_margin = if content_height <= area.height {
             area.height
-                .saturating_sub((content_height as u16) + 2)
+                .saturating_sub(content_height as u16)
                 .saturating_div(2)
         } else {
-            area.height - 2
+            2
         };
-        let horizontal_margin = area
+        let horizontal_margin = if content_width <= area.width {
+            area
             .width
-            .saturating_sub((content_width as u16) + 2)
-            .saturating_div(2);
+            .saturating_sub(content_width as u16)
+            .saturating_div(2)
+        } else {
+           2
+        };
         let [_, dialog_vertical, _] = Layout::vertical(vec![
             Constraint::Length(vertical_margin),
             Constraint::Fill(1),

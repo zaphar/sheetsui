@@ -172,6 +172,7 @@ impl Markdown {
                     match tag {
                         TagEnd::Heading { .. } => {
                             lines.push(current_line);
+                            lines.push(Line::default()); // Add empty line after heading
                             current_line = Line::default();
                             state_stack.pop();
                         }
