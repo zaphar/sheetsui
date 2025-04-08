@@ -1,5 +1,5 @@
 /target
-result/
+/result
 *.json
 tarpaulin-report.*
 *.profraw

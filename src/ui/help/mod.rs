@@ -1,12 +1,11 @@
-use ratatui::text::Text;
-use tui_markdown;
+use crate::ui::render::markdown::Markdown;
 
-pub fn render_topic(topic: &str) -> Text<'static> {
+pub fn to_widget(topic: &str) -> Markdown {
     match topic {
-        "navigate" => tui_markdown::from_str(include_str!("../../../docs/navigation.md")),
-        "edit" => tui_markdown::from_str(include_str!("../../../docs/edit.md")),
-        "command" => tui_markdown::from_str(include_str!("../../../docs/command.md")),
-        "visual" => tui_markdown::from_str(include_str!("../../../docs/visual.md")),
-        _ => tui_markdown::from_str(include_str!("../../../docs/intro.md")),
+        "navigate" => Markdown::from_str(include_str!("../../../docs/navigation.md")),
+        "edit" => Markdown::from_str(include_str!("../../../docs/edit.md")),
+        "command" => Markdown::from_str(include_str!("../../../docs/command.md")),
+        "visual" => Markdown::from_str(include_str!("../../../docs/visual.md")),
+        _ => Markdown::from_str(include_str!("../../../docs/intro.md")),
     }
 }

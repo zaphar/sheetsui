@@ -7,19 +7,22 @@ use anyhow::{anyhow, Result};
 use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
 use ironcalc::base::{expressions::types::Area, Model};
 use ratatui::{
-    buffer::Buffer, layout::{Constraint, Flex, Layout}, style::{Modifier, Style}, text::{Line, Text}, widgets::Block
+    buffer::Buffer,
+    layout::{Constraint, Flex, Layout},
+    style::{Modifier, Style},
+    widgets::Block,
 };
 use tui_prompts::{State, Status, TextPrompt, TextState};
 use tui_textarea::{CursorMove, TextArea};
 
-mod help;
 mod cmd;
+mod help;
 pub mod render;
 #[cfg(test)]
 mod test;
 
 use cmd::Cmd;
-use render::viewport::ViewportState;
+use render::{markdown::Markdown, viewport::ViewportState};
 
 #[derive(Default, Debug, PartialEq, Clone)]
 pub enum Modality {
@@ -80,7 +83,7 @@ pub struct AppState<'ws> {
     pub range_select: RangeSelection,
     pub dialog_scroll: u16,
     dirty: bool,
-    popup: Text<'ws>,
+    popup: Option<Markdown>,
     clipboard: Option<ClipboardContents>,
 }
 
@@ -299,16 +302,16 @@ impl<'ws> Workspace<'ws> {
         Ok(None)
     }
 
-    fn render_help_text(&self) -> Text<'static> {
+    fn render_help_text(&self) -> Markdown {
         // TODO(zaphar): We should be sourcing these from our actual help documentation.
         // Ideally we would also render the markdown content properly.
         // https://github.com/zaphar/sheetsui/issues/22
         match self.state.modality() {
-            Modality::Navigate => help::render_topic("navigate"),
-            Modality::CellEdit => help::render_topic("edit"),
-            Modality::Command => help::render_topic("command"),
-            Modality::RangeSelect => help::render_topic("visual"),
-            _ => help::render_topic(""),
+            Modality::Navigate => help::to_widget("navigate"),
+            Modality::CellEdit => help::to_widget("edit"),
+            Modality::Command => help::to_widget("command"),
+            Modality::RangeSelect => help::to_widget("visual"),
+            _ => help::to_widget(""),
         }
     }
 
@@ -332,16 +335,16 @@ impl<'ws> Workspace<'ws> {
     fn handle_quit_dialog(&mut self, key: event::KeyEvent) -> Result<Option<ExitCode>> {
         if key.kind == KeyEventKind::Press {
             match key.code {
-                KeyCode::Esc | KeyCode::Char('n') | KeyCode::Char('N') =>  {
+                KeyCode::Esc | KeyCode::Char('n') | KeyCode::Char('N') => {
                     self.exit_quit_mode()?;
-                    return Ok(Some(ExitCode::SUCCESS))
-                },
+                    return Ok(Some(ExitCode::SUCCESS));
+                }
                 KeyCode::Char('y') | KeyCode::Char('Y') => {
                     // We have been asked to save the file first.
                     self.save_file()?;
                     self.exit_quit_mode()?;
                     return Ok(Some(ExitCode::SUCCESS));
-                },
+                }
                 _ => return Ok(None),
             }
         }
@@ -361,8 +364,10 @@ impl<'ws> Workspace<'ws> {
                 KeyCode::Char('k') | KeyCode::Up => {
                     self.state.dialog_scroll = self.state.dialog_scroll.saturating_sub(1);
                 }
-                _ => {
-                    // NOOP
+                code => {
+                    if let Some(widget) = &self.state.popup {
+                        widget.handle_input(code);
+                    }
                 }
             }
         }
@@ -414,7 +419,7 @@ impl<'ws> Workspace<'ws> {
                 Ok(None)
             }
             Ok(Some(Cmd::Help(maybe_topic))) => {
-                self.enter_dialog_mode(help::render_topic(maybe_topic.unwrap_or("")));
+                self.enter_dialog_mode(help::to_widget(maybe_topic.unwrap_or("")));
                 Ok(None)
             }
             Ok(Some(Cmd::Write(maybe_path))) => {
@@ -426,7 +431,8 @@ impl<'ws> Workspace<'ws> {
                 Ok(None)
             }
             Ok(Some(Cmd::ExportCsv(path))) => {
-                self.book.save_sheet_to_csv(self.book.location.sheet, path)?;
+                self.book
+                    .save_sheet_to_csv(self.book.location.sheet, path)?;
                 Ok(None)
             }
             Ok(Some(Cmd::InsertColumns(count))) => {
@@ -508,11 +514,14 @@ impl<'ws> Workspace<'ws> {
                 Ok(None)
             }
             Ok(None) => {
-                self.enter_dialog_mode(vec![Line::from(format!("Unrecognized commmand {}", cmd_text))]);
+                self.enter_dialog_mode(Markdown::from_str(&format!(
+                    "Unrecognized commmand {}",
+                    cmd_text
+                )));
                 Ok(None)
             }
             Err(msg) => {
-                self.enter_dialog_mode(vec![Line::from(msg.to_owned())]);
+                self.enter_dialog_mode(Markdown::from_str(msg));
                 Ok(None)
             }
         }
@@ -543,18 +552,12 @@ impl<'ws> Workspace<'ws> {
                 }
                 KeyCode::Char('D') => {
                     if let Some((start, end)) = self.state.range_select.get_range() {
-                        self.book.clear_cell_range_all(
-                            start,
-                            end,
-                        )?;
+                        self.book.clear_cell_range_all(start, end)?;
                     }
                 }
                 KeyCode::Char('d') => {
                     if let Some((start, end)) = self.state.range_select.get_range() {
-                        self.book.clear_cell_range(
-                            start,
-                            end,
-                        )?;
+                        self.book.clear_cell_range(start, end)?;
                     }
                 }
                 KeyCode::Char('h') => {
@@ -775,7 +778,11 @@ impl<'ws> Workspace<'ws> {
                 }
                 KeyCode::Char('l') if key.modifiers == KeyModifiers::CONTROL => {
                     self.run_with_prefix(|ws: &mut Workspace<'_>| -> Result<()> {
-                        let Address { sheet: _, row: _, col } = &ws.book.location;
+                        let Address {
+                            sheet: _,
+                            row: _,
+                            col,
+                        } = &ws.book.location;
                         ws.book
                             .set_col_size(*col, ws.book.get_col_size(*col)? + 1)?;
                         Ok(())
@@ -783,7 +790,11 @@ impl<'ws> Workspace<'ws> {
                 }
                 KeyCode::Char('h') if key.modifiers == KeyModifiers::CONTROL => {
                     self.run_with_prefix(|ws: &mut Workspace<'_>| -> Result<()> {
-                        let Address { sheet: _, row: _, col } = &ws.book.location;
+                        let Address {
+                            sheet: _,
+                            row: _,
+                            col,
+                        } = &ws.book.location;
                         let curr_size = ws.book.get_col_size(*col)?;
                         if curr_size > 1 {
                             ws.book.set_col_size(*col, curr_size - 1)?;
@@ -874,21 +885,31 @@ impl<'ws> Workspace<'ws> {
         return Ok(None);
     }
 
-    fn toggle_bool_style(&mut self, current_val: Option<bool>, path: &str, address: &Address) -> Result<(), anyhow::Error> {
+    fn toggle_bool_style(
+        &mut self,
+        current_val: Option<bool>,
+        path: &str,
+        address: &Address,
+    ) -> Result<(), anyhow::Error> {
         let value = if let Some(b_val) = current_val {
-            if b_val { "false" } else { "true" }
+            if b_val {
+                "false"
+            } else {
+                "true"
+            }
         } else {
             "true"
         };
         self.book.set_cell_style(
             &[(path, value)],
             &Area {
-            sheet: address.sheet,
-            row: address.row as i32,
-            column: address.col as i32,
-            width: 1,
-            height: 1,
-        })?;
+                sheet: address.sheet,
+                row: address.row as i32,
+                column: address.col as i32,
+                width: 1,
+                height: 1,
+            },
+        )?;
         Ok(())
     }
 
@@ -951,8 +972,8 @@ impl<'ws> Workspace<'ws> {
         self.state.command_state.focus();
     }
 
-    fn enter_dialog_mode<T: Into<Text<'ws>>>(&mut self, msg: T) {
-        self.state.popup = msg.into();
+    fn enter_dialog_mode(&mut self, msg: Markdown) {
+        self.state.popup = Some(msg);
         self.state.modality_stack.push(Modality::Dialog);
     }
 
@@ -981,7 +1002,7 @@ impl<'ws> Workspace<'ws> {
         self.state.pop_modality();
         Ok(None)
     }
-    
+
     fn exit_command_mode(&mut self) -> Result<Option<ExitCode>> {
         let cmd = self.state.command_state.value().to_owned();
         self.state.command_state.blur();
@@ -1045,14 +1066,13 @@ impl<'ws> Workspace<'ws> {
         self.book.save_to_xlsx(path.into().as_str())?;
         Ok(())
     }
-    
+
     fn quit_app(&mut self) -> std::result::Result<Option<ExitCode>, anyhow::Error> {
         if self.enter_quit_mode() {
             return Ok(None);
         }
-        return Ok(Some(ExitCode::SUCCESS))
+        return Ok(Some(ExitCode::SUCCESS));
     }
-
 }
 
 fn load_book(path: &PathBuf, locale: &str, tz: &str) -> Result<Book, anyhow::Error> {
