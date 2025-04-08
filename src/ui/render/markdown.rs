@@ -340,8 +340,6 @@ impl Widget for Markdown {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ratatui::text::Text;
-
     #[test]
     fn test_empty_markdown() {
         let md = Markdown::from_str("");
@@ -362,15 +360,17 @@ mod tests {
         let md = Markdown::from_str("# Heading 1\n## Heading 2\n### Heading 3");
         let text = md.get_text();
         
-        // Should have 3 headings
-        assert_eq!(text.lines.len(), 3);
+        // Should have 3 headings and 6 lines
+        assert_eq!(text.lines.len(), 6);
         
         // Check content
         assert_eq!(text.lines[0].spans[0].content, "Heading 1");
-        assert_eq!(text.lines[1].spans[0].content, "Heading 2");
-        assert_eq!(text.lines[2].spans[0].content, "Heading 3");
+        assert_eq!(text.lines[1].spans.len(), 0);
+        assert_eq!(text.lines[2].spans[0].content, "Heading 2");
+        assert_eq!(text.lines[3].spans.len(), 0);
+        assert_eq!(text.lines[4].spans[0].content, "Heading 3");
+        assert_eq!(text.lines[5].spans.len(), 0);
         
-        // Check styling (we can't directly check the style, but we can verify it's different)
         assert!(text.lines[0].style != text.lines[1].style);
     }
 

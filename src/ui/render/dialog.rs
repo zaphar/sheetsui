@@ -1,5 +1,3 @@
-use std::cmp::{max, min};
-
 use ratatui::{
     self,
     layout::{Constraint, Layout, Rect},
