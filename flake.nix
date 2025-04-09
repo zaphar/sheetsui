@@ -26,7 +26,7 @@
       buildInputs =
         (
           if pkgs.stdenv.isDarwin
-          then with pkgs.darwin.apple_sdk.frameworks; [Security SystemConfiguration]
+          then with pkgs.darwin.apple_sdk.frameworks; [Security SystemConfiguration AppKit]
           else [pkgs.openssl]
         )
         ++ [my-rust-bin];
@@ -37,7 +37,12 @@
     rust-bin = pkgs.rust-bin;
     
     devShells.default = pkgs.mkShell {
-      nativeBuildInputs = with pkgs; [ gnumake my-rust-bin rust-analyzer cargo-tarpaulin ];
+      nativeBuildInputs = with pkgs; (
+          if pkgs.stdenv.isDarwin
+          then with pkgs.darwin.apple_sdk.frameworks; [Security SystemConfiguration AppKit]
+          else [pkgs.openssl]
+        )
+        ++ [ gnumake my-rust-bin rust-analyzer cargo-tarpaulin ];
     };
   });
 }
