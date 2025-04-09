@@ -660,8 +660,9 @@ impl<'ws> Workspace<'ws> {
                     }
                     rows.push(cols);
                 }
+                // TODO(zaphar): Rethink this a bit perhaps?
                 let mut cb = Clipboard::new()?;
-                let (html, csv) = crate::book::rows_to_clipboard_content(&rows)?;
+                let (html, csv) = self.book.range_to_clipboard_content(AddressRange { start, end })?;
                 cb.set_html(html, Some(csv))?;
                 self.state.clipboard = Some(ClipboardContents::Range(rows));
             }
