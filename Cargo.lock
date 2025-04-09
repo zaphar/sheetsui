@@ -844,19 +844,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "html"
-version = "0.6.3"
+name = "htmf"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "944d7db81871c611549302f3014418fedbcfbc46902f97e6a1c4f53e785903d2"
-dependencies = [
- "html-sys",
-]
-
-[[package]]
-name = "html-sys"
-version = "0.4.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "13eca55667a5657dd1b86db77c5fe2d1810e3f9413e9555a2c4c461733dd2573"
+checksum = "abcb5a4078c86d49875d3079c1b31c3bd5c277ad6adb88800a4d5c6af0fec9b2"
 
 [[package]]
 name = "iana-time-zone"
@@ -1029,7 +1020,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4979f22fdb869068da03c9f7528f8297c6fd2606bc3a4affe42e6a823fdb8da4"
 dependencies = [
  "cfg-if",
- "windows-targets 0.48.5",
+ "windows-targets 0.52.6",
 ]
 
 [[package]]
@@ -1780,7 +1771,7 @@ dependencies = [
  "crossterm",
  "csv",
  "futures",
- "html",
+ "htmf",
  "ironcalc",
  "pulldown-cmark 0.13.0",
  "ratatui",

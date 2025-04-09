@@ -200,3 +200,119 @@ fn test_book_get_exportable_rows() {
         ]
     );
 }
+
+#[test]
+fn test_sheet_to_clipboard_content() {
+    let mut book = Book::default();
+    book.update_cell(
+        &Address {
+            sheet: 0,
+            row: 1,
+            col: 1,
+        },
+        "A1",
+    )
+    .expect("failed to edit cell");
+    book.update_cell(
+        &Address {
+            sheet: 0,
+            row: 1,
+            col: 2,
+        },
+        "B1",
+    )
+    .expect("failed to edit cell");
+    book.update_cell(
+        &Address {
+            sheet: 0,
+            row: 2,
+            col: 1,
+        },
+        "A2",
+    )
+    .expect("failed to edit cell");
+    book.update_cell(
+        &Address {
+            sheet: 0,
+            row: 2,
+            col: 2,
+        },
+        "B2",
+    )
+    .expect("failed to edit cell");
+    
+    let (html, csv) = dbg!(book.sheeet_to_clipboard_content(0).expect("Failed to get clipboard content"));
+    
+    // Check that HTML contains table elements and our data
+    assert!(html.contains("<table>"));
+    assert!(html.contains("<tr>"));
+    assert!(html.contains("<td>"));
+    assert!(html.contains("A1"));
+    assert!(html.contains("B1"));
+    assert!(html.contains("A2"));
+    assert!(html.contains("B2"));
+    
+    // Check CSV content
+    let expected_csv = ",,\n,A1,B1\n,A2,B2\n";
+    assert_eq!(csv, expected_csv);
+}
+
+#[test]
+fn test_range_to_clipboard_content() {
+    let mut book = Book::default();
+    book.update_cell(
+        &Address {
+            sheet: 0,
+            row: 1,
+            col: 1,
+        },
+        "A1",
+    )
+    .expect("failed to edit cell");
+    book.update_cell(
+        &Address {
+            sheet: 0,
+            row: 1,
+            col: 2,
+        },
+        "B1",
+    )
+    .expect("failed to edit cell");
+    book.update_cell(
+        &Address {
+            sheet: 0,
+            row: 2,
+            col: 1,
+        },
+        "A2",
+    )
+    .expect("failed to edit cell");
+    book.update_cell(
+        &Address {
+            sheet: 0,
+            row: 2,
+            col: 2,
+        },
+        "B2",
+    )
+    .expect("failed to edit cell");
+    
+    let start = Address { sheet: 0, row: 1, col: 1 };
+    let end = Address { sheet: 0, row: 2, col: 2 };
+    let range = super::AddressRange { start: &start, end: &end };
+    
+    let (html, csv) = book.range_to_clipboard_content(range).expect("Failed to get clipboard content");
+    
+    // Check that HTML contains table elements and our data
+    assert!(html.contains("<table>"));
+    assert!(html.contains("<tr>"));
+    assert!(html.contains("<td>"));
+    assert!(html.contains("A1"));
+    assert!(html.contains("B1"));
+    assert!(html.contains("A2"));
+    assert!(html.contains("B2"));
+    
+    // Check CSV content
+    let expected_csv = "A1,B1\nA2,B2\n";
+    assert_eq!(csv, expected_csv);
+}

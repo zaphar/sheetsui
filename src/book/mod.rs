@@ -132,27 +132,19 @@ impl Book {
         Ok(())
     }
 
-    /// Construct a payload of (html, csv_text) for the address range.
-    pub fn range_to_clipboard_content(&self, range: AddressRange) -> Result<(String, String), anyhow::Error> {
-        use html::tables;
-        let rows = self.get_rows_for_range(&range).unwrap_or_default();
-        let mut html = tables::Table::builder();
-        let mut writer = csv::Writer::from_writer(vec![]);
-        for row in rows {
-            let mut html_row = tables::TableRow::builder();
-            writer.write_record(&row)?;
-            for cell in row {
-                let mut html_cell = tables::TableCell::builder();
-                html_cell.text(cell);
-                html_row.push(html_cell.build());
-            }
-            html.push(html_row.build());
-        }
-       
-        let csv_content = writer.into_inner().expect("Failed to get the csv content");
-        Ok((html.build().to_string(), String::from_utf8_lossy(&csv_content).to_string()))
+    /// Construct a payload of (html, csv_text) for a sheet.
+    pub fn sheeet_to_clipboard_content(&self, sheet: u32) -> Result<(String, String), anyhow::Error> {
+        let rows = self.get_export_rows_for_sheet(sheet)?;
+        rows_to_clipboard_content(rows)
     }
 
+    /// Construct a payload of (html, csv_text) for the address range.
+    pub fn range_to_clipboard_content(&self, range: AddressRange) -> Result<(String, String), anyhow::Error> {
+        let rows = self.get_rows_for_range(&range).unwrap_or_default();
+        rows_to_clipboard_content(rows)
+    }
+
+    /// Get rows for current sheet to export.
     pub fn get_export_rows(&self) -> Result<Vec<Vec<String>>> {
         let sheet = self.location.sheet;
         Ok(self.get_export_rows_for_sheet(sheet)?)
@@ -728,6 +720,25 @@ impl Book {
             .map_err(|s| anyhow!("Invalid Worksheet: {}", s))?
             .name)
     }
+}
+
+fn rows_to_clipboard_content(rows: Vec<Vec<String>>) -> std::result::Result<(String, String), anyhow::Error> {
+    use htmf::prelude::*;
+    let table = table([]);
+    let mut writer = csv::Writer::from_writer(vec![]);
+    let mut table_rows = vec![];
+    for row in rows {
+        let table_row = tr([]);
+        writer.write_record(&row)?;
+        let mut row_cells = vec![];
+        for cell in row {
+            row_cells.push(td([]).with(text(cell)));
+        }
+        table_rows.push(table_row.with(row_cells));
+    }
+       
+    let csv_content = writer.into_inner().expect("Failed to get the csv content");
+    Ok((table.with(table_rows).to_html(), String::from_utf8_lossy(&csv_content).to_string()))
 }
 
 fn calculate_area(sheet: u32, start: &Address, end: &Address) -> Area {
