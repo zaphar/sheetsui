@@ -135,13 +135,13 @@ impl Book {
     /// Construct a payload of (html, csv_text) for a sheet.
     pub fn sheeet_to_clipboard_content(&self, sheet: u32) -> Result<(String, String), anyhow::Error> {
         let rows = self.get_export_rows_for_sheet(sheet)?;
-        rows_to_clipboard_content(rows)
+        rows_to_clipboard_content(&rows)
     }
 
     /// Construct a payload of (html, csv_text) for the address range.
     pub fn range_to_clipboard_content(&self, range: AddressRange) -> Result<(String, String), anyhow::Error> {
         let rows = self.get_rows_for_range(&range).unwrap_or_default();
-        rows_to_clipboard_content(rows)
+        rows_to_clipboard_content(&rows)
     }
 
     /// Get rows for current sheet to export.
@@ -722,14 +722,14 @@ impl Book {
     }
 }
 
-fn rows_to_clipboard_content(rows: Vec<Vec<String>>) -> std::result::Result<(String, String), anyhow::Error> {
+pub fn rows_to_clipboard_content(rows: &Vec<Vec<String>>) -> std::result::Result<(String, String), anyhow::Error> {
     use htmf::prelude::*;
     let table = table([]);
     let mut writer = csv::Writer::from_writer(vec![]);
     let mut table_rows = vec![];
     for row in rows {
         let table_row = tr([]);
-        writer.write_record(&row)?;
+        writer.write_record(row)?;
         let mut row_cells = vec![];
         for cell in row {
             row_cells.push(td([]).with(text(cell)));

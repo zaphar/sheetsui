@@ -644,6 +644,7 @@ impl<'ws> Workspace<'ws> {
     }
 
     fn copy_range(&mut self, formatted: bool) -> Result<(), anyhow::Error> {
+        use arboard::Clipboard;
         self.update_range_selection()?;
         match &self.state.range_select.get_range() {
             Some((start, end)) => {
@@ -659,6 +660,9 @@ impl<'ws> Workspace<'ws> {
                     }
                     rows.push(cols);
                 }
+                let mut cb = Clipboard::new()?;
+                let (html, csv) = crate::book::rows_to_clipboard_content(&rows)?;
+                cb.set_html(html, Some(csv))?;
                 self.state.clipboard = Some(ClipboardContents::Range(rows));
             }
             None => {
