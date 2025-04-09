@@ -87,6 +87,7 @@ impl<'book> AddressRange<'book> {
         };
         (row_range, col_range)
     }
+
 }
 
 /// A spreadsheet book with some internal state tracking.
@@ -131,9 +132,43 @@ impl Book {
         Ok(())
     }
 
+    /// Construct a payload of (html, csv_text) for the address range.
+    pub fn range_to_clipboard_content(&self, range: AddressRange) -> Result<(String, String), anyhow::Error> {
+        use html::tables;
+        let rows = self.get_rows_for_range(&range).unwrap_or_default();
+        let mut html = tables::Table::builder();
+        let mut writer = csv::Writer::from_writer(vec![]);
+        for row in rows {
+            let mut html_row = tables::TableRow::builder();
+            writer.write_record(&row)?;
+            for cell in row {
+                let mut html_cell = tables::TableCell::builder();
+                html_cell.text(cell);
+                html_row.push(html_cell.build());
+            }
+            html.push(html_row.build());
+        }
+       
+        let csv_content = writer.into_inner().expect("Failed to get the csv content");
+        Ok((html.build().to_string(), String::from_utf8_lossy(&csv_content).to_string()))
+    }
+
     pub fn get_export_rows(&self) -> Result<Vec<Vec<String>>> {
         let sheet = self.location.sheet;
         Ok(self.get_export_rows_for_sheet(sheet)?)
+    }
+
+    fn get_rows_for_range(&self, range: &AddressRange) -> Result<Vec<Vec<String>>, anyhow::Error> {
+        let mut rows = Vec::new();
+        for row in range.as_rows() {
+            let mut row_data = Vec::new();
+            for address in row {
+                let cell_content = self.get_cell_addr_rendered(&address)?;
+                row_data.push(cell_content);
+            }
+            rows.push(row_data);
+        }
+        Ok(rows)
     }
 
     pub fn get_export_rows_for_sheet(&self, sheet: u32) -> Result<Vec<Vec<String>>, anyhow::Error> {
