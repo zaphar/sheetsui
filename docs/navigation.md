@@ -49,3 +49,5 @@ Range selections made from navigation mode will be available to paste into a Cel
 <aside>Note that for `q` this will not currently prompt you if the sheet is not
 saved.</aside>
 
+Note also that copy paste works with the system clipboard.
+

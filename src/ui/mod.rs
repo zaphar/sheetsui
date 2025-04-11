@@ -513,6 +513,12 @@ impl<'ws> Workspace<'ws> {
                     .set_cell_style(&[("fill.bg_color", &color)], &area)?;
                 Ok(None)
             }
+            Ok(Some(Cmd::SystemPaste)) => {
+                let rows = self.get_rows_from_system_cipboard()?;
+                self.state.clipboard = Some(ClipboardContents::Range(rows));
+                self.paste_range()?;
+                Ok(None)
+            }
             Ok(None) => {
                 self.enter_dialog_mode(Markdown::from_str(&format!(
                     "Unrecognized commmand {}",
@@ -607,19 +613,19 @@ impl<'ws> Workspace<'ws> {
                         Ok(())
                     })?;
                 }
-                KeyCode::Char('C') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                     self.copy_range(true)?;
-                    self.exit_range_select_mode()?;
-                }
-                KeyCode::Char('Y') => {
-                    self.copy_range(true)?;
-                    self.exit_range_select_mode()?;
-                }
-                KeyCode::Char('c') if key.modifiers == KeyModifiers::CONTROL => {
-                    self.copy_range(false)?;
                     self.exit_range_select_mode()?;
                 }
                 KeyCode::Char('y') => {
+                    self.copy_range(true)?;
+                    self.exit_range_select_mode()?;
+                }
+                KeyCode::Char('C') if key.modifiers == KeyModifiers::CONTROL => {
+                    self.copy_range(false)?;
+                    self.exit_range_select_mode()?;
+                }
+                KeyCode::Char('Y') => {
                     self.copy_range(false)?;
                     self.exit_range_select_mode()?;
                 }
@@ -662,7 +668,9 @@ impl<'ws> Workspace<'ws> {
                 }
                 // TODO(zaphar): Rethink this a bit perhaps?
                 let mut cb = Clipboard::new()?;
-                let (html, csv) = self.book.range_to_clipboard_content(AddressRange { start, end })?;
+                let (html, csv) = self
+                    .book
+                    .range_to_clipboard_content(AddressRange { start, end })?;
                 cb.set_html(html, Some(csv))?;
                 self.state.clipboard = Some(ClipboardContents::Range(rows));
             }
@@ -675,6 +683,26 @@ impl<'ws> Workspace<'ws> {
             }
         }
         Ok(())
+    }
+
+    fn get_rows_from_system_cipboard(&mut self) -> Result<Vec<Vec<String>>, anyhow::Error> {
+        use arboard::Clipboard;
+        let mut cb = Clipboard::new()?;
+        let txt = match cb.get_text() {
+            Ok(txt) => txt,
+            Err(e) => return Err(anyhow!(e)),
+        };
+        let reader = csv::Reader::from_reader(txt.as_bytes());
+        let mut rows = Vec::new();
+        for rec in reader.into_byte_records() {
+            let record = rec?;
+            let mut row = Vec::with_capacity(record.len());
+            for i in 0..record.len() {
+                row.push(String::from_utf8_lossy(record.get(i).expect("Unexpected failure to get cell row")).to_string());
+            };
+            rows.push(row);
+        }
+        Ok(rows)
     }
 
     fn update_range_selection(&mut self) -> Result<bool, anyhow::Error> {

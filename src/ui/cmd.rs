@@ -16,6 +16,7 @@ pub enum Cmd<'a> {
     Edit(&'a str),
     Help(Option<&'a str>),
     ExportCsv(&'a str),
+    SystemPaste,
     Quit,
 }
 
@@ -66,6 +67,9 @@ pub fn parse<'cmd, 'i: 'cmd>(input: &'i str) -> Result<Option<Cmd<'cmd>>, &'stat
         return Ok(Some(cmd));
     }
     if let Some(cmd) = try_consume_color_cell(cursor.clone())? {
+        return Ok(Some(cmd));
+    }
+    if let Some(cmd) = try_consume_system_paste(cursor.clone())? {
         return Ok(Some(cmd));
     }
     Ok(None)
@@ -314,6 +318,22 @@ fn try_consume_quit<'cmd, 'i: 'cmd>(
         return Err("Invalid command: Quit does not take an argument");
     }
     return Ok(Some(Cmd::Quit));
+}
+
+fn try_consume_system_paste<'cmd, 'i: 'cmd>(
+    mut input: StrCursor<'i>,
+) -> Result<Option<Cmd<'cmd>>, &'static str> {
+    const LONG: &'static str = "system-paste";
+
+    if compare(input.clone(), LONG) {
+        input.seek(LONG.len());
+    } else {
+        return Ok(None);
+    }
+    if input.remaining() > 0 {
+        return Err("Invalid command: system-paste does not take an argument");
+    }
+    return Ok(Some(Cmd::SystemPaste));
 }
 
 fn try_consume_rename_sheet<'cmd, 'i: 'cmd>(
