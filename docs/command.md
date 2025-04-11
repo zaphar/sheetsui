@@ -18,6 +18,7 @@ The currently supported commands are:
 * `help [topic]` Display help for a given topic.
 * `export-csv <path>` Export the current sheet to a csv file at `<path>`.
 * `quit` Quits the application. `q` is a shorthand alias for this command.
+* `system-paste` Paste from the system clipboard
 
 <aside>Note that in the case of `quit` and `edit` that we do not currently
 prompt you if the current spreadsheet has not been saved yet. So your changes
