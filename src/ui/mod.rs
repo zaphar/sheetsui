@@ -5,6 +5,7 @@ use crate::book::{self, AddressRange, Book};
 
 use anyhow::{anyhow, Result};
 use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
+use csv::StringRecord;
 use ironcalc::base::{expressions::types::Area, Model};
 use ratatui::{
     buffer::Buffer,
@@ -700,8 +701,13 @@ impl<'ws> Workspace<'ws> {
             let record = rec?;
             let mut row = Vec::with_capacity(record.len());
             for i in 0..record.len() {
-                row.push(String::from_utf8_lossy(record.get(i).expect("Unexpected failure to get cell row")).to_string());
-            };
+                row.push(
+                    String::from_utf8_lossy(
+                        record.get(i).expect("Unexpected failure to get cell row"),
+                    )
+                    .to_string(),
+                );
+            }
             rows.push(row);
         }
         Ok(rows)
@@ -986,7 +992,34 @@ impl<'ws> Workspace<'ws> {
                 self.book.evaluate();
             }
             None => {
-                // NOOP
+                // Try to get from system clipboard
+                use arboard::Clipboard;
+                let mut cb = Clipboard::new()?;
+                let csv = cb.get_text()?;
+                let rdr = csv::Reader::from_reader(csv.as_bytes());
+                let records: Vec<Result<csv::StringRecord, csv::Error>> =
+                    rdr.into_records().collect();
+                let Address { sheet, row, col } = self.book.location.clone();
+                let row_len = records.len();
+                for ri in 0..row_len {
+                    let columns = &records[ri];
+                    if let Ok(columns) = columns {
+                        let col_len = columns.len();
+                        for ci in 0..col_len {
+                            self.book.update_cell(
+                                &Address {
+                                    sheet,
+                                    row: ri + row,
+                                    col: ci + col,
+                                },
+                                columns
+                                    .get(ci)
+                                    .expect("Failed to get column value from csv")
+                                    .to_string(),
+                            )?;
+                        }
+                    }
+                }
             }
         }
         self.state.clipboard = None;
