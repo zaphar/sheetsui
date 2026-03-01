@@ -13,7 +13,7 @@ use ratatui::{
     widgets::Block,
 };
 use tui_prompts::{State, Status, TextPrompt, TextState};
-use tui_textarea::{CursorMove, TextArea};
+use ratatui_textarea::{CursorMove, TextArea};
 
 mod cmd;
 mod help;

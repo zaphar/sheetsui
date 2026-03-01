@@ -1,7 +1,7 @@
 use ratatui::{
     self,
     layout::{Constraint, Layout, Rect},
-    style::{Style, Stylize},
+    style::Style,
     text::Text,
     widgets::{Block, Clear, Paragraph, Widget, Wrap},
 };
