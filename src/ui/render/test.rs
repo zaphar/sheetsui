@@ -9,7 +9,7 @@ use super::{Address, Book, Viewport, ViewportState};
 fn test_viewport_get_visible_columns() {
     let mut state = ViewportState::default();
     let book = Book::from_model(
-        Model::new_empty("test", "en", "America/New_York").expect("Failed to make model"),
+        Model::new_empty("test", "en", "America/New_York", "en").expect("Failed to make model"),
     );
     let default_size = book.get_col_size(1).expect("Failed to get column size");
     let width = default_size * 12 / 2;
@@ -30,7 +30,7 @@ fn test_viewport_get_visible_columns() {
 fn test_viewport_get_visible_rows() {
     let mut state = ViewportState::default();
     let book = Book::from_model(
-        Model::new_empty("test", "en", "America/New_York").expect("Failed to make model"),
+        Model::new_empty("test", "en", "America/New_York", "en").expect("Failed to make model"),
     );
     let height = 6;
     let app_state = AppState::default();
@@ -52,7 +52,7 @@ fn test_viewport_get_visible_rows() {
 fn test_viewport_visible_columns_after_length_change() {
     let mut state = ViewportState::default();
     let mut book = Book::from_model(
-        Model::new_empty("test", "en", "America/New_York").expect("Failed to make model"),
+        Model::new_empty("test", "en", "America/New_York", "en").expect("Failed to make model"),
     );
     let default_size = book.get_col_size(1).expect("Failed to get column size");
     let width = default_size * 12 / 2;

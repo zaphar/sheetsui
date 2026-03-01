@@ -130,6 +130,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "approx"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cab112f0a86d568ea0e627cc1d6be74a1e9cd55214684db5561995f6dad897c6"
+dependencies = [
+ "num-traits",
+]
+
+[[package]]
 name = "arboard"
 version = "3.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -200,9 +209,9 @@ dependencies = [
 
 [[package]]
 name = "bitcode"
-version = "0.6.3"
+version = "0.6.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ee1bce7608560cd4bf0296a4262d0dbf13e6bcec5ff2105724c8ab88cc7fc784"
+checksum = "0a6ed1b54d8dc333e7be604d00fa9262f4635485ffea923647b6521a5fff045d"
 dependencies = [
  "arrayvec",
  "bitcode_derive",
@@ -213,9 +222,9 @@ dependencies = [
 
 [[package]]
 name = "bitcode_derive"
-version = "0.6.3"
+version = "0.6.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a539389a13af092cd345a2b47ae7dec12deb306d660b2223d25cd3419b253ebe"
+checksum = "238b90427dfad9da4a9abd60f3ec1cdee6b80454bde49ed37f1781dd8e9dc7f9"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -922,8 +931,9 @@ dependencies = [
 
 [[package]]
 name = "ironcalc"
-version = "0.5.0"
-source = "git+https://github.com/ironcalc/IronCalc#efc925a0460fa5ea915376f386f948e988f2be2f"
+version = "0.7.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8e07dd44af17a9e14e7df372347ee0bfc3f0bbbf38894aba5e9abfb53f32ba95"
 dependencies = [
  "bitcode",
  "chrono",
@@ -938,19 +948,20 @@ dependencies = [
 
 [[package]]
 name = "ironcalc_base"
-version = "0.5.0"
-source = "git+https://github.com/ironcalc/IronCalc#efc925a0460fa5ea915376f386f948e988f2be2f"
+version = "0.7.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9f208abea2365061ed7ce3f6a70e7c1537181ea11780de4974aae3082bf4c6d9"
 dependencies = [
  "bitcode",
  "chrono",
  "chrono-tz",
  "csv",
  "js-sys",
- "once_cell",
  "rand",
  "regex",
  "ryu",
  "serde",
+ "statrs",
 ]
 
 [[package]]
@@ -1862,6 +1873,16 @@ name = "static_assertions"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
+
+[[package]]
+name = "statrs"
+version = "0.18.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2a3fe7c28c6512e766b0874335db33c94ad7b8f9054228ae1c2abd47ce7d335e"
+dependencies = [
+ "approx",
+ "num-traits",
+]
 
 [[package]]
 name = "strsim"

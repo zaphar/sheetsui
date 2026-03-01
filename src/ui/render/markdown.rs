@@ -313,7 +313,7 @@ impl Markdown {
         self.links.iter().nth(num).cloned()
     }
 
-    pub fn get_text(&self) -> Text {
+    pub fn get_text(&self) -> Text<'_> {
         if let Some(ref parsed) = self.parsed_text {
             parsed.clone()
         } else {

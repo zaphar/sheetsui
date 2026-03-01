@@ -190,8 +190,10 @@ impl<'ws> Workspace<'ws> {
     }
 
     pub fn new_empty(locale: &str, tz: &str) -> Result<Self> {
+        let locale: &'static str = Box::leak(locale.to_string().into_boxed_str());
+        let tz: &'static str = Box::leak(tz.to_string().into_boxed_str());
         Ok(Self::new(
-            Book::from_model(Model::new_empty("", locale, tz).map_err(|e| anyhow!("{}", e))?),
+            Book::from_model(Model::new_empty("", locale, tz, "en").map_err(|e| anyhow!("{}", e))?),
             PathBuf::from_str("Untitled.xlsx").unwrap(),
         ))
     }
