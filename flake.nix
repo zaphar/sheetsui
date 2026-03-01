@@ -14,7 +14,7 @@
       rust-overlay.overlays.default
     ];
     pkgs = import nixpkgs { inherit system overlays; };
-    my-rust-bin = pkgs.rust-bin.stable.latest.default;
+    my-rust-bin = pkgs.rust-bin.stable."1.92.0".default;
     naersk-lib = pkgs.callPackage naersk {
       rustc = my-rust-bin;
       cargo = my-rust-bin;
