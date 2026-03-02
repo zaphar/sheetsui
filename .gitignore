@@ -3,3 +3,5 @@
 *.json
 tarpaulin-report.*
 *.profraw
+.claude
+CLAUDE.md

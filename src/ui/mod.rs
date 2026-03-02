@@ -5,7 +5,6 @@ use crate::book::{self, AddressRange, Book};
 
 use anyhow::{anyhow, Result};
 use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
-use csv::StringRecord;
 use ironcalc::base::{expressions::types::Area, Model};
 use ratatui::{
     buffer::Buffer,
@@ -175,6 +174,27 @@ pub struct Workspace<'ws> {
     book: Book,
     pub(crate) state: AppState<'ws>,
     text_area: TextArea<'ws>,
+}
+
+fn parse_csv_rows(text: &str) -> Result<Vec<Vec<String>>, anyhow::Error> {
+    let reader = csv::ReaderBuilder::new()
+        .has_headers(false)
+        .from_reader(text.as_bytes());
+    let mut rows = Vec::new();
+    for rec in reader.into_byte_records() {
+        let record = rec?;
+        let mut row = Vec::with_capacity(record.len());
+        for i in 0..record.len() {
+            row.push(
+                String::from_utf8_lossy(
+                    record.get(i).expect("Unexpected failure to get cell row"),
+                )
+                .to_string(),
+            );
+        }
+        rows.push(row);
+    }
+    Ok(rows)
 }
 
 impl<'ws> Workspace<'ws> {
@@ -517,7 +537,7 @@ impl<'ws> Workspace<'ws> {
                 Ok(None)
             }
             Ok(Some(Cmd::SystemPaste)) => {
-                let rows = self.get_rows_from_system_cipboard()?;
+                let rows = self.get_rows_from_system_clipboard()?;
                 self.state.clipboard = Some(ClipboardContents::Range(rows));
                 self.paste_range()?;
                 Ok(None)
@@ -669,7 +689,6 @@ impl<'ws> Workspace<'ws> {
                     }
                     rows.push(cols);
                 }
-                // TODO(zaphar): Rethink this a bit perhaps?
                 let mut cb = Clipboard::new()?;
                 let (html, csv) = self
                     .book
@@ -678,39 +697,30 @@ impl<'ws> Workspace<'ws> {
                 self.state.clipboard = Some(ClipboardContents::Range(rows));
             }
             None => {
-                self.state.clipboard = Some(ClipboardContents::Cell(if formatted {
-                    self.book.get_current_cell_rendered()?
-                } else {
-                    self.book.get_current_cell_contents()?
-                }));
+                self.copy_cell_to_clipboard(formatted)?;
             }
         }
         Ok(())
     }
 
-    fn get_rows_from_system_cipboard(&mut self) -> Result<Vec<Vec<String>>, anyhow::Error> {
+    fn get_rows_from_system_clipboard(&mut self) -> Result<Vec<Vec<String>>, anyhow::Error> {
         use arboard::Clipboard;
         let mut cb = Clipboard::new()?;
-        let txt = match cb.get_text() {
-            Ok(txt) => txt,
-            Err(e) => return Err(anyhow!(e)),
+        let txt = cb.get_text().map_err(|e| anyhow!(e))?;
+        parse_csv_rows(&txt)
+    }
+
+    fn copy_cell_to_clipboard(&mut self, formatted: bool) -> Result<(), anyhow::Error> {
+        use arboard::Clipboard;
+        let contents = if formatted {
+            self.book.get_current_cell_rendered()?
+        } else {
+            self.book.get_current_cell_contents()?
         };
-        let reader = csv::Reader::from_reader(txt.as_bytes());
-        let mut rows = Vec::new();
-        for rec in reader.into_byte_records() {
-            let record = rec?;
-            let mut row = Vec::with_capacity(record.len());
-            for i in 0..record.len() {
-                row.push(
-                    String::from_utf8_lossy(
-                        record.get(i).expect("Unexpected failure to get cell row"),
-                    )
-                    .to_string(),
-                );
-            }
-            rows.push(row);
-        }
-        Ok(rows)
+        let mut cb = Clipboard::new()?;
+        cb.set_text(&contents)?;
+        self.state.clipboard = Some(ClipboardContents::Cell(contents));
+        Ok(())
     }
 
     fn update_range_selection(&mut self) -> Result<bool, anyhow::Error> {
@@ -768,24 +778,16 @@ impl<'ws> Workspace<'ws> {
                     self.enter_range_select_mode(false);
                 }
                 KeyCode::Char('c') if key.modifiers == KeyModifiers::CONTROL => {
-                    self.state.clipboard = Some(ClipboardContents::Cell(
-                        self.book.get_current_cell_contents()?,
-                    ));
+                    self.copy_cell_to_clipboard(false)?;
                 }
                 KeyCode::Char('y') => {
-                    self.state.clipboard = Some(ClipboardContents::Cell(
-                        self.book.get_current_cell_contents()?,
-                    ));
+                    self.copy_cell_to_clipboard(false)?;
                 }
                 KeyCode::Char('Y') => {
-                    self.state.clipboard = Some(ClipboardContents::Cell(
-                        self.book.get_current_cell_rendered()?,
-                    ));
+                    self.copy_cell_to_clipboard(true)?;
                 }
                 KeyCode::Char('C') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                    self.state.clipboard = Some(ClipboardContents::Cell(
-                        self.book.get_current_cell_rendered()?,
-                    ));
+                    self.copy_cell_to_clipboard(true)?;
                 }
                 KeyCode::Char('v') if key.modifiers != KeyModifiers::CONTROL => {
                     self.enter_range_select_mode(true)
@@ -992,34 +994,22 @@ impl<'ws> Workspace<'ws> {
                 self.book.evaluate();
             }
             None => {
-                // Try to get from system clipboard
-                use arboard::Clipboard;
-                let mut cb = Clipboard::new()?;
-                let csv = cb.get_text()?;
-                let rdr = csv::Reader::from_reader(csv.as_bytes());
-                let records: Vec<Result<csv::StringRecord, csv::Error>> =
-                    rdr.into_records().collect();
+                let rows = self.get_rows_from_system_clipboard()?;
                 let Address { sheet, row, col } = self.book.location.clone();
-                let row_len = records.len();
-                for ri in 0..row_len {
-                    let columns = &records[ri];
-                    if let Ok(columns) = columns {
-                        let col_len = columns.len();
-                        for ci in 0..col_len {
-                            self.book.update_cell(
-                                &Address {
-                                    sheet,
-                                    row: ri + row,
-                                    col: ci + col,
-                                },
-                                columns
-                                    .get(ci)
-                                    .expect("Failed to get column value from csv")
-                                    .to_string(),
-                            )?;
-                        }
+                for ri in 0..rows.len() {
+                    let columns = &rows[ri];
+                    for ci in 0..columns.len() {
+                        self.book.update_cell(
+                            &Address {
+                                sheet,
+                                row: ri + row,
+                                col: ci + col,
+                            },
+                            columns[ci].clone(),
+                        )?;
                     }
                 }
+                self.book.evaluate();
             }
         }
         self.state.clipboard = None;
