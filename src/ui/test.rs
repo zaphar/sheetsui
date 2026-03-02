@@ -1645,3 +1645,175 @@ fn test_paste_from_internal_range_clipboard() {
 fn new_workspace<'a>() -> Workspace<'a> {
     Workspace::new_empty("en", "America/New_York").expect("Failed to get empty workbook")
 }
+
+// ---------------------------------------------------------------------------
+// Phase 3: UI/Command Integration (REQ-005..REQ-009)
+// ---------------------------------------------------------------------------
+
+fn ui_tmp_path(name: &str) -> std::path::PathBuf {
+    std::env::temp_dir().join(format!("sheetui_ui_p3_{name}"))
+}
+
+#[test]
+fn test_new_workspace_default_format_is_sui() {
+    // REQ-008: new empty workspace defaults to SUI format.
+    let ws = new_workspace();
+    assert_eq!(
+        ws.book.get_format(),
+        &book::FileFormat::Sui,
+        "new workspace book must default to FileFormat::Sui"
+    );
+}
+
+#[test]
+fn test_new_workspace_name_ends_with_sui() {
+    // REQ-008: new empty workspace name should default to .sui extension.
+    let ws = new_workspace();
+    assert!(
+        ws.name.to_string_lossy().ends_with(".sui"),
+        "new workspace path must end with .sui, got: {}",
+        ws.name.display()
+    );
+}
+
+#[test]
+fn test_write_cmd_saves_as_sui_and_updates_format() {
+    // REQ-007: :w path.sui saves as SUI and updates the stored format.
+    let path = ui_tmp_path("write_sui.sui");
+    let mut ws = new_workspace();
+    ws.book
+        .update_cell(&Address { sheet: 0, row: 1, col: 1 }, "write-sui-test")
+        .expect("set cell");
+    ws.book.evaluate();
+    script()
+        .char(':')
+        .chars(&format!("w {}", path.display()))
+        .enter()
+        .run(&mut ws)
+        .expect("write command failed");
+    assert_eq!(
+        ws.book.get_format(),
+        &book::FileFormat::Sui,
+        "book format must be Sui after :w .sui"
+    );
+    let text = std::fs::read_to_string(&path).expect("read saved file");
+    assert!(
+        text.contains("[sheet"),
+        "saved .sui file must contain a sheet block, got: {text}"
+    );
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
+fn test_write_cmd_saves_as_xlsx_and_updates_format() {
+    // REQ-007: :w path.xlsx saves as xlsx and updates the stored format.
+    let path = ui_tmp_path("write_xlsx.xlsx");
+    let mut ws = new_workspace();
+    ws.book
+        .update_cell(&Address { sheet: 0, row: 1, col: 1 }, "xlsx-write-test")
+        .expect("set cell");
+    ws.book.evaluate();
+    script()
+        .char(':')
+        .chars(&format!("w {}", path.display()))
+        .enter()
+        .run(&mut ws)
+        .expect("write command failed");
+    assert_eq!(
+        ws.book.get_format(),
+        &book::FileFormat::Xlsx,
+        "book format must be Xlsx after :w .xlsx"
+    );
+    let bytes = std::fs::read(&path).expect("read saved xlsx");
+    assert!(
+        bytes.starts_with(b"PK"),
+        "saved .xlsx must be a valid zip/xlsx (starts with PK magic bytes)"
+    );
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
+fn test_edit_cmd_loads_sui_file() {
+    // REQ-005: :e path.sui loads SUI content using the SUI parser.
+    let path = ui_tmp_path("edit_sui.sui");
+    let content = "[sheet \"Sheet1\"]\nA1 = \"loaded-via-edit\"\n[/sheet]\n";
+    std::fs::write(&path, content).expect("write temp .sui");
+    let mut ws = new_workspace();
+    script()
+        .char(':')
+        .chars(&format!("e {}", path.display()))
+        .enter()
+        .run(&mut ws)
+        .expect("edit command failed");
+    assert_eq!(
+        ws.book.get_format(),
+        &book::FileFormat::Sui,
+        "book format must be Sui after :e .sui"
+    );
+    let val = ws
+        .book
+        .get_cell_addr_contents(&Address { sheet: 0, row: 1, col: 1 })
+        .expect("get A1 after :e");
+    assert_eq!(val, "loaded-via-edit", "cell A1 must be loaded from .sui file");
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
+fn test_write_then_edit_round_trip_sui() {
+    // REQ-006 + REQ-010: :w saves, :e reloads, cell values survive.
+    let path = ui_tmp_path("round_trip.sui");
+    let mut ws = new_workspace();
+    ws.book
+        .update_cell(&Address { sheet: 0, row: 1, col: 1 }, "round-trip-val")
+        .expect("set cell");
+    ws.book.evaluate();
+    script()
+        .char(':')
+        .chars(&format!("w {}", path.display()))
+        .enter()
+        .run(&mut ws)
+        .expect(":w command");
+    ws.book
+        .update_cell(&Address { sheet: 0, row: 1, col: 1 }, "")
+        .expect("clear cell locally");
+    script()
+        .char(':')
+        .chars(&format!("e {}", path.display()))
+        .enter()
+        .run(&mut ws)
+        .expect(":e command");
+    let val = ws
+        .book
+        .get_cell_addr_contents(&Address { sheet: 0, row: 1, col: 1 })
+        .expect("get A1 after :e");
+    assert_eq!(val, "round-trip-val", "cell must survive :w/:e round-trip");
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
+fn test_parse_warnings_stored_after_loading_malformed_sui() {
+    // REQ-009: loading a malformed .sui file stores warnings on the Book.
+    let path = ui_tmp_path("malformed.sui");
+    let content = "[sheet \"Sheet1\"]\nTHIS IS NOT VALID\nA1 = \"valid-cell\"\n[/sheet]\n";
+    std::fs::write(&path, content).expect("write malformed .sui");
+    let mut ws = new_workspace();
+    script()
+        .char(':')
+        .chars(&format!("e {}", path.display()))
+        .enter()
+        .run(&mut ws)
+        .expect("edit command");
+    assert!(
+        !ws.book.parse_warnings.is_empty(),
+        "loading a malformed .sui file must store parse warnings on Book"
+    );
+    let val = ws
+        .book
+        .get_cell_addr_contents(&Address { sheet: 0, row: 1, col: 1 })
+        .expect("get A1");
+    assert_eq!(
+        val, "valid-cell",
+        "valid cell must be loaded despite malformed lines"
+    );
+    std::fs::remove_file(&path).ok();
+}

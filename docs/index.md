@@ -24,10 +24,22 @@ If you do not provide a workbook path, sheetui will open an empty workbook.
 
 ## Supported formats
 
-Currently we only support the [ironcalc](https://docs.ironcalc.com/) xlsx
-features for spreadsheet. I plan to handle csv import and export at some point.
-I also might support other export formats as well but for the moment just csv
-and it's variants such as tsv are in the roadmap.
+sheetui supports two spreadsheet file formats:
+
+* **`.sui`** — sheetui's native plain-text format. Human-readable, diff-friendly,
+  and the default for new workbooks. See [File Formats](./file-formats.md) for
+  the complete format reference.
+* **`.xlsx`** — Excel-compatible format, backed by the
+  [ironcalc](https://docs.ironcalc.com/) library. Use this when sharing files
+  with other spreadsheet applications.
+
+When you open or save a file, sheetui detects the format from the file
+extension. If you start sheetui without a workbook path, an empty workbook is
+created and will be saved as `Untitled.sui` in the current directory when you
+first write it.
+
+CSV export is available via the `export-csv` command (see
+[Command Mode](./command.md)).
 
 ## User Interface
 

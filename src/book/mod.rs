@@ -1,4 +1,8 @@
+pub mod sui;
+pub use sui::ParseWarning;
+
 use std::cmp::max;
+use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, Result};
 use ironcalc::{
@@ -11,6 +15,15 @@ use ironcalc::{
     export::save_xlsx_to_writer,
     import::load_from_xlsx,
 };
+
+/// The file format a [`Book`] was loaded from or will be saved to.
+#[derive(Debug, Clone, PartialEq)]
+pub enum FileFormat {
+    /// Native `.sui` declarative text format.
+    Sui,
+    /// Microsoft Excel `.xlsx` format.
+    Xlsx,
+}
 
 use crate::ui::Address;
 
@@ -95,15 +108,25 @@ pub struct Book {
     pub(crate) model: UserModel<'static>,
     pub location: crate::ui::Address,
     pub dirty: bool,
+    /// Format this book was loaded from / will be saved to.
+    pub format: FileFormat,
+    /// Path this book was last loaded from or saved to.
+    pub file_path: Option<PathBuf>,
+    /// Parse warnings produced when loading a `.sui` file with invalid lines.
+    /// Empty for xlsx files and for freshly created books.
+    pub parse_warnings: Vec<ParseWarning>,
 }
 
 impl Book {
-    /// Construct a new book from a Model
+    /// Construct a new book from a Model. Defaults to [`FileFormat::Sui`] with no file path.
     pub fn new(model: UserModel<'static>) -> Self {
         Self {
             model,
             location: Address::default(),
             dirty: false,
+            format: FileFormat::Sui,
+            file_path: None,
+            parse_warnings: Vec::new(),
         }
     }
 
@@ -114,12 +137,105 @@ impl Book {
 
     /// Construct a new book from an xlsx file.
     pub fn new_from_xlsx(path: &str) -> Result<Self> {
-        Ok(Self::from_model(load_from_xlsx(
+        let mut book = Self::from_model(load_from_xlsx(
             path,
             "en",
             "America/New_York",
             "en",
-        )?))
+        )?);
+        book.format = FileFormat::Xlsx;
+        book.file_path = Some(PathBuf::from(path));
+        Ok(book)
+    }
+
+    /// Return the format this book is currently associated with.
+    pub fn get_format(&self) -> &FileFormat {
+        &self.format
+    }
+
+    /// Return the path this book was last loaded from or saved to, if any.
+    pub fn get_file_path(&self) -> Option<&std::path::Path> {
+        self.file_path.as_deref()
+    }
+
+    /// Detect the [`FileFormat`] for a file path based on its extension (case-insensitive).
+    fn format_for_path(path: &Path) -> FileFormat {
+        match path
+            .extension()
+            .and_then(|e| e.to_str())
+            .map(|e| e.to_ascii_lowercase())
+            .as_deref()
+        {
+            Some("xlsx") => FileFormat::Xlsx,
+            _ => FileFormat::Sui,
+        }
+    }
+
+    /// Load a book from `path`, auto-detecting the format by file extension.
+    ///
+    /// Extension mapping (case-insensitive):
+    /// - `.sui` → [`FileFormat::Sui`]
+    /// - `.xlsx` → [`FileFormat::Xlsx`]
+    pub fn load(path: &Path, locale: &str, tz: &str) -> Result<Self> {
+        let format = Self::format_for_path(path);
+        let mut book = match format {
+            FileFormat::Xlsx => {
+                let locale: &'static str = Box::leak(locale.to_string().into_boxed_str());
+                let tz: &'static str = Box::leak(tz.to_string().into_boxed_str());
+                Self::from_model(load_from_xlsx(
+                    &path.to_string_lossy(),
+                    locale,
+                    tz,
+                    "en",
+                )?)
+            }
+            FileFormat::Sui => {
+                let text = std::fs::read_to_string(path)
+                    .map_err(|e| anyhow!("Failed to read .sui file: {}", e))?;
+                let (mut parsed, warnings) = sui::parse_sui(&text);
+                parsed.parse_warnings = warnings;
+                parsed
+            }
+        };
+        book.format = format;
+        book.file_path = Some(path.to_path_buf());
+        Ok(book)
+    }
+
+    /// Save the book to its current [`file_path`] in its current [`format`].
+    ///
+    /// Returns `Err` if [`file_path`] is `None`.
+    pub fn save(&mut self) -> Result<()> {
+        let path = self
+            .file_path
+            .clone()
+            .ok_or_else(|| anyhow!("No file path set; use save_as to specify a path"))?;
+        match &self.format {
+            FileFormat::Sui => {
+                let text = sui::serialize_sui(self);
+                std::fs::write(&path, text)
+                    .map_err(|e| anyhow!("Failed to write .sui file: {}", e))?;
+            }
+            FileFormat::Xlsx => {
+                let file = std::fs::File::create(&path)
+                    .map_err(|e| anyhow!("Failed to create xlsx file: {}", e))?;
+                let writer = std::io::BufWriter::new(file);
+                save_xlsx_to_writer(self.model.get_model(), writer)?;
+            }
+        }
+        self.dirty = false;
+        Ok(())
+    }
+
+    /// Save the book to `path`, detecting the format from `path`'s extension.
+    ///
+    /// Updates [`file_path`] and [`format`] after a successful write.
+    pub fn save_as<P: AsRef<Path>>(&mut self, path: P) -> Result<()> {
+        let path = path.as_ref();
+        let new_format = Self::format_for_path(path);
+        self.file_path = Some(path.to_path_buf());
+        self.format = new_format;
+        self.save()
     }
 
     pub fn csv_for_sheet<W>(&self, sheet: u32, sink: W) -> Result<()>
@@ -210,7 +326,10 @@ impl Book {
     pub fn new_from_xlsx_with_locale(path: &str, locale: &str, tz: &str) -> Result<Self> {
         let locale: &'static str = Box::leak(locale.to_string().into_boxed_str());
         let tz: &'static str = Box::leak(tz.to_string().into_boxed_str());
-        Ok(Self::from_model(load_from_xlsx(path, locale, tz, "en")?))
+        let mut book = Self::from_model(load_from_xlsx(path, locale, tz, "en")?);
+        book.format = FileFormat::Xlsx;
+        book.file_path = Some(PathBuf::from(path));
+        Ok(book)
     }
 
     /// Save a sheet in the book to a csv file

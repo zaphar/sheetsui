@@ -3,9 +3,9 @@ use std::{path::PathBuf, process::ExitCode, str::FromStr};
 
 use crate::book::{self, AddressRange, Book};
 
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
-use ironcalc::base::{expressions::types::Area, Model};
+use ironcalc::base::expressions::types::Area;
 use ratatui::{
     buffer::Buffer,
     layout::{Constraint, Flex, Layout},
@@ -23,6 +23,9 @@ mod test;
 
 use cmd::Cmd;
 use render::{markdown::Markdown, viewport::ViewportState};
+
+/// Default file name used when creating a new empty workbook.
+const DEFAULT_WORKBOOK_NAME: &str = "Untitled.sui";
 
 #[derive(Default, Debug, PartialEq, Clone)]
 pub enum Modality {
@@ -210,13 +213,10 @@ impl<'ws> Workspace<'ws> {
         ws
     }
 
-    pub fn new_empty(locale: &str, tz: &str) -> Result<Self> {
-        let locale: &'static str = Box::leak(locale.to_string().into_boxed_str());
-        let tz: &'static str = Box::leak(tz.to_string().into_boxed_str());
-        Ok(Self::new(
-            Book::from_model(Model::new_empty("", locale, tz, "en").map_err(|e| anyhow!("{}", e))?),
-            PathBuf::from_str("Untitled.xlsx").unwrap(),
-        ))
+    pub fn new_empty(_locale: &str, _tz: &str) -> Result<Self> {
+        let mut book = Book::default();
+        book.dirty = false;
+        Ok(Self::new(book, PathBuf::from_str(DEFAULT_WORKBOOK_NAME).unwrap()))
     }
 
     /// Loads a workspace from a path.
@@ -1127,13 +1127,20 @@ impl<'ws> Workspace<'ws> {
     }
 
     fn save_file(&mut self) -> Result<()> {
-        self.book
-            .save_to_xlsx(&self.name.to_string_lossy().to_string())?;
+        // If a file_path was previously set (i.e. the book was loaded from or
+        // saved-as a concrete path), use save() to update it in place.
+        // Otherwise fall back to save_as(&self.name) which also sets file_path
+        // so that subsequent `:w` calls use save() directly.
+        if self.book.get_file_path().is_some() {
+            self.book.save()?;
+        } else {
+            self.book.save_as(&self.name)?;
+        }
         Ok(())
     }
 
     fn save_to<S: Into<String>>(&mut self, path: S) -> Result<()> {
-        self.book.save_to_xlsx(path.into().as_str())?;
+        self.book.save_as(path.into().as_str())?;
         Ok(())
     }
 
@@ -1147,7 +1154,7 @@ impl<'ws> Workspace<'ws> {
 
 fn load_book(path: &PathBuf, locale: &str, tz: &str) -> Result<Book, anyhow::Error> {
     let book = if path.exists() {
-        Book::new_from_xlsx_with_locale(&path.to_string_lossy().to_string(), locale, tz)?
+        Book::load(path, locale, tz)?
     } else {
         Book::default()
     };
