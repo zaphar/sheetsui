@@ -1,13 +1,14 @@
 use std::process::ExitCode;
 
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
+use serial_test::serial;
 
 use crate::book;
 use crate::ui::cmd::parse_color;
-use crate::ui::{Address, Modality};
+use crate::ui::{Address, ClipboardContents, Modality};
 
 use super::cmd::{parse, Cmd};
-use super::Workspace;
+use super::{parse_csv_rows, Workspace};
 
 #[derive(Default)]
 pub struct InputScript {
@@ -549,6 +550,7 @@ fn test_navigation_tab_next_numeric_prefix() {
 }
 
 #[test]
+#[serial]
 fn test_range_copy() {
     let mut ws = new_workspace();
     assert_eq!(Some(&Modality::Navigate), ws.state.modality_stack.last());
@@ -805,6 +807,7 @@ macro_rules! assert_copy_paste {
 }
 
 #[test]
+#[serial]
 fn test_y_p_copy_paste() {
     assert_copy_paste!(
         construct_key_event(KeyCode::Char('y')),
@@ -814,6 +817,7 @@ fn test_y_p_copy_paste() {
 }
 
 #[test]
+#[serial]
 fn test_traditional_copy_paste() {
     assert_copy_paste!(
         construct_modified_key_event(KeyCode::Char('c'), KeyModifiers::CONTROL),
@@ -823,6 +827,7 @@ fn test_traditional_copy_paste() {
 }
 
 #[test]
+#[serial]
 fn test_y_p_copy_paste_rendered() {
     assert_copy_paste!(
         construct_key_event(KeyCode::Char('Y')),
@@ -833,6 +838,7 @@ fn test_y_p_copy_paste_rendered() {
 }
 
 #[test]
+#[serial]
 fn test_traditional_copy_paste_rendered() {
     assert_copy_paste!(
         construct_modified_key_event(KeyCode::Char('C'), KeyModifiers::CONTROL),
@@ -1254,21 +1260,25 @@ macro_rules! assert_range_copy {
 }
 
 #[test]
+#[serial]
 fn test_range_select_copy_c() {
     assert_range_copy!(script().ctrl('c'));
 }
 
 #[test]
+#[serial]
 fn test_range_select_copy_y() {
     assert_range_copy!(script().char('y'));
 }
 
 #[test]
+#[serial]
 fn test_range_select_copy_capital_y() {
     assert_range_copy!(script().char('Y'));
 }
 
 #[test]
+#[serial]
 fn test_range_select_copy_capital_c() {
     assert_range_copy!(script().ctrl('C'));
 }
@@ -1506,6 +1516,130 @@ fn test_quit_dialog() {
     //    .run(&mut ws)
     //    .expect("Failed to run input script");
     //assert!(!ws.book.dirty);
+}
+
+// parse_csv_rows unit tests
+
+#[test]
+fn test_parse_csv_rows_preserves_first_row() {
+    let csv_text = "A1,B1\nA2,B2\n";
+    let rows = parse_csv_rows(csv_text).expect("Failed to parse csv");
+    assert_eq!(rows.len(), 2);
+    assert_eq!(rows[0], vec!["A1", "B1"]);
+    assert_eq!(rows[1], vec!["A2", "B2"]);
+}
+
+#[test]
+fn test_parse_csv_rows_single_cell() {
+    let csv_text = "hello\n";
+    let rows = parse_csv_rows(csv_text).expect("Failed to parse csv");
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0], vec!["hello"]);
+}
+
+#[test]
+fn test_parse_csv_rows_empty() {
+    let csv_text = "";
+    let rows = parse_csv_rows(csv_text).expect("Failed to parse csv");
+    assert_eq!(rows.len(), 0);
+}
+
+// System clipboard integration tests
+
+#[test]
+#[serial]
+fn test_single_cell_copy_writes_system_clipboard() {
+    use arboard::Clipboard;
+    let mut ws = new_workspace();
+    ws.book.edit_current_cell("hello world").unwrap();
+    ws.book.evaluate();
+    script().char('y').run(&mut ws).expect("Failed to run");
+    let mut cb = Clipboard::new().expect("Failed to open clipboard");
+    assert_eq!(cb.get_text().unwrap(), "hello world");
+}
+
+#[test]
+#[serial]
+fn test_single_cell_copy_rendered_writes_system_clipboard() {
+    use arboard::Clipboard;
+    let mut ws = new_workspace();
+    ws.book.edit_current_cell("=1+2").unwrap();
+    ws.book.evaluate();
+    script().char('Y').run(&mut ws).expect("Failed to run");
+    let mut cb = Clipboard::new().expect("Failed to open clipboard");
+    assert_eq!(cb.get_text().unwrap(), "3");
+}
+
+#[test]
+#[serial]
+fn test_range_copy_writes_system_clipboard_csv() {
+    use arboard::Clipboard;
+    let mut ws = new_workspace();
+    ws.book.edit_current_cell("hello").unwrap();
+    script().char('l').run(&mut ws).unwrap();
+    ws.book.edit_current_cell("world").unwrap();
+    ws.book.evaluate();
+    script()
+        .char('h')
+        .ctrl('r')
+        .char(' ')
+        .char('l')
+        .char('y')
+        .run(&mut ws)
+        .unwrap();
+    let mut cb = Clipboard::new().expect("Failed to open clipboard");
+    let text = cb.get_text().unwrap();
+    assert!(text.contains("hello"), "clipboard text was: {:?}", text);
+    assert!(text.contains("world"), "clipboard text was: {:?}", text);
+}
+
+#[test]
+#[serial]
+fn test_paste_from_system_clipboard() {
+    use arboard::Clipboard;
+    let mut ws = new_workspace();
+    let mut cb = Clipboard::new().expect("Failed to open clipboard");
+    cb.set_text("A1,B1\nA2,B2\n").unwrap();
+    drop(cb);
+    assert!(ws.state.clipboard.is_none());
+    script().char('p').run(&mut ws).expect("Failed to run");
+    assert_eq!(ws.book.get_current_cell_contents().unwrap(), "A1");
+    script().char('l').run(&mut ws).unwrap();
+    assert_eq!(ws.book.get_current_cell_contents().unwrap(), "B1");
+    script().char('j').char('h').run(&mut ws).unwrap();
+    assert_eq!(ws.book.get_current_cell_contents().unwrap(), "A2");
+    script().char('l').run(&mut ws).unwrap();
+    assert_eq!(ws.book.get_current_cell_contents().unwrap(), "B2");
+}
+
+#[test]
+#[serial]
+fn test_system_paste_command() {
+    use arboard::Clipboard;
+    let mut ws = new_workspace();
+    let mut cb = Clipboard::new().expect("Failed to open clipboard");
+    cb.set_text("X1,Y1\nX2,Y2\n").unwrap();
+    drop(cb);
+    script()
+        .char(':')
+        .chars("system-paste")
+        .enter()
+        .run(&mut ws)
+        .expect("Failed to run");
+    assert_eq!(ws.book.get_current_cell_contents().unwrap(), "X1");
+}
+
+#[test]
+fn test_paste_from_internal_range_clipboard() {
+    let mut ws = new_workspace();
+    ws.state.clipboard = Some(ClipboardContents::Range(vec![
+        vec!["A1".to_string(), "B1".to_string()],
+        vec!["A2".to_string(), "B2".to_string()],
+    ]));
+    script().char('p').run(&mut ws).expect("Failed to run");
+    assert_eq!(ws.book.get_current_cell_contents().unwrap(), "A1");
+    script().char('l').run(&mut ws).unwrap();
+    assert_eq!(ws.book.get_current_cell_contents().unwrap(), "B1");
 }
 
 fn new_workspace<'a>() -> Workspace<'a> {

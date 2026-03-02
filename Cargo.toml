@@ -24,3 +24,6 @@ pulldown-cmark = "0.13.0"
 arboard = { version = "3.5.0", features = ["wayland-data-control"] }
 htmf = "0.2.0"
 time = "0.3.44"
+
+[dev-dependencies]
+serial_test = "3"
