@@ -3,7 +3,7 @@ use std::{path::PathBuf, process::ExitCode, str::FromStr};
 
 use crate::book::{self, AddressRange, Book};
 
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
 use ironcalc::base::expressions::types::Area;
 use ratatui::{
