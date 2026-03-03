@@ -22,12 +22,14 @@
 //!
 //! ```text
 //! file          ::= line* EOF
-//! line          ::= (comment | sheet_start | sheet_end | col_width | style_decl | cell_decl) NEWLINE
+//! line          ::= (comment | sheet_start | sheet_end | col_width | row_style | col_style | style_decl | cell_decl) NEWLINE
 //!                 | NEWLINE                        (* blank lines are ignored *)
 //! comment       ::= '#' rest_of_line
 //! sheet_start   ::= '[sheet' WS quoted_string ']'
 //! sheet_end     ::= '[/sheet]'
 //! col_width     ::= 'col' WS uint WS 'width' WS uint
+//! row_style     ::= 'row_style' WS uint WS style_prop (WS style_prop)*
+//! col_style     ::= 'col_style' WS uint WS style_prop (WS style_prop)*
 //! style_decl    ::= 'style' WS cellref WS style_prop (WS style_prop)*
 //! style_prop    ::= style_key WS style_val
 //! style_key     ::= 'font.b' | 'font.i' | 'font.strike' | 'font.color' | 'font.u'
@@ -86,6 +88,7 @@
 use crate::ui::Address;
 use ironcalc::base::expressions::types::Area;
 use ironcalc::base::types::{HorizontalAlignment, Style, VerticalAlignment};
+use super::{LAST_COLUMN, LAST_ROW};
 use ironcalc::base::UserModel;
 
 use super::Book;
@@ -139,6 +142,24 @@ pub fn parse_sui(text: &str) -> (Book, Vec<ParseWarning>) {
         if let Some(sheet_idx) = current_sheet {
             if let Some((col, width)) = parse_col_width(trimmed) {
                 let _ = book.set_column_size_for_sheet(sheet_idx, col, width);
+            } else if let Some((row, props)) = parse_row_style_decl(trimmed) {
+                let area = Area {
+                    sheet: sheet_idx,
+                    row: row as i32,
+                    column: 1,
+                    width: LAST_COLUMN,
+                    height: 1,
+                };
+                apply_style_props_area(&mut book, &area, &props, line_num, &mut warnings);
+            } else if let Some((col, props)) = parse_col_style_decl(trimmed) {
+                let area = Area {
+                    sheet: sheet_idx,
+                    row: 1,
+                    column: col as i32,
+                    width: 1,
+                    height: LAST_ROW,
+                };
+                apply_style_props_area(&mut book, &area, &props, line_num, &mut warnings);
             } else if let Some((row, col, props)) = parse_style_decl(trimmed) {
                 apply_style_props(&mut book, sheet_idx, row, col, &props, line_num, &mut warnings);
             } else if let Some((row, col, value)) = parse_cell_decl(trimmed) {
@@ -169,7 +190,10 @@ pub fn parse_sui(text: &str) -> (Book, Vec<ParseWarning>) {
 /// Canonical ordering:
 /// 1. Sheets in workbook index order.
 /// 2. Within each sheet: `col` width declarations in ascending column order.
-/// 3. Cell declarations in row-major order (ascending row, then ascending column).
+/// 3. Row style declarations in ascending row order.
+/// 4. Column style declarations in ascending column order.
+/// 5. Per-cell style declarations in row-major order.
+/// 6. Cell declarations in row-major order (ascending row, then ascending column).
 pub fn serialize_sui(book: &Book) -> String {
     let mut out = String::new();
     let worksheets = &book.model.get_model().workbook.worksheets;
@@ -202,7 +226,38 @@ pub fn serialize_sui(book: &Book) -> String {
             }
         }
 
-        // Style declarations in row-major order (canonical: after col_widths, before cell_decls).
+        // Row style declarations (ascending row order, canonical: after col_widths).
+        let mut styled_rows: Vec<i32> = ws.rows.iter()
+            .filter(|r| r.custom_format)
+            .map(|r| r.r)
+            .collect();
+        styled_rows.sort_unstable();
+        for row in styled_rows {
+            if let Ok(Some(style)) = book.model.get_model().get_row_style(sheet_idx, row) {
+                let props = serialize_style_props(&style);
+                if !props.is_empty() {
+                    out.push_str(&format!("row_style {} {}\n", row, props.join(" ")));
+                }
+            }
+        }
+
+        // Column style declarations (ascending col order, canonical: after row_styles).
+        let mut styled_col_nums: Vec<i32> = ws.cols.iter()
+            .filter(|c| c.style.is_some())
+            .flat_map(|c| c.min..=c.max)
+            .collect();
+        styled_col_nums.sort_unstable();
+        styled_col_nums.dedup();
+        for col in styled_col_nums {
+            if let Ok(Some(style)) = book.model.get_model().get_column_style(sheet_idx, col) {
+                let props = serialize_style_props(&style);
+                if !props.is_empty() {
+                    out.push_str(&format!("col_style {} {}\n", col, props.join(" ")));
+                }
+            }
+        }
+
+        // Per-cell style declarations in row-major order (canonical: after col_styles, before cell_decls).
         let mut styled_cells: Vec<(i32, i32)> = ws
             .sheet_data
             .keys()
@@ -462,6 +517,75 @@ fn serialize_style_props(style: &Style) -> Vec<String> {
     props
 }
 
+/// Parses a sequence of `key val` pairs from the remainder of a style line.
+/// Handles quoted `num_fmt` values specially. Unknown keys are included as-is;
+/// the caller is responsible for filtering.
+fn parse_style_kv_pairs(remainder: &str) -> Vec<(String, String)> {
+    let mut props = Vec::new();
+    let mut s = remainder;
+    while !s.is_empty() {
+        let (key, after_key) = if let Some(pos) = s.find(' ') {
+            (&s[..pos], s[pos + 1..].trim_start())
+        } else {
+            break; // key with no value — malformed pair, stop
+        };
+        let (val, after_val) = if key == "num_fmt" {
+            if let Some(end_quote) = after_key.strip_prefix('"').and_then(|inner| {
+                let mut escaped = false;
+                inner.char_indices().find(|(_, c)| {
+                    if escaped {
+                        escaped = false;
+                        false
+                    } else if *c == '\\' {
+                        escaped = true;
+                        false
+                    } else {
+                        *c == '"'
+                    }
+                }).map(|(i, _)| i)
+            }) {
+                let quoted = &after_key[..end_quote + 2];
+                let parsed_val = parse_quoted_string(quoted).unwrap_or_default();
+                let after = after_key[end_quote + 2..].trim_start();
+                (parsed_val, after)
+            } else {
+                break; // malformed quoted value
+            }
+        } else if let Some(pos) = after_key.find(' ') {
+            (after_key[..pos].to_string(), after_key[pos + 1..].trim_start())
+        } else {
+            (after_key.to_string(), "")
+        };
+        props.push((key.to_string(), val));
+        s = after_val;
+    }
+    props
+}
+
+/// Parses a `row_style <row> <key> <val> [<key> <val> ...]` line.
+///
+/// Returns `Some((row, props))` on success, or `None` if not a row_style line.
+fn parse_row_style_decl(line: &str) -> Option<(usize, Vec<(String, String)>)> {
+    let rest = line.strip_prefix("row_style ")?;
+    let (idx_str, remainder) = rest.split_once(' ')
+        .map(|(a, b)| (a, b.trim_start()))
+        .unwrap_or((rest, ""));
+    let row: usize = idx_str.parse().ok().filter(|&n| n > 0)?;
+    Some((row, parse_style_kv_pairs(remainder)))
+}
+
+/// Parses a `col_style <col> <key> <val> [<key> <val> ...]` line.
+///
+/// Returns `Some((col, props))` on success, or `None` if not a col_style line.
+fn parse_col_style_decl(line: &str) -> Option<(usize, Vec<(String, String)>)> {
+    let rest = line.strip_prefix("col_style ")?;
+    let (idx_str, remainder) = rest.split_once(' ')
+        .map(|(a, b)| (a, b.trim_start()))
+        .unwrap_or((rest, ""));
+    let col: usize = idx_str.parse().ok().filter(|&n| n > 0)?;
+    Some((col, parse_style_kv_pairs(remainder)))
+}
+
 /// Parses a `style <cellref> <key> <val> [<key> <val> ...]` line.
 ///
 /// Returns `Some((row, col, props))` on success, or `None` if the line is not
@@ -476,65 +600,15 @@ fn parse_style_decl(line: &str) -> Option<(usize, usize, Vec<(String, String)>)>
         (rest, "")
     };
     let (row, col) = parse_cellref(cellref_str)?;
-
-    let mut props = Vec::new();
-    let mut s = remainder;
-    while !s.is_empty() {
-        // Read the key (next whitespace-delimited token)
-        let (key, after_key) = if let Some(pos) = s.find(' ') {
-            (&s[..pos], s[pos + 1..].trim_start())
-        } else {
-            // key with no value — malformed pair, stop
-            break;
-        };
-        // Read the value: for num_fmt it's a quoted string; otherwise the next token
-        let (val, after_val) = if key == "num_fmt" {
-            // Value is a quoted string; use parse_quoted_string on the leading portion
-            if let Some(end_quote) = after_key.strip_prefix('"').and_then(|inner| {
-                // find the closing unescaped quote
-                let mut escaped = false;
-                inner.char_indices().find(|(_, c)| {
-                    if escaped {
-                        escaped = false;
-                        false
-                    } else if *c == '\\' {
-                        escaped = true;
-                        false
-                    } else {
-                        *c == '"'
-                    }
-                }).map(|(i, _)| i)
-            }) {
-                // The quoted string spans after_key[0..=end_quote+1] (include both quotes)
-                let quoted = &after_key[..end_quote + 2]; // +2 for the two quote characters
-                let parsed_val = parse_quoted_string(quoted).unwrap_or_default();
-                let after = after_key[end_quote + 2..].trim_start();
-                (parsed_val, after)
-            } else {
-                break; // malformed quoted value
-            }
-        } else {
-            if let Some(pos) = after_key.find(' ') {
-                (after_key[..pos].to_string(), after_key[pos + 1..].trim_start())
-            } else {
-                (after_key.to_string(), "")
-            }
-        };
-        props.push((key.to_string(), val));
-        s = after_val;
-    }
-
-    Some((row, col, props))
+    Some((row, col, parse_style_kv_pairs(remainder)))
 }
 
-/// Applies parsed style key-value pairs to a cell in the book.
+/// Applies parsed style key-value pairs to an area in the book.
 /// Emits a `ParseWarning` for each unknown key; known keys are forwarded to
 /// `Book::set_cell_style`.
-fn apply_style_props(
+fn apply_style_props_area(
     book: &mut Book,
-    sheet: u32,
-    row: usize,
-    col: usize,
+    area: &Area,
     props: &[(String, String)],
     line_num: usize,
     warnings: &mut Vec<ParseWarning>,
@@ -561,21 +635,36 @@ fn apply_style_props(
             });
             continue;
         }
-        let area = Area {
-            sheet,
-            row: row as i32,
-            column: col as i32,
-            width: 1,
-            height: 1,
-        };
-        let _ = book.set_cell_style(&[(key.as_str(), val.as_str())], &area);
+        let _ = book.set_cell_style(&[(key.as_str(), val.as_str())], area);
     }
 }
+
+/// Applies parsed style key-value pairs to a single cell in the book.
+/// Delegates to `apply_style_props_area` with a 1×1 area.
+fn apply_style_props(
+    book: &mut Book,
+    sheet: u32,
+    row: usize,
+    col: usize,
+    props: &[(String, String)],
+    line_num: usize,
+    warnings: &mut Vec<ParseWarning>,
+) {
+    let area = Area {
+        sheet,
+        row: row as i32,
+        column: col as i32,
+        width: 1,
+        height: 1,
+    };
+    apply_style_props_area(book, &area, props, line_num, warnings);
+}
+
 
 #[cfg(test)]
 mod tests {
     use super::{parse_sui, serialize_sui};
-    use crate::book::Book;
+    use crate::book::{Book, LAST_COLUMN, LAST_ROW};
     use crate::ui::Address;
     use ironcalc::base::expressions::types::Area;
     use ironcalc::base::types::{HorizontalAlignment, VerticalAlignment};
@@ -1307,6 +1396,105 @@ mod tests {
         assert_eq!(
             text1, text2,
             "serialize → parse → serialize must be byte-identical for styled books"
+        );
+    }
+
+    // -------------------------------------------------------------------------
+    // Row/column style tests (bug fix: empty cells in styled rows/cols)
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_row_style_roundtrip() {
+        // Set a full-row style on row 2 (no cell content in that row).
+        // serialize_sui must emit a `row_style 2 ...` line.
+        // After parse, an empty cell in row 2 must carry the style.
+        let mut book = Book::default();
+        let row2_full = Area {
+            sheet: 0,
+            row: 2,
+            column: 1,
+            width: LAST_COLUMN,
+            height: 1,
+        };
+        book.set_cell_style(&[("fill.bg_color", "#ABCDEF")], &row2_full)
+            .expect("failed to set row style");
+
+        let sui_text = serialize_sui(&book);
+        assert!(
+            sui_text.lines().any(|l| l.starts_with("row_style 2 ")),
+            "serialized output must contain a 'row_style 2 ...' line, got:\n{sui_text}"
+        );
+        assert!(
+            sui_text.contains("fill.bg_color #ABCDEF"),
+            "row_style line must include fill.bg_color #ABCDEF, got:\n{sui_text}"
+        );
+
+        let (parsed, warnings) = parse_sui(&sui_text);
+        assert_eq!(warnings.len(), 0, "round-tripped row_style .sui must have no warnings");
+
+        // An empty cell in the styled row (col 5 = E2, has no content) must carry the style.
+        let empty_in_row2 = Address { sheet: 0, row: 2, col: 5 };
+        let style = parsed
+            .get_cell_style(&empty_in_row2)
+            .expect("empty cell in styled row must have a style after round-trip");
+        assert_eq!(
+            style.fill.bg_color,
+            Some("#ABCDEF".to_string()),
+            "fill.bg_color must be #ABCDEF on empty cell in styled row after round-trip"
+        );
+
+        // Stability: serialize → parse → serialize must be byte-identical.
+        let text2 = serialize_sui(&parsed);
+        assert_eq!(
+            sui_text, text2,
+            "row_style round-trip serialize → parse → serialize must be byte-identical"
+        );
+    }
+
+    #[test]
+    fn test_col_style_roundtrip() {
+        // Set a full-column style on col 3 (no cell content in that column).
+        // serialize_sui must emit a `col_style 3 ...` line.
+        // After parse, an empty cell in col 3 must carry the style.
+        let mut book = Book::default();
+        let col3_full = Area {
+            sheet: 0,
+            row: 1,
+            column: 3,
+            width: 1,
+            height: LAST_ROW,
+        };
+        book.set_cell_style(&[("font.b", "true")], &col3_full)
+            .expect("failed to set col style");
+
+        let sui_text = serialize_sui(&book);
+        assert!(
+            sui_text.lines().any(|l| l.starts_with("col_style 3 ")),
+            "serialized output must contain a 'col_style 3 ...' line, got:\n{sui_text}"
+        );
+        assert!(
+            sui_text.contains("font.b true"),
+            "col_style line must include font.b true, got:\n{sui_text}"
+        );
+
+        let (parsed, warnings) = parse_sui(&sui_text);
+        assert_eq!(warnings.len(), 0, "round-tripped col_style .sui must have no warnings");
+
+        // An empty cell in the styled column (row 5 = C5, has no content) must carry the style.
+        let empty_in_col3 = Address { sheet: 0, row: 5, col: 3 };
+        let style = parsed
+            .get_cell_style(&empty_in_col3)
+            .expect("empty cell in styled col must have a style after round-trip");
+        assert!(
+            style.font.b,
+            "font.b must be true on empty cell in styled col after round-trip"
+        );
+
+        // Stability: serialize → parse → serialize must be byte-identical.
+        let text2 = serialize_sui(&parsed);
+        assert_eq!(
+            sui_text, text2,
+            "col_style round-trip serialize → parse → serialize must be byte-identical"
         );
     }
 }
