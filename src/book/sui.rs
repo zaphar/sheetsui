@@ -357,6 +357,8 @@ mod tests {
     use super::{parse_sui, serialize_sui};
     use crate::book::Book;
     use crate::ui::Address;
+    use ironcalc::base::expressions::types::Area;
+    use ironcalc::base::types::{HorizontalAlignment, VerticalAlignment};
 
     fn addr(row: usize, col: usize) -> Address {
         Address { sheet: 0, row, col }
@@ -676,6 +678,415 @@ mod tests {
         assert_eq!(
             first_output, second_output,
             "serialize → parse → serialize must be a no-op (byte-identical output)"
+        );
+    }
+
+    // -------------------------------------------------------------------------
+    // Style per-property round-trip tests (iter-2, Phase 1)
+    // -------------------------------------------------------------------------
+
+    fn a1_area() -> Area {
+        Area { sheet: 0, row: 1, column: 1, width: 1, height: 1 }
+    }
+
+    #[test]
+    fn test_style_roundtrip_font_bold() {
+        let mut book = Book::default();
+        let a1 = addr(1, 1);
+        book.set_cell_style(&[("font.b", "true")], &a1_area())
+            .expect("failed to set font.b");
+        let sui_text = serialize_sui(&book);
+        assert!(
+            sui_text.contains("font.b true"),
+            "serialized output must contain 'font.b true', got:\n{sui_text}"
+        );
+        let (parsed, warnings) = parse_sui(&sui_text);
+        assert_eq!(warnings.len(), 0, "round-tripped styled .sui must have no warnings");
+        let style = parsed.get_cell_style(&a1).expect("style must be present after round-trip");
+        assert!(style.font.b, "font.b must be true after round-trip");
+    }
+
+    #[test]
+    fn test_style_roundtrip_font_italic() {
+        let mut book = Book::default();
+        let a1 = addr(1, 1);
+        book.set_cell_style(&[("font.i", "true")], &a1_area())
+            .expect("failed to set font.i");
+        let sui_text = serialize_sui(&book);
+        assert!(
+            sui_text.contains("font.i true"),
+            "serialized output must contain 'font.i true', got:\n{sui_text}"
+        );
+        let (parsed, warnings) = parse_sui(&sui_text);
+        assert_eq!(warnings.len(), 0, "round-tripped styled .sui must have no warnings");
+        let style = parsed.get_cell_style(&a1).expect("style must be present after round-trip");
+        assert!(style.font.i, "font.i must be true after round-trip");
+    }
+
+    #[test]
+    fn test_style_roundtrip_font_strikethrough() {
+        let mut book = Book::default();
+        let a1 = addr(1, 1);
+        book.set_cell_style(&[("font.strike", "true")], &a1_area())
+            .expect("failed to set font.strike");
+        let sui_text = serialize_sui(&book);
+        assert!(
+            sui_text.contains("font.strike true"),
+            "serialized output must contain 'font.strike true', got:\n{sui_text}"
+        );
+        let (parsed, warnings) = parse_sui(&sui_text);
+        assert_eq!(warnings.len(), 0, "round-tripped styled .sui must have no warnings");
+        let style = parsed.get_cell_style(&a1).expect("style must be present after round-trip");
+        assert!(style.font.strike, "font.strike must be true after round-trip");
+    }
+
+    #[test]
+    fn test_style_roundtrip_font_underline() {
+        let mut book = Book::default();
+        let a1 = addr(1, 1);
+        book.set_cell_style(&[("font.u", "true")], &a1_area())
+            .expect("failed to set font.u");
+        let sui_text = serialize_sui(&book);
+        assert!(
+            sui_text.contains("font.u true"),
+            "serialized output must contain 'font.u true', got:\n{sui_text}"
+        );
+        let (parsed, warnings) = parse_sui(&sui_text);
+        assert_eq!(warnings.len(), 0, "round-tripped styled .sui must have no warnings");
+        let style = parsed.get_cell_style(&a1).expect("style must be present after round-trip");
+        assert!(style.font.u, "font.u must be true after round-trip");
+    }
+
+    #[test]
+    fn test_style_roundtrip_font_color() {
+        let mut book = Book::default();
+        let a1 = addr(1, 1);
+        // Use #FF0000 which is different from the default (#000000)
+        book.set_cell_style(&[("font.color", "#FF0000")], &a1_area())
+            .expect("failed to set font.color");
+        let sui_text = serialize_sui(&book);
+        assert!(
+            sui_text.contains("font.color #FF0000"),
+            "serialized output must contain 'font.color #FF0000', got:\n{sui_text}"
+        );
+        let (parsed, warnings) = parse_sui(&sui_text);
+        assert_eq!(warnings.len(), 0, "round-tripped styled .sui must have no warnings");
+        let style = parsed.get_cell_style(&a1).expect("style must be present after round-trip");
+        assert_eq!(
+            style.font.color,
+            Some("#FF0000".to_string()),
+            "font.color must be #FF0000 after round-trip"
+        );
+    }
+
+    #[test]
+    fn test_style_roundtrip_fill_bg_color() {
+        let mut book = Book::default();
+        let a1 = addr(1, 1);
+        book.set_cell_style(&[("fill.bg_color", "#AABBCC")], &a1_area())
+            .expect("failed to set fill.bg_color");
+        let sui_text = serialize_sui(&book);
+        assert!(
+            sui_text.contains("fill.bg_color #AABBCC"),
+            "serialized output must contain 'fill.bg_color #AABBCC', got:\n{sui_text}"
+        );
+        let (parsed, warnings) = parse_sui(&sui_text);
+        assert_eq!(warnings.len(), 0, "round-tripped styled .sui must have no warnings");
+        let style = parsed.get_cell_style(&a1).expect("style must be present after round-trip");
+        assert_eq!(
+            style.fill.bg_color,
+            Some("#AABBCC".to_string()),
+            "fill.bg_color must be #AABBCC after round-trip"
+        );
+    }
+
+    #[test]
+    fn test_style_roundtrip_fill_fg_color() {
+        let mut book = Book::default();
+        let a1 = addr(1, 1);
+        book.set_cell_style(&[("fill.fg_color", "#112233")], &a1_area())
+            .expect("failed to set fill.fg_color");
+        let sui_text = serialize_sui(&book);
+        assert!(
+            sui_text.contains("fill.fg_color #112233"),
+            "serialized output must contain 'fill.fg_color #112233', got:\n{sui_text}"
+        );
+        let (parsed, warnings) = parse_sui(&sui_text);
+        assert_eq!(warnings.len(), 0, "round-tripped styled .sui must have no warnings");
+        let style = parsed.get_cell_style(&a1).expect("style must be present after round-trip");
+        assert_eq!(
+            style.fill.fg_color,
+            Some("#112233".to_string()),
+            "fill.fg_color must be #112233 after round-trip"
+        );
+    }
+
+    #[test]
+    fn test_style_roundtrip_num_fmt() {
+        let mut book = Book::default();
+        let a1 = addr(1, 1);
+        book.set_cell_style(&[("num_fmt", "0.00")], &a1_area())
+            .expect("failed to set num_fmt");
+        let sui_text = serialize_sui(&book);
+        // num_fmt is serialized as a quoted string
+        assert!(
+            sui_text.contains("num_fmt \"0.00\""),
+            "serialized output must contain 'num_fmt \"0.00\"', got:\n{sui_text}"
+        );
+        let (parsed, warnings) = parse_sui(&sui_text);
+        assert_eq!(warnings.len(), 0, "round-tripped styled .sui must have no warnings");
+        let style = parsed.get_cell_style(&a1).expect("style must be present after round-trip");
+        assert_eq!(
+            style.num_fmt, "0.00",
+            "num_fmt must be '0.00' after round-trip"
+        );
+    }
+
+    #[test]
+    fn test_style_roundtrip_alignment_horizontal() {
+        let mut book = Book::default();
+        let a1 = addr(1, 1);
+        book.set_cell_style(&[("alignment.horizontal", "center")], &a1_area())
+            .expect("failed to set alignment.horizontal");
+        let sui_text = serialize_sui(&book);
+        assert!(
+            sui_text.contains("alignment.horizontal center"),
+            "serialized output must contain 'alignment.horizontal center', got:\n{sui_text}"
+        );
+        let (parsed, warnings) = parse_sui(&sui_text);
+        assert_eq!(warnings.len(), 0, "round-tripped styled .sui must have no warnings");
+        let style = parsed.get_cell_style(&a1).expect("style must be present after round-trip");
+        let alignment = style.alignment.expect("alignment must be Some after round-trip");
+        assert_eq!(
+            alignment.horizontal,
+            HorizontalAlignment::Center,
+            "alignment.horizontal must be Center after round-trip"
+        );
+    }
+
+    #[test]
+    fn test_style_roundtrip_alignment_vertical() {
+        let mut book = Book::default();
+        let a1 = addr(1, 1);
+        book.set_cell_style(&[("alignment.vertical", "top")], &a1_area())
+            .expect("failed to set alignment.vertical");
+        let sui_text = serialize_sui(&book);
+        assert!(
+            sui_text.contains("alignment.vertical top"),
+            "serialized output must contain 'alignment.vertical top', got:\n{sui_text}"
+        );
+        let (parsed, warnings) = parse_sui(&sui_text);
+        assert_eq!(warnings.len(), 0, "round-tripped styled .sui must have no warnings");
+        let style = parsed.get_cell_style(&a1).expect("style must be present after round-trip");
+        let alignment = style.alignment.expect("alignment must be Some after round-trip");
+        assert_eq!(
+            alignment.vertical,
+            VerticalAlignment::Top,
+            "alignment.vertical must be Top after round-trip"
+        );
+    }
+
+    #[test]
+    fn test_style_roundtrip_alignment_wrap_text() {
+        let mut book = Book::default();
+        let a1 = addr(1, 1);
+        book.set_cell_style(&[("alignment.wrap_text", "true")], &a1_area())
+            .expect("failed to set alignment.wrap_text");
+        let sui_text = serialize_sui(&book);
+        assert!(
+            sui_text.contains("alignment.wrap_text true"),
+            "serialized output must contain 'alignment.wrap_text true', got:\n{sui_text}"
+        );
+        let (parsed, warnings) = parse_sui(&sui_text);
+        assert_eq!(warnings.len(), 0, "round-tripped styled .sui must have no warnings");
+        let style = parsed.get_cell_style(&a1).expect("style must be present after round-trip");
+        let alignment = style.alignment.expect("alignment must be Some after round-trip");
+        assert!(alignment.wrap_text, "alignment.wrap_text must be true after round-trip");
+    }
+
+    // -------------------------------------------------------------------------
+    // Style scenario tests (iter-2, Phase 1)
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_style_roundtrip_multi_property() {
+        // Set three distinct style properties on A1 and verify all survive a round-trip.
+        let mut book = Book::default();
+        let a1 = addr(1, 1);
+        book.set_cell_style(
+            &[("font.b", "true"), ("fill.bg_color", "#FF0000"), ("num_fmt", "0.00")],
+            &a1_area(),
+        )
+        .expect("failed to set multi-property style");
+        let sui_text = serialize_sui(&book);
+        // All three properties must appear in the output
+        assert!(
+            sui_text.contains("font.b true"),
+            "output must contain 'font.b true', got:\n{sui_text}"
+        );
+        assert!(
+            sui_text.contains("fill.bg_color #FF0000"),
+            "output must contain 'fill.bg_color #FF0000', got:\n{sui_text}"
+        );
+        assert!(
+            sui_text.contains("num_fmt \"0.00\""),
+            "output must contain 'num_fmt \"0.00\"', got:\n{sui_text}"
+        );
+        let (parsed, warnings) = parse_sui(&sui_text);
+        assert_eq!(warnings.len(), 0, "multi-property round-trip must have no warnings");
+        let style = parsed.get_cell_style(&a1).expect("style must be present after round-trip");
+        assert!(style.font.b, "font.b must be true after multi-property round-trip");
+        assert_eq!(
+            style.fill.bg_color,
+            Some("#FF0000".to_string()),
+            "fill.bg_color must be #FF0000 after multi-property round-trip"
+        );
+        assert_eq!(style.num_fmt, "0.00", "num_fmt must be '0.00' after multi-property round-trip");
+    }
+
+    #[test]
+    fn test_style_roundtrip_multi_sheet() {
+        // Styles on different sheets must both survive a round-trip.
+        let mut book = Book::default();
+        // Set font.i=true on sheet 0 / A1
+        book.set_cell_style(&[("font.i", "true")], &a1_area())
+            .expect("failed to set font.i on sheet 0");
+        book.new_sheet(Some("Sheet2")).expect("failed to add Sheet2");
+        // Set fill.bg_color on sheet 1 / B2
+        let area_sheet1 = Area { sheet: 1, row: 2, column: 2, width: 1, height: 1 };
+        book.set_cell_style(&[("fill.bg_color", "#0000FF")], &area_sheet1)
+            .expect("failed to set fill.bg_color on sheet 1");
+        let sui_text = serialize_sui(&book);
+        let (parsed, warnings) = parse_sui(&sui_text);
+        assert_eq!(warnings.len(), 0, "multi-sheet round-trip must have no warnings");
+        // Sheet 0, A1 — font.i
+        let style0 = parsed
+            .get_cell_style(&addr(1, 1))
+            .expect("style on sheet 0 A1 must be present after round-trip");
+        assert!(style0.font.i, "font.i must be true on sheet 0 A1 after round-trip");
+        // Sheet 1, B2 — fill.bg_color
+        let b2_sheet1 = Address { sheet: 1, row: 2, col: 2 };
+        let style1 = parsed
+            .get_cell_style(&b2_sheet1)
+            .expect("style on sheet 1 B2 must be present after round-trip");
+        assert_eq!(
+            style1.fill.bg_color,
+            Some("#0000FF".to_string()),
+            "fill.bg_color must be #0000FF on sheet 1 B2 after round-trip"
+        );
+    }
+
+    #[test]
+    fn test_style_sparse_unstyled_book() {
+        // A book with no styling must not emit any style_decl lines.
+        let book = Book::default();
+        let sui_text = serialize_sui(&book);
+        // No line should start with "style "
+        let has_style_line = sui_text.lines().any(|l| l.starts_with("style "));
+        assert!(
+            !has_style_line,
+            "unstyled book must not emit any 'style ...' lines, got:\n{sui_text}"
+        );
+    }
+
+    #[test]
+    fn test_style_styled_book_emits_style_line() {
+        // A book with at least one non-default style must emit at least one style_decl line.
+        let mut book = Book::default();
+        book.set_cell_style(&[("font.b", "true")], &a1_area())
+            .expect("failed to set font.b");
+        let output = serialize_sui(&book);
+        assert!(
+            output.lines().any(|l| l.starts_with("style ")),
+            "a styled book must emit at least one style_decl line, got:\n{output}"
+        );
+    }
+
+    #[test]
+    fn test_style_unknown_key_warning() {
+        // A style_decl line with an unrecognized key must produce exactly one warning
+        // but must not prevent other lines from loading.
+        let text = "[sheet \"Sheet1\"]\nstyle A1 unknown.key value\nA1 = \"hello\"\n[/sheet]\n";
+        let (book, warnings) = parse_sui(text);
+        assert_eq!(
+            warnings.len(),
+            1,
+            "exactly one warning expected for the unknown style key, got {} warnings",
+            warnings.len()
+        );
+        assert_eq!(
+            warnings[0].line, 2,
+            "warning must reference line 2 (the style_decl line), got line {}",
+            warnings[0].line
+        );
+        // The valid cell_decl on line 3 must still be loaded
+        let content = book
+            .get_cell_addr_contents(&addr(1, 1))
+            .expect("A1 must be loadable even after a bad style_decl line");
+        assert_eq!(
+            content, "hello",
+            "cell A1 must have value 'hello' despite the bad style_decl line before it"
+        );
+    }
+
+    #[test]
+    fn test_style_parse_known_key_applies_style() {
+        // Parsing a valid style_decl line must produce zero warnings and apply the style.
+        let text = "[sheet \"Sheet1\"]\nstyle A1 font.b true\nA1 = \"data\"\n[/sheet]\n";
+        let (book, warnings) = parse_sui(text);
+        assert_eq!(
+            warnings.len(),
+            0,
+            "parsing a valid style_decl line must produce zero warnings, got: {:?}",
+            warnings.iter().map(|w| &w.message).collect::<Vec<_>>()
+        );
+        let style = book
+            .get_cell_style(&addr(1, 1))
+            .expect("cell A1 must have a style after parsing style_decl");
+        assert!(style.font.b, "font.b must be true after parsing 'style A1 font.b true'");
+    }
+
+    #[test]
+    fn test_style_duplicate_lines_same_cell() {
+        // Two style_decl lines for the same property on the same cell: last value wins.
+        let text = "[sheet \"Sheet1\"]\n\
+                    style A1 font.b true\n\
+                    style A1 font.b false\n\
+                    A1 = \"data\"\n\
+                    [/sheet]\n";
+        let (book, warnings) = parse_sui(text);
+        assert_eq!(
+            warnings.len(),
+            0,
+            "duplicate style_decl lines with known keys must produce no warnings"
+        );
+        let style = book
+            .get_cell_style(&addr(1, 1))
+            .expect("style must be present on A1");
+        assert!(
+            !style.font.b,
+            "font.b must be false after the second style_decl (last value wins)"
+        );
+    }
+
+    #[test]
+    fn test_style_roundtrip_noop_stability_styled() {
+        // serialize → parse → serialize must produce byte-identical output even when
+        // style_decl lines are present (extends the existing no-op stability test).
+        let mut book = Book::default();
+        book.set_cell_style(&[("font.b", "true")], &a1_area())
+            .expect("failed to set font.b");
+        let text1 = serialize_sui(&book);
+        assert!(
+            text1.contains("font.b true"),
+            "serialized styled book must contain 'font.b true' token, got:\n{text1}"
+        );
+        let (book2, warnings) = parse_sui(&text1);
+        assert_eq!(warnings.len(), 0, "parse of styled .sui must have no warnings");
+        let text2 = serialize_sui(&book2);
+        assert_eq!(
+            text1, text2,
+            "serialize → parse → serialize must be byte-identical for styled books"
         );
     }
 }
