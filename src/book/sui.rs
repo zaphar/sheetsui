@@ -72,6 +72,8 @@
 //! An all-invalid file returns an empty `Book` with one warning per invalid line.
 
 use crate::ui::Address;
+use ironcalc::base::expressions::types::Area;
+use ironcalc::base::types::{HorizontalAlignment, Style, VerticalAlignment};
 use ironcalc::base::UserModel;
 
 use super::Book;
@@ -125,6 +127,8 @@ pub fn parse_sui(text: &str) -> (Book, Vec<ParseWarning>) {
         if let Some(sheet_idx) = current_sheet {
             if let Some((col, width)) = parse_col_width(trimmed) {
                 let _ = book.set_column_size_for_sheet(sheet_idx, col, width);
+            } else if let Some((row, col, props)) = parse_style_decl(trimmed) {
+                apply_style_props(&mut book, sheet_idx, row, col, &props, line_num, &mut warnings);
             } else if let Some((row, col, value)) = parse_cell_decl(trimmed) {
                 let _ = book.update_cell(&Address { sheet: sheet_idx, row, col }, &value);
             } else {
@@ -182,6 +186,30 @@ pub fn serialize_sui(book: &Book) -> String {
             if let Ok(width) = book.get_column_size_for_sheet(sheet_idx, col) {
                 if width != default_width {
                     out.push_str(&format!("col {col} width {width}\n"));
+                }
+            }
+        }
+
+        // Style declarations in row-major order (canonical: after col_widths, before cell_decls).
+        let mut styled_cells: Vec<(i32, i32)> = ws
+            .sheet_data
+            .keys()
+            .flat_map(|&row| ws.sheet_data[&row].keys().map(move |&col| (row, col)))
+            .collect();
+        styled_cells.sort_unstable();
+        for (row, col) in &styled_cells {
+            let addr = Address {
+                sheet: sheet_idx,
+                row: *row as usize,
+                col: *col as usize,
+            };
+            if let Some(style) = book.get_cell_style(&addr) {
+                if !is_default_style(&style) {
+                    let props = serialize_style_props(&style);
+                    if !props.is_empty() {
+                        let cell_ref = format!("{}{row}", col_index_to_letters(*col as usize));
+                        out.push_str(&format!("style {cell_ref} {}\n", props.join(" ")));
+                    }
                 }
             }
         }
@@ -350,6 +378,186 @@ fn escape_string(s: &str) -> String {
         }
     }
     result
+}
+
+/// Returns true when all 11 tracked style properties are at their defaults.
+/// Default font color is `None` or `Some("#000000")`, both treated as default.
+fn is_default_style(style: &Style) -> bool {
+    let font_color_default = style.font.color.is_none()
+        || style.font.color.as_deref() == Some("#000000");
+    let alignment_default = match &style.alignment {
+        None => true,
+        Some(a) => {
+            a.horizontal == HorizontalAlignment::General
+                && a.vertical == VerticalAlignment::Bottom
+                && !a.wrap_text
+        }
+    };
+    !style.font.b
+        && !style.font.i
+        && !style.font.strike
+        && !style.font.u
+        && font_color_default
+        && style.fill.bg_color.is_none()
+        && style.fill.fg_color.is_none()
+        && style.num_fmt.eq_ignore_ascii_case("general")
+        && alignment_default
+}
+
+/// Serializes non-default style properties as `"key value"` strings.
+/// Returns an empty Vec when all properties are at their defaults.
+fn serialize_style_props(style: &Style) -> Vec<String> {
+    let mut props = Vec::new();
+
+    if style.font.b {
+        props.push("font.b true".to_string());
+    }
+    if style.font.i {
+        props.push("font.i true".to_string());
+    }
+    if style.font.strike {
+        props.push("font.strike true".to_string());
+    }
+    if style.font.u {
+        props.push("font.u true".to_string());
+    }
+    if let Some(ref color) = style.font.color {
+        if color != "#000000" {
+            props.push(format!("font.color {color}"));
+        }
+    }
+    if let Some(ref color) = style.fill.bg_color {
+        props.push(format!("fill.bg_color {color}"));
+    }
+    if let Some(ref color) = style.fill.fg_color {
+        props.push(format!("fill.fg_color {color}"));
+    }
+    if !style.num_fmt.eq_ignore_ascii_case("general") {
+        props.push(format!("num_fmt \"{}\"", escape_string(&style.num_fmt)));
+    }
+    if let Some(ref alignment) = style.alignment {
+        if alignment.horizontal != HorizontalAlignment::General {
+            props.push(format!("alignment.horizontal {}", alignment.horizontal));
+        }
+        if alignment.vertical != VerticalAlignment::Bottom {
+            props.push(format!("alignment.vertical {}", alignment.vertical));
+        }
+        if alignment.wrap_text {
+            props.push("alignment.wrap_text true".to_string());
+        }
+    }
+
+    props
+}
+
+/// Parses a `style <cellref> <key> <val> [<key> <val> ...]` line.
+///
+/// Returns `Some((row, col, props))` on success, or `None` if the line is not
+/// a style declaration (missing prefix or malformed cellref).
+fn parse_style_decl(line: &str) -> Option<(usize, usize, Vec<(String, String)>)> {
+    let rest = line.strip_prefix("style ")?;
+    // Find the cellref: next whitespace-delimited token
+    let (cellref_str, remainder) = if let Some(pos) = rest.find(' ') {
+        (&rest[..pos], rest[pos + 1..].trim_start())
+    } else {
+        // "style A1" with no properties — valid structure, no props
+        (rest, "")
+    };
+    let (row, col) = parse_cellref(cellref_str)?;
+
+    let mut props = Vec::new();
+    let mut s = remainder;
+    while !s.is_empty() {
+        // Read the key (next whitespace-delimited token)
+        let (key, after_key) = if let Some(pos) = s.find(' ') {
+            (&s[..pos], s[pos + 1..].trim_start())
+        } else {
+            // key with no value — malformed pair, stop
+            break;
+        };
+        // Read the value: for num_fmt it's a quoted string; otherwise the next token
+        let (val, after_val) = if key == "num_fmt" {
+            // Value is a quoted string; use parse_quoted_string on the leading portion
+            if let Some(end_quote) = after_key.strip_prefix('"').and_then(|inner| {
+                // find the closing unescaped quote
+                let mut escaped = false;
+                inner.char_indices().find(|(_, c)| {
+                    if escaped {
+                        escaped = false;
+                        false
+                    } else if *c == '\\' {
+                        escaped = true;
+                        false
+                    } else {
+                        *c == '"'
+                    }
+                }).map(|(i, _)| i)
+            }) {
+                // The quoted string spans after_key[0..=end_quote+1] (include both quotes)
+                let quoted = &after_key[..end_quote + 2]; // +2 for the two quote characters
+                let parsed_val = parse_quoted_string(quoted).unwrap_or_default();
+                let after = after_key[end_quote + 2..].trim_start();
+                (parsed_val, after)
+            } else {
+                break; // malformed quoted value
+            }
+        } else {
+            if let Some(pos) = after_key.find(' ') {
+                (after_key[..pos].to_string(), after_key[pos + 1..].trim_start())
+            } else {
+                (after_key.to_string(), "")
+            }
+        };
+        props.push((key.to_string(), val));
+        s = after_val;
+    }
+
+    Some((row, col, props))
+}
+
+/// Applies parsed style key-value pairs to a cell in the book.
+/// Emits a `ParseWarning` for each unknown key; known keys are forwarded to
+/// `Book::set_cell_style`.
+fn apply_style_props(
+    book: &mut Book,
+    sheet: u32,
+    row: usize,
+    col: usize,
+    props: &[(String, String)],
+    line_num: usize,
+    warnings: &mut Vec<ParseWarning>,
+) {
+    const KNOWN_KEYS: &[&str] = &[
+        "font.b",
+        "font.i",
+        "font.strike",
+        "font.color",
+        "font.u",
+        "fill.bg_color",
+        "fill.fg_color",
+        "num_fmt",
+        "alignment.horizontal",
+        "alignment.vertical",
+        "alignment.wrap_text",
+    ];
+
+    for (key, val) in props {
+        if !KNOWN_KEYS.contains(&key.as_str()) {
+            warnings.push(ParseWarning {
+                line: line_num,
+                message: format!("unknown style key: {key}"),
+            });
+            continue;
+        }
+        let area = Area {
+            sheet,
+            row: row as i32,
+            column: col as i32,
+            width: 1,
+            height: 1,
+        };
+        let _ = book.set_cell_style(&[(key.as_str(), val.as_str())], &area);
+    }
 }
 
 #[cfg(test)]
