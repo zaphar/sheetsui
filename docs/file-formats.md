@@ -14,11 +14,14 @@ extension when opening or saving.
 readable in any text editor and friendly to version control (each cell is one
 line, making diffs easy to read).
 
+For the complete format specification including the EBNF grammar, style key
+reference, and annotated examples, see [SUI_FORMAT.md](./SUI_FORMAT.md).
+
 ### File Structure
 
 A `.sui` file consists of one or more **sheet blocks**. Each block starts with
 a `[sheet "Name"]` header and ends with `[/sheet]`. Inside a block you can
-declare column widths and cell values.
+declare column widths, cell style properties, and cell values.
 
 ```
 # This is a comment — comments begin with # and are ignored on load.
@@ -26,6 +29,7 @@ declare column widths and cell values.
 [sheet "Sheet1"]
 col 1 width 15
 col 2 width 20
+style A1 font.b true font.color #1F4E79
 A1 = "hello world"
 B1 = 42
 C1 = true
@@ -89,9 +93,11 @@ When sheetui writes a `.sui` file the output is deterministic:
 1. Sheets appear in workbook index order.
 2. Within each sheet, `col` width declarations come first, in ascending column
    order.
-3. Cell declarations follow in row-major order: ascending row, then ascending
+3. Style declarations follow in row-major order: ascending row, then ascending
    column within each row.
-4. Empty cells are omitted (the format is sparse).
+4. Cell declarations follow in row-major order: ascending row, then ascending
+   column within each row.
+5. Empty cells are omitted (the format is sparse).
 
 ### Parse Warnings
 
@@ -128,9 +134,10 @@ Use `.xlsx` when you need to share a workbook with Excel, LibreOffice, or
 another spreadsheet application.
 
 **Note:** Cell styles (row/column background colors set with `color-rows`,
-`color-columns`, or `color-cell`) are preserved in `.xlsx` but are **not**
-written to `.sui` files. If you save an `.xlsx` workbook as `.sui`, styling
-information will be lost.
+`color-columns`, or `color-cell`) are preserved in both `.xlsx` and `.sui`
+files. When saving as `.sui`, style properties are written as `style`
+declarations. See [SUI_FORMAT.md](./SUI_FORMAT.md) for the full list of
+supported style properties.
 
 ## Format Auto-Detection
 
@@ -150,4 +157,5 @@ appropriate extension when saving with `:w <path>`.
 | Personal spreadsheets | `.sui` |
 | Version-controlled spreadsheets | `.sui` |
 | Sharing with Excel / LibreOffice | `.xlsx` |
-| Preserving cell styling | `.xlsx` |
+| Preserving cell styling (within sheetui) | `.sui` |
+| Preserving cell styling (cross-application) | `.xlsx` |

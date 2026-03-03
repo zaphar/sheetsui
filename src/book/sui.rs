@@ -15,19 +15,31 @@
 //! # .sui File Format
 //!
 //! The `.sui` format is a declarative, sparse, human-readable text format for
-//! spreadsheet data. Each non-comment, non-structural line declares one cell or
-//! one column-width setting.
+//! spreadsheet data. Each non-comment, non-structural line declares one cell,
+//! one column-width setting, or one set of cell style properties.
 //!
 //! ## Grammar (EBNF)
 //!
 //! ```text
 //! file          ::= line* EOF
-//! line          ::= (comment | sheet_start | sheet_end | col_width | cell_decl) NEWLINE
+//! line          ::= (comment | sheet_start | sheet_end | col_width | style_decl | cell_decl) NEWLINE
 //!                 | NEWLINE                        (* blank lines are ignored *)
 //! comment       ::= '#' rest_of_line
 //! sheet_start   ::= '[sheet' WS quoted_string ']'
 //! sheet_end     ::= '[/sheet]'
 //! col_width     ::= 'col' WS uint WS 'width' WS uint
+//! style_decl    ::= 'style' WS cellref WS style_prop (WS style_prop)*
+//! style_prop    ::= style_key WS style_val
+//! style_key     ::= 'font.b' | 'font.i' | 'font.strike' | 'font.color' | 'font.u'
+//!                 | 'fill.bg_color' | 'fill.fg_color'
+//!                 | 'num_fmt'
+//!                 | 'alignment.wrap_text' | 'alignment.horizontal' | 'alignment.vertical'
+//! style_val     ::= bool_val | quoted_string | hex_color | align_h_val | align_v_val
+//! bool_val      ::= 'true' | 'false'               (* lowercase only *)
+//! hex_color     ::= '#' [0-9A-Fa-f]{6}
+//! align_h_val   ::= 'center' | 'centerContinuous' | 'distributed' | 'fill'
+//!                 | 'general' | 'justify' | 'left' | 'right'
+//! align_v_val   ::= 'bottom' | 'center' | 'distributed' | 'justify' | 'top'
 //! cell_decl     ::= cellref WS '=' WS value
 //! cellref       ::= [A-Z]+ [1-9][0-9]*            (* standard A1 notation, 1-based *)
 //! value         ::= string | number | boolean | formula
@@ -45,9 +57,9 @@
 //! 1. Sheets are written in workbook index order.
 //! 2. Within each sheet, `col` width declarations come first, in ascending
 //!    column-index order.
-//! 3. Cell declarations follow in row-major order: ascending row, then
-//!    ascending column within each row.
-//! 4. Empty cells are omitted (sparse representation).
+//! 3. Style declarations follow in row-major order (ascending row, then ascending column).
+//! 4. Cell declarations follow in row-major order (ascending row, then ascending column).
+//! 5. Empty cells are omitted (sparse representation).
 //!
 //! ## Example
 //!

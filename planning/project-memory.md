@@ -103,3 +103,90 @@ All prior requirements-review blocking issues (font.sz removal, style_val alignm
 #### Summary
 
 The architecture is correct, implementable, and well-reasoned. The scope is precisely bounded to COMP-001 (src/book/sui.rs). All eight iteration-2 requirements are mapped with notes in the traceability file. ADR-002 documents all six required decisions with alternatives considered and consequences stated. The component boundary is correct: no UI components (COMP-002 through COMP-008) are listed as affected. The constraint of no new dependencies is upheld — no new packages appear in architecture_dependencies.yaml. The grammar extension is backward-compatible (old parsers emit warnings, do not abort) and forward-compatible (new parsers handle style-less files identically to before).
+
+### Implementation Review — Phase 2 (2026-03-02, Revision 1)
+
+**Verdict: APPROVED**
+
+#### Build and Test Results
+
+- `cargo build`: PASSED, zero warnings
+- `cargo test`: PASSED, 154 tests, zero warnings, zero failures
+  - 19 iter-2 style tests: all green
+  - 19 iter-1 sui tests: all green (no regressions)
+  - 116 pre-existing ui/book tests: all green
+
+#### Checklist Results
+
+- **Zero compiler warnings**: CONFIRMED
+- **All tests pass**: CONFIRMED (154/154)
+- **No `#[allow(...)]` suppressions**: CONFIRMED — all three iter-1 dead_code suppressions removed
+- **No unsafe code**: CONFIRMED
+- **Helper functions are private (not pub)**: CONFIRMED — `is_default_style`, `serialize_style_props`, `parse_style_decl`, `apply_style_props` are all private fn
+- **Canonical ordering in serialize_sui**: CONFIRMED — col_width lines (lines 184-191), then style_decl lines (lines 193-215), then cell_decl lines (lines 217-240)
+- **parse_sui handles style_decl before cell_decl**: CONFIRMED — `else if let Some(...) = parse_style_decl(...)` (line 130) appears before `else if let Some(...) = parse_cell_decl(...)` (line 132)
+- **Requirements REQ-001 through REQ-007**: ALL IMPLEMENTED. REQ-008 (docs/SUI_FORMAT.md) deferred to documentation phase per implementation plan
+- **No test files modified**: CONFIRMED — test section content matches Phase 1 approved state; 19 new style tests present; no tests deleted
+
+#### Non-Blocking Finding: EBNF Grammar Comment Not Updated
+
+- File: `/Users/zaphar/projects/personal/sheetui/src/book/sui.rs`, lines 23-41
+- The module-level doc comment EBNF grammar still shows the old `line` production without `style_decl`. The grammar does not include `style_decl`, though the implementation supports it.
+- This is a documentation inconsistency only. No functional impact. The inline implementation comments (line 193: "canonical: after col_widths, before cell_decls") and the `parse_style_decl` doc comment are correct.
+- Recommend fixing in documentation phase alongside `docs/SUI_FORMAT.md` creation (REQ-008).
+
+#### Non-Blocking Finding: Display trait used for alignment enum serialization
+
+- File: `/Users/zaphar/projects/personal/sheetui/src/book/sui.rs`, lines 440, 443
+- `serialize_style_props` uses `format!("{}", alignment.horizontal)` and `format!("{}", alignment.vertical)` relying on Display trait, rather than explicit match arms.
+- Implementation plan notes explicit match arms are "preferred" but this is not a hard requirement. The Display impl produces correct tokens ("center", "top", etc.) as verified by passing tests.
+- The risk is that a future ironcalc upgrade could change Display output format. This is acceptable given the version is pinned in Cargo.lock.
+
+#### Patterns Confirmed Working
+
+- Double-guard in `serialize_sui` (`is_default_style` + `!props.is_empty()`) is redundant but harmless defensive coding.
+- Empty-cell styling (styled-but-no-value cells) correctly appear in sheet_data via ironcalc's EmptyCell mechanism; serialize/parse round-trip works correctly.
+- `parse_style_decl` correctly handles the edge case of "style A1" with no properties (returns empty props vec), avoiding a malformed-line warning.
+- The `apply_style_props` unknown-key warning correctly emits one warning per unknown key (not one per style line), which is the right granularity.
+
+#### Summary
+
+Phase 2 is complete and correct. All 7 in-scope requirements (REQ-001 through REQ-007) are implemented and verified by passing tests. The implementation is clean, secure (no injection vectors, no unsafe code), and maintains the zero-warnings policy throughout.
+
+### Documentation Review (2026-03-03, Revision 1)
+
+**Verdict: APPROVED**
+
+#### Documents Reviewed
+
+- `/Users/zaphar/projects/personal/sheetui/.claude/rigor-artifacts/rigor-workflow/documentation/documentation_manifest.yaml`
+- `/Users/zaphar/projects/personal/sheetui/docs/SUI_FORMAT.md`
+- `/Users/zaphar/projects/personal/sheetui/docs/file-formats.md`
+- `/Users/zaphar/projects/personal/sheetui/src/book/sui.rs` (lines 1-75, module doc comment)
+- `/Users/zaphar/projects/personal/sheetui/.claude/rigor-artifacts/rigor-workflow/requirements/requirements.yaml` (REQ-008 acceptance criteria)
+- `/Users/zaphar/projects/personal/sheetui/docs/index.md`
+
+#### REQ-008 Acceptance Criteria: ALL PASSED
+
+1. `docs/SUI_FORMAT.md` exists and describes the complete `.sui` file format — PASS
+2. Full EBNF grammar including `style_decl` production present — PASS
+3. All 11 style keys listed with value type and example — PASS
+4. `alignment.horizontal` all 8 values enumerated — PASS
+5. `alignment.vertical` all 5 values enumerated — PASS
+6. Backward compatibility note (ParseWarning, no abort) present — PASS
+7. Fully-annotated example with cell values, col widths, and style declarations — PASS
+
+#### Non-Blocking Implementation Finding Resolved
+
+The implementation review (2026-03-02) noted as non-blocking that the EBNF grammar in `src/book/sui.rs` had not been updated to include `style_decl`. This was resolved in the documentation phase: lines 25-53 of `sui.rs` now contain the full updated grammar matching `SUI_FORMAT.md` exactly.
+
+#### Recommendations (non-blocking)
+
+1. Module doc example in `src/book/sui.rs` (lines 64-75) does not show a `style_decl` line between col and cell declarations. The grammar is correct; the example is incomplete.
+2. Manifest `summary.documents_created: 1` is technically correct (1 new file) but `file-formats.md` was also updated; a `documents_updated` field would be clearer.
+3. Manifest getting_started description says "updated with link to SUI_FORMAT.md" but the actual link goes to `file-formats.md` (which then links to `SUI_FORMAT.md`). Minor imprecision.
+
+#### Patterns/Lessons
+
+- When a format-extension feature adds new syntax, the module-level doc comment grammar should be updated in the implementation phase (not deferred to docs). This avoided a blocking finding but required an extra pass.
+- Cross-referencing strategy (index -> file-formats -> SUI_FORMAT) is navigable and appropriate for a layered format spec. No single-document requirement needed.
