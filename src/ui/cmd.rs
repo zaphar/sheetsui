@@ -82,7 +82,7 @@ fn compare<'i>(input: StrCursor<'i>, compare: &str) -> bool {
 fn is_ws<'r, 'i: 'r>(input: &'r mut StrCursor<'i>) -> bool {
     match input.peek_next() {
         Some(b) => {
-            if *b == (' ' as u8) || *b == ('\t' as u8) || *b == ('\n' as u8) || *b == ('\r' as u8) {
+            if *b == b' ' || *b == b'\t' || *b == b'\n' || *b == b'\r' {
                 input.next();
                 true
             } else {
@@ -96,8 +96,8 @@ fn is_ws<'r, 'i: 'r>(input: &'r mut StrCursor<'i>) -> bool {
 fn try_consume_write<'cmd, 'i: 'cmd>(
     mut input: StrCursor<'i>,
 ) -> Result<Option<Cmd<'cmd>>, &'static str> {
-    const SHORT: &'static str = "w";
-    const LONG: &'static str = "write";
+    const SHORT: &str = "w";
+    const LONG: &str = "write";
 
     if compare(input.clone(), LONG) {
         input.seek(LONG.len());
@@ -111,17 +111,17 @@ fn try_consume_write<'cmd, 'i: 'cmd>(
         return Err("Invalid command: Did you mean to type `write <path>`?");
     }
     let arg = input.span(0..).trim();
-    return Ok(Some(Cmd::Write(if arg.is_empty() {
+    Ok(Some(Cmd::Write(if arg.is_empty() {
         None
     } else {
         Some(arg)
-    })));
+    })))
 }
 
 fn try_consume_export_csv<'cmd, 'i: 'cmd>(
     mut input: StrCursor<'i>,
 ) -> Result<Option<Cmd<'cmd>>, &'static str> {
-    const LONG: &'static str = "export-csv";
+    const LONG: &str = "export-csv";
 
     if compare(input.clone(), LONG) {
         input.seek(LONG.len());
@@ -132,13 +132,13 @@ fn try_consume_export_csv<'cmd, 'i: 'cmd>(
         return Err("Invalid command: Did you mean to type `export <path>`?");
     }
     let arg = input.span(0..).trim();
-    return Ok(Some(Cmd::ExportCsv(arg)));
+    Ok(Some(Cmd::ExportCsv(arg)))
 }
 
 fn try_consume_new_sheet<'cmd, 'i: 'cmd>(
     mut input: StrCursor<'i>,
 ) -> Result<Option<Cmd<'cmd>>, &'static str> {
-    const LONG: &'static str = "new-sheet";
+    const LONG: &str = "new-sheet";
 
     if compare(input.clone(), LONG) {
         input.seek(LONG.len());
@@ -149,17 +149,17 @@ fn try_consume_new_sheet<'cmd, 'i: 'cmd>(
         return Err("Invalid command: Did you mean to type `new-sheet <arg>`?");
     }
     let arg = input.span(0..).trim();
-    return Ok(Some(Cmd::NewSheet(if arg.is_empty() {
+    Ok(Some(Cmd::NewSheet(if arg.is_empty() {
         None
     } else {
         Some(arg)
-    })));
+    })))
 }
 
 fn try_consume_select_sheet<'cmd, 'i: 'cmd>(
     mut input: StrCursor<'i>,
 ) -> Result<Option<Cmd<'cmd>>, &'static str> {
-    const LONG: &'static str = "select-sheet";
+    const LONG: &str = "select-sheet";
 
     if compare(input.clone(), LONG) {
         input.seek(LONG.len());
@@ -173,14 +173,14 @@ fn try_consume_select_sheet<'cmd, 'i: 'cmd>(
     if arg.is_empty() {
         return Err("Invalid command: Did you forget the sheet name? `select-sheet <sheet-name>`?");
     }
-    return Ok(Some(Cmd::SelectSheet(arg)));
+    Ok(Some(Cmd::SelectSheet(arg)))
 }
 
 fn try_consume_color_cell<'cmd, 'i: 'cmd>(
     mut input: StrCursor<'i>,
 ) -> Result<Option<Cmd<'cmd>>, &'static str> {
-    const SHORT: &'static str = "cc";
-    const LONG: &'static str = "color-cell";
+    const SHORT: &str = "cc";
+    const LONG: &str = "color-cell";
     if compare(input.clone(), LONG) {
         input.seek(LONG.len());
     } else if compare(input.clone(), SHORT) {
@@ -192,14 +192,14 @@ fn try_consume_color_cell<'cmd, 'i: 'cmd>(
         return Err("Invalid command: Did you mean to type `color-cell <color>`?");
     }
     let arg = parse_color(input.span(0..).trim())?;
-    return Ok(Some(Cmd::ColorCell(arg)));
+    Ok(Some(Cmd::ColorCell(arg)))
 }
 
 fn try_consume_insert_row<'cmd, 'i: 'cmd>(
     mut input: StrCursor<'i>,
 ) -> Result<Option<Cmd<'cmd>>, &'static str> {
-    const SHORT: &'static str = "ir";
-    const LONG: &'static str = "insert-rows";
+    const SHORT: &str = "ir";
+    const LONG: &str = "insert-rows";
 
     if compare(input.clone(), LONG) {
         input.seek(LONG.len());
@@ -212,22 +212,20 @@ fn try_consume_insert_row<'cmd, 'i: 'cmd>(
         return Err("Invalid command: Did you mean to type `insert-rows <arg>`?");
     }
     let arg = input.span(0..).trim();
-    return Ok(Some(Cmd::InsertRows(if arg.is_empty() {
+    Ok(Some(Cmd::InsertRows(if arg.is_empty() {
         1
+    } else if let Ok(count) = arg.parse() {
+        count
     } else {
-        if let Ok(count) = arg.parse() {
-            count
-        } else {
-            return Err("You must pass in a non negative number for the row count");
-        }
-    })));
+        return Err("You must pass in a non negative number for the row count");
+    })))
 }
 
 fn try_consume_insert_column<'cmd, 'i: 'cmd>(
     mut input: StrCursor<'i>,
 ) -> Result<Option<Cmd<'cmd>>, &'static str> {
-    const SHORT: &'static str = "ic";
-    const LONG: &'static str = "insert-cols";
+    const SHORT: &str = "ic";
+    const LONG: &str = "insert-cols";
 
     if compare(input.clone(), LONG) {
         input.seek(LONG.len());
@@ -240,22 +238,20 @@ fn try_consume_insert_column<'cmd, 'i: 'cmd>(
         return Err("Invalid command: Did you mean to type `insert-cols <arg>`?");
     }
     let arg = input.span(0..).trim();
-    return Ok(Some(Cmd::InsertColumns(if arg.is_empty() {
+    Ok(Some(Cmd::InsertColumns(if arg.is_empty() {
         1
+    } else if let Ok(count) = arg.parse() {
+        count
     } else {
-        if let Ok(count) = arg.parse() {
-            count
-        } else {
-            return Err("You must pass in a non negative number for the column count");
-        }
-    })));
+        return Err("You must pass in a non negative number for the column count");
+    })))
 }
 
 fn try_consume_edit<'cmd, 'i: 'cmd>(
     mut input: StrCursor<'i>,
 ) -> Result<Option<Cmd<'cmd>>, &'static str> {
-    const SHORT: &'static str = "e";
-    const LONG: &'static str = "edit";
+    const SHORT: &str = "e";
+    const LONG: &str = "edit";
 
     if compare(input.clone(), LONG) {
         input.seek(LONG.len());
@@ -268,18 +264,18 @@ fn try_consume_edit<'cmd, 'i: 'cmd>(
         return Err("Invalid command: Did you mean to type `edit <arg>`?");
     }
     let arg = input.span(0..).trim();
-    return Ok(Some(Cmd::Edit(if arg.is_empty() {
+    Ok(Some(Cmd::Edit(if arg.is_empty() {
         return Err("You must pass in a path to edit");
     } else {
         arg
-    })));
+    })))
 }
 
 fn try_consume_help<'cmd, 'i: 'cmd>(
     mut input: StrCursor<'i>,
 ) -> Result<Option<Cmd<'cmd>>, &'static str> {
-    const SHORT: &'static str = "?";
-    const LONG: &'static str = "help";
+    const SHORT: &str = "?";
+    const LONG: &str = "help";
 
     if compare(input.clone(), LONG) {
         input.seek(LONG.len());
@@ -293,18 +289,18 @@ fn try_consume_help<'cmd, 'i: 'cmd>(
         return Err("Invalid command: Did you mean to type `help <arg>`?");
     }
     let arg = input.span(0..).trim();
-    return Ok(Some(Cmd::Help(if arg.is_empty() {
+    Ok(Some(Cmd::Help(if arg.is_empty() {
         None
     } else {
         Some(arg)
-    })));
+    })))
 }
 
 fn try_consume_quit<'cmd, 'i: 'cmd>(
     mut input: StrCursor<'i>,
 ) -> Result<Option<Cmd<'cmd>>, &'static str> {
-    const SHORT: &'static str = "q";
-    const LONG: &'static str = "quit";
+    const SHORT: &str = "q";
+    const LONG: &str = "quit";
 
     if compare(input.clone(), LONG) {
         input.seek(LONG.len());
@@ -317,13 +313,13 @@ fn try_consume_quit<'cmd, 'i: 'cmd>(
     if input.remaining() > 0 {
         return Err("Invalid command: Quit does not take an argument");
     }
-    return Ok(Some(Cmd::Quit));
+    Ok(Some(Cmd::Quit))
 }
 
 fn try_consume_system_paste<'cmd, 'i: 'cmd>(
     mut input: StrCursor<'i>,
 ) -> Result<Option<Cmd<'cmd>>, &'static str> {
-    const LONG: &'static str = "system-paste";
+    const LONG: &str = "system-paste";
 
     if compare(input.clone(), LONG) {
         input.seek(LONG.len());
@@ -333,13 +329,13 @@ fn try_consume_system_paste<'cmd, 'i: 'cmd>(
     if input.remaining() > 0 {
         return Err("Invalid command: system-paste does not take an argument");
     }
-    return Ok(Some(Cmd::SystemPaste));
+    Ok(Some(Cmd::SystemPaste))
 }
 
 fn try_consume_rename_sheet<'cmd, 'i: 'cmd>(
     mut input: StrCursor<'i>,
 ) -> Result<Option<Cmd<'cmd>>, &'static str> {
-    const LONG: &'static str = "rename-sheet";
+    const LONG: &str = "rename-sheet";
     if compare(input.clone(), LONG) {
         input.seek(LONG.len());
     } else {
@@ -353,13 +349,13 @@ fn try_consume_rename_sheet<'cmd, 'i: 'cmd>(
     if arg.is_empty() {
         return Err("Invalid command: `rename-sheet` requires a sheet name argument");
     }
-    return Ok(Some(Cmd::RenameSheet(idx, arg)));
+    Ok(Some(Cmd::RenameSheet(idx, arg)))
 }
 
 fn try_consume_color_rows<'cmd, 'i: 'cmd>(
     mut input: StrCursor<'i>,
 ) -> Result<Option<Cmd<'cmd>>, &'static str> {
-    const LONG: &'static str = "color-rows";
+    const LONG: &str = "color-rows";
     if compare(input.clone(), LONG) {
         input.seek(LONG.len());
     } else {
@@ -370,13 +366,13 @@ fn try_consume_color_rows<'cmd, 'i: 'cmd>(
     }
     let (idx, rest) = try_consume_usize(input.clone());
     let arg = parse_color(rest.span(0..).trim())?;
-    return Ok(Some(Cmd::ColorRows(idx, arg)));
+    Ok(Some(Cmd::ColorRows(idx, arg)))
 }
 
 fn try_consume_color_columns<'cmd, 'i: 'cmd>(
     mut input: StrCursor<'i>,
 ) -> Result<Option<Cmd<'cmd>>, &'static str> {
-    const LONG: &'static str = "color-columns";
+    const LONG: &str = "color-columns";
     if compare(input.clone(), LONG) {
         input.seek(LONG.len());
     } else {
@@ -387,7 +383,7 @@ fn try_consume_color_columns<'cmd, 'i: 'cmd>(
     }
     let (idx, rest) = try_consume_usize(input.clone());
     let arg = parse_color(rest.span(0..).trim())?;
-    return Ok(Some(Cmd::ColorColumns(idx, arg)));
+    Ok(Some(Cmd::ColorColumns(idx, arg)))
 }
 
 pub(crate) fn parse_color(color: &str) -> Result<String, &'static str> {
@@ -441,7 +437,7 @@ fn try_consume_usize<'cmd, 'i: 'cmd>(mut input: StrCursor<'i>) -> (Option<usize>
     {
         out.push(*input.next().unwrap() as char);
     }
-    if out.len() > 0 {
+    if !out.is_empty() {
         return (Some(out.parse().unwrap()), input.clone());
     }
     (None, original_input)

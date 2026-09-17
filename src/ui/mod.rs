@@ -1,5 +1,9 @@
 //! Ui rendering logic
-use std::{path::PathBuf, process::ExitCode, str::FromStr};
+use std::{
+    path::{Path, PathBuf},
+    process::ExitCode,
+    str::FromStr,
+};
 
 use crate::book::{self, AddressRange, Book};
 
@@ -122,8 +126,8 @@ impl<'ws> AppState<'ws> {
             .numeric_prefix
             .iter()
             .map(|c| c.to_digit(10).unwrap())
-            .fold(Some(0 as usize), |acc, n| {
-                acc?.checked_mul(10)?.checked_add(n as usize)
+            .try_fold(0_usize, |acc, n| {
+                acc.checked_mul(10)?.checked_add(n as usize)
             })
             .unwrap_or(1);
         if prefix == 0 {
@@ -214,15 +218,17 @@ impl<'ws> Workspace<'ws> {
     }
 
     pub fn new_empty(_locale: &str, _tz: &str) -> Result<Self> {
-        let mut book = Book::default();
-        book.dirty = false;
+        let book = Book {
+            dirty: false,
+            ..Default::default()
+        };
         Ok(Self::new(book, PathBuf::from_str(DEFAULT_WORKBOOK_NAME).unwrap()))
     }
 
     /// Loads a workspace from a path.
-    pub fn load(path: &PathBuf, locale: &str, tz: &str) -> Result<Self> {
+    pub fn load(path: &Path, locale: &str, tz: &str) -> Result<Self> {
         let book = load_book(path, locale, tz)?;
-        Ok(Workspace::new(book, path.clone()))
+        Ok(Workspace::new(book, path.to_path_buf()))
     }
 
     /// Loads a new `Book` into a `Workspace` from a path.
@@ -238,11 +244,7 @@ impl<'ws> Workspace<'ws> {
     pub fn selected_range_to_string(&self) -> String {
         let state = &self.state;
         if let Some((start, end)) = state.range_select.get_range() {
-            let a1 = format!(
-                "{}{}",
-                start.to_range_part(),
-                format!(":{}", end.to_range_part())
-            );
+            let a1 = format!("{}:{}", start.to_range_part(), end.to_range_part());
             if let Some(ref start_addr) = state.range_select.start {
                 if start_addr.sheet != self.book.location.sheet {
                     return format!(
@@ -256,7 +258,7 @@ impl<'ws> Workspace<'ws> {
             }
             return a1;
         }
-        return String::new();
+        String::new()
     }
 
     /// Move a row down in the current sheet.
@@ -564,7 +566,7 @@ impl<'ws> Workspace<'ws> {
         if key.kind == KeyEventKind::Press {
             match key.code {
                 KeyCode::Esc => {
-                    if self.state.numeric_prefix.len() > 0 {
+                    if !self.state.numeric_prefix.is_empty() {
                         self.state.reset_n_prefix();
                     } else {
                         self.state.range_select.start = None;
@@ -937,7 +939,7 @@ impl<'ws> Workspace<'ws> {
                 }
             }
         }
-        return Ok(None);
+        Ok(None)
     }
 
     fn toggle_bool_style(
@@ -976,18 +978,15 @@ impl<'ws> Workspace<'ws> {
             }
             Some(ClipboardContents::Range(ref rows)) => {
                 let Address { sheet, row, col } = self.book.location.clone();
-                let row_len = rows.len();
-                for ri in 0..row_len {
-                    let columns = &rows[ri];
-                    let col_len = columns.len();
-                    for ci in 0..col_len {
+                for (ri, columns) in rows.iter().enumerate() {
+                    for (ci, cell) in columns.iter().enumerate() {
                         self.book.update_cell(
                             &Address {
                                 sheet,
                                 row: ri + row,
                                 col: ci + col,
                             },
-                            columns[ci].clone(),
+                            cell.clone(),
                         )?;
                     }
                 }
@@ -996,16 +995,15 @@ impl<'ws> Workspace<'ws> {
             None => {
                 let rows = self.get_rows_from_system_clipboard()?;
                 let Address { sheet, row, col } = self.book.location.clone();
-                for ri in 0..rows.len() {
-                    let columns = &rows[ri];
-                    for ci in 0..columns.len() {
+                for (ri, columns) in rows.iter().enumerate() {
+                    for (ci, cell) in columns.iter().enumerate() {
                         self.book.update_cell(
                             &Address {
                                 sheet,
                                 row: ri + row,
                                 col: ci + col,
                             },
-                            columns[ci].clone(),
+                            cell.clone(),
                         )?;
                     }
                 }
@@ -1032,7 +1030,7 @@ impl<'ws> Workspace<'ws> {
             self.state.modality_stack.push(Modality::Quit);
             return true;
         }
-        return false;
+        false
     }
 
     fn enter_command_mode(&mut self) {
@@ -1148,11 +1146,11 @@ impl<'ws> Workspace<'ws> {
         if self.enter_quit_mode() {
             return Ok(None);
         }
-        return Ok(Some(ExitCode::SUCCESS));
+        Ok(Some(ExitCode::SUCCESS))
     }
 }
 
-fn load_book(path: &PathBuf, locale: &str, tz: &str) -> Result<Book, anyhow::Error> {
+fn load_book(path: &Path, locale: &str, tz: &str) -> Result<Book, anyhow::Error> {
     let book = if path.exists() {
         Book::load(path, locale, tz)?
     } else {

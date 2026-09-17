@@ -44,7 +44,7 @@ impl<'w> Widget for Dialog<'w> {
         let content_height = (self.content.height() + 2) as u16;
         let vertical_margin = if content_height <= area.height {
             area.height
-                .saturating_sub(content_height as u16)
+                .saturating_sub(content_height)
                 .saturating_div(2)
         } else {
             2
@@ -52,7 +52,7 @@ impl<'w> Widget for Dialog<'w> {
         let horizontal_margin = if content_width <= area.width {
             area
             .width
-            .saturating_sub(content_width as u16)
+            .saturating_sub(content_width)
             .saturating_div(2)
         } else {
            2
@@ -77,7 +77,7 @@ impl<'w> Widget for Dialog<'w> {
             .style(Style::default().on_black());
         let dialog = Paragraph::new(self.content.clone())
             .wrap(Wrap::default())
-            .scroll(self.scroll.clone())
+            .scroll(self.scroll)
             .block(dialog_block)
             .style(Style::default());
         dialog.render(dialog_area, buf);

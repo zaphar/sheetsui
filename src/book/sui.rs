@@ -610,11 +610,14 @@ fn parse_col_style_decl(line: &str) -> Option<(usize, Vec<(String, String)>)> {
     Some((col, parse_style_kv_pairs(remainder)))
 }
 
+/// A parsed `style` line: the row, the column, and the key/value properties.
+type StyleDecl = (usize, usize, Vec<(String, String)>);
+
 /// Parses a `style <cellref> <key> <val> [<key> <val> ...]` line.
 ///
 /// Returns `Some((row, col, props))` on success, or `None` if the line is not
 /// a style declaration (missing prefix or malformed cellref).
-fn parse_style_decl(line: &str) -> Option<(usize, usize, Vec<(String, String)>)> {
+fn parse_style_decl(line: &str) -> Option<StyleDecl> {
     let rest = line.strip_prefix("style ")?;
     // Find the cellref: next whitespace-delimited token
     let (cellref_str, remainder) = if let Some(pos) = rest.find(' ') {
@@ -735,7 +738,7 @@ mod tests {
         let (book, warnings) = parse_sui("");
         assert_eq!(warnings.len(), 0, "empty input should produce zero warnings");
         let names = book.get_sheet_names();
-        assert!(names.len() >= 1, "book should have at least one sheet");
+        assert!(!names.is_empty(), "book should have at least one sheet");
     }
 
     #[test]

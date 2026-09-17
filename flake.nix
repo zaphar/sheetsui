@@ -62,6 +62,11 @@
     checks = {
       inherit sheetui;
 
+      clippy = craneLib.cargoClippy (commonArgs // {
+        inherit cargoArtifacts;
+        cargoClippyExtraArgs = "--all-targets -- --deny warnings";
+      });
+
       test = craneLib.cargoTest (commonArgs // {
         inherit cargoArtifacts;
         # The clipboard tests reach for the system pasteboard, which the

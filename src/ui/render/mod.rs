@@ -16,18 +16,21 @@ pub mod markdown;
 #[cfg(test)]
 mod test;
 
+/// Draws one piece of the frame into its own rect.
+type RenderFn<'ws> = Box<dyn Fn(Rect, &mut Buffer, &mut Workspace<'ws>)>;
+
+/// A rect paired with the function that draws it.
+type RenderPart<'ws> = (Rect, RenderFn<'ws>);
+
 impl<'ws> Workspace<'ws> {
-    fn get_render_parts(
-        &mut self,
-        area: Rect,
-    ) -> Vec<(Rect, Box<dyn Fn(Rect, &mut Buffer, &mut Self)>)> {
+    fn get_render_parts(&mut self, area: Rect) -> Vec<RenderPart<'ws>> {
         use ratatui::widgets::StatefulWidget;
         let mut cs = vec![
             Constraint::Length(2),
             Constraint::Length(3),
             Constraint::Fill(1),
         ];
-        let mut rs: Vec<Box<dyn Fn(Rect, &mut Buffer, &mut Self)>> = vec![
+        let mut rs: Vec<RenderFn<'ws>> = vec![
             Box::new(|rect: Rect, buf: &mut Buffer, ws: &mut Self| {
                 let tabs = Tabs::new(
                     ws.book
@@ -83,13 +86,12 @@ impl<'ws> Workspace<'ws> {
                 .vertical_margin(2)
                 .horizontal_margin(2)
                 .flex(Flex::Legacy)
-                .split(area.clone())
+                .split(area)
                 .as_ref(),
         );
         rects
             .into_iter()
-            .zip(rs.into_iter())
-            .map(|(rect, f)| (rect, f))
+            .zip(rs)
             .collect()
     }
 }
@@ -137,7 +139,7 @@ impl<'widget, 'ws: 'widget> Widget for &'widget mut Workspace<'ws> {
                     .right_aligned(),
                 );
 
-            for (rect, f) in self.get_render_parts(area.clone()) {
+            for (rect, f) in self.get_render_parts(area) {
                 f(rect, buf, self);
             }
 
