@@ -2,7 +2,6 @@ use std::{path::PathBuf, process::ExitCode};
 
 use clap::Parser;
 use crossterm::event;
-use ratatui;
 use serde_json::to_writer;
 use std::io::Write;
 
@@ -38,7 +37,7 @@ fn run(terminal: &mut ratatui::DefaultTerminal, args: Args) -> anyhow::Result<Ex
             Box::new(move || {
                 let evt = event::read()?;
                 to_writer(&log_file, &evt)?;
-                writeln!(&log_file, "")?;
+                writeln!(&log_file)?;
                 Ok(evt)
             })
         }

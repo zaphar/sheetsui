@@ -19,7 +19,7 @@ pub struct VisibleColumn {
 
 impl<'a> From<&'a VisibleColumn> for Constraint {
     fn from(value: &'a VisibleColumn) -> Self {
-        Constraint::Length(value.length as u16)
+        Constraint::Length(value.length)
     }
 }
 
@@ -36,7 +36,7 @@ pub struct Viewport<'ws> {
     block: Option<Block<'ws>>,
 }
 
-pub(crate) const COLNAMES: [&'static str; 26] = [
+pub(crate) const COLNAMES: [&str; 26] = [
     "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R", "S",
     "T", "U", "V", "W", "X", "Y", "Z",
 ];
@@ -69,13 +69,13 @@ impl<'ws> Viewport<'ws> {
                 length = updated_length;
                 end = row_idx;
             } else if self.selected.row >= row_idx {
-                start = start + 1;
+                start += 1;
                 end = row_idx;
             } else {
                 break;
             }
         }
-        return (start..=end).collect();
+        (start..=end).collect()
     }
 
     pub(crate) fn get_visible_columns(
@@ -99,7 +99,7 @@ impl<'ws> Viewport<'ws> {
                 // We need a sliding window now
                 if let Some(first) = visible.first() {
                     // subtract the first columns size.
-                    length = length - first.length;
+                    length -= first.length;
                     // remove the first column.
                     // TODO(jwall): This is a bit inefficient. Can we do better?
                     visible = visible.into_iter().skip(1).collect();
@@ -111,7 +111,7 @@ impl<'ws> Viewport<'ws> {
                 if length > width {
                     if let Some(first) = visible.first() {
                         // subtract the first columns size.
-                        length = length - first.length;
+                        length -= first.length;
                     }
                     visible = visible.into_iter().skip(1).collect();
                 }
@@ -119,7 +119,7 @@ impl<'ws> Viewport<'ws> {
                 break;
             }
         }
-        return Ok(visible);
+        Ok(visible)
     }
 
     pub fn block(mut self, block: Block<'ws>) -> Self {
@@ -164,7 +164,7 @@ impl<'ws> Viewport<'ws> {
                 .collect();
         let constraints: Vec<Constraint> = visible_columns
             .iter()
-            .map(|vc| Constraint::from(vc))
+            .map(Constraint::from)
             .collect();
         let end_idx = visible_columns.last().unwrap().idx;
         let mut header = Vec::with_capacity(constraints.len());
@@ -182,7 +182,7 @@ impl<'ws> Viewport<'ws> {
                 .bold()
         }));
         let mut col_constraints = vec![Constraint::Length(5)];
-        col_constraints.extend(constraints.into_iter());
+        col_constraints.extend(constraints);
         Ok(Table::new(rows, col_constraints)
             .header(Row::new(header).underlined())
             .column_spacing(0)
@@ -224,7 +224,7 @@ impl<'ws> Viewport<'ws> {
             style_color_hex(&style.font.color, theme).as_ref(),
             Color::White,
         );
-        if let Some((start, end)) = &self.range_selection.map_or(None, |r| r.get_range()) {
+        if let Some((start, end)) = &self.range_selection.and_then(|r| r.get_range()) {
             if ri >= start.row && ri <= end.row && ci >= start.col && ci <= end.col {
                 // This is a selected range
                 cell = cell.fg(Color::Black).bg(Color::LightBlue)

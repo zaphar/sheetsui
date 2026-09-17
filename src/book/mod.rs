@@ -78,22 +78,18 @@ impl<'book> AddressRange<'book> {
     fn get_ranges(&self) -> (Vec<usize>, Vec<usize>) {
         let row_range = if self.start.row <= self.end.row {
             (self.start.row..=self.end.row)
-                .into_iter()
                 .collect::<Vec<usize>>()
         } else {
             let mut v = (self.start.row..=self.end.row)
-                .into_iter()
                 .collect::<Vec<usize>>();
             v.reverse();
             v
         };
         let col_range = if self.start.col <= self.end.col {
             (self.start.col..=self.end.col)
-                .into_iter()
                 .collect::<Vec<usize>>()
         } else {
             let mut v = (self.start.col..=self.end.col)
-                .into_iter()
                 .collect::<Vec<usize>>();
             v.reverse();
             v
@@ -265,7 +261,7 @@ impl Book {
     /// Get rows for current sheet to export.
     pub fn get_export_rows(&self) -> Result<Vec<Vec<String>>> {
         let sheet = self.location.sheet;
-        Ok(self.get_export_rows_for_sheet(sheet)?)
+        self.get_export_rows_for_sheet(sheet)
     }
 
     fn get_rows_for_range(&self, range: &AddressRange) -> Result<Vec<Vec<String>>, anyhow::Error> {
@@ -449,7 +445,7 @@ impl Book {
 
     pub fn clear_cell_contents(&mut self, Address { sheet, row, col }: Address) -> Result<()> {
         self.dirty = true;
-        Ok(self
+        self
             .model
             .range_clear_contents(&Area {
                 sheet,
@@ -458,7 +454,7 @@ impl Book {
                 width: 1,
                 height: 1,
             })
-            .map_err(|s| anyhow!("Unable to clear cell contents {}", s))?)
+            .map_err(|s| anyhow!("Unable to clear cell contents {}", s))
     }
 
     pub fn clear_cell_range(&mut self, start: Address, end: Address) -> Result<()> {
@@ -472,7 +468,7 @@ impl Book {
 
     pub fn clear_cell_all(&mut self, Address { sheet, row, col }: Address) -> Result<()> {
         self.dirty = true;
-        Ok(self
+        self
             .model
             .range_clear_all(&Area {
                 sheet,
@@ -481,7 +477,7 @@ impl Book {
                 width: 1,
                 height: 1,
             })
-            .map_err(|s| anyhow!("Unable to clear cell contents {}", s))?)
+            .map_err(|s| anyhow!("Unable to clear cell contents {}", s))
     }
 
     pub fn clear_cell_range_all(&mut self, start: Address, end: Address) -> Result<()> {
@@ -495,20 +491,16 @@ impl Book {
 
     /// Get a cells formatted content.
     pub fn get_current_cell_rendered(&self) -> Result<String> {
-        Ok(self.get_cell_addr_rendered(&self.location)?)
+        self.get_cell_addr_rendered(&self.location)
     }
 
     pub fn get_cell_style(&self, cell: &Address) -> Option<Style> {
         // TODO(jwall): This is modeled a little weird. We should probably record
         // the error *somewhere* but for the user there is nothing to be done except
         // not use a style.
-        match self
+        self
             .model
-            .get_cell_style(cell.sheet, cell.row as i32, cell.col as i32)
-        {
-            Err(_) => None,
-            Ok(s) => Some(s),
-        }
+            .get_cell_style(cell.sheet, cell.row as i32, cell.col as i32).ok()
     }
 
     /// Set the cell style
@@ -603,30 +595,30 @@ impl Book {
 
     /// Get a cells rendered content for display.
     pub fn get_cell_addr_rendered(&self, Address { sheet, row, col }: &Address) -> Result<String> {
-        Ok(self
+        self
             .model
             .get_formatted_cell_value(*sheet, *row as i32, *col as i32)
-            .map_err(|s| anyhow!("Unable to format cell {}", s))?)
+            .map_err(|s| anyhow!("Unable to format cell {}", s))
     }
 
     /// Get a cells actual content unformatted as a string.
     pub fn get_cell_addr_contents(&self, Address { sheet, row, col }: &Address) -> Result<String> {
-        Ok(self
+        self
             .model
             .get_cell_content(*sheet, *row as i32, *col as i32)
-            .map_err(|s| anyhow!("Unable to format cell {}", s))?)
+            .map_err(|s| anyhow!("Unable to format cell {}", s))
     }
 
     /// Get a cells actual content as a string.
     pub fn get_current_cell_contents(&self) -> Result<String> {
-        Ok(self
+        self
             .model
             .get_cell_content(
                 self.location.sheet,
                 self.location.row as i32,
                 self.location.col as i32,
             )
-            .map_err(|s| anyhow!("Unable to format cell {}", s))?)
+            .map_err(|s| anyhow!("Unable to format cell {}", s))
     }
 
     /// Update the current cell in a book.
@@ -731,8 +723,8 @@ impl Book {
     // Get the size of the current sheet as a `(row_count, column_count)`
     pub fn get_size(&self) -> Result<(usize, usize)> {
         let sheet = &self.get_sheet()?.sheet_data;
-        let mut row_count = 0 as i32;
-        let mut col_count = 0 as i32;
+        let mut row_count = 0_i32;
+        let mut col_count = 0_i32;
         for (ri, cols) in sheet.iter() {
             row_count = max(*ri, row_count);
             for (ci, _) in cols.iter() {
@@ -814,7 +806,7 @@ impl Book {
         // TODO(jwall): Is there a cleaner way to do this with UserModel?
         // Looks like it should be done with:
         // https://docs.rs/ironcalc_base/latest/ironcalc_base/struct.UserModel.html#method.get_worksheets_properties
-        Ok(self
+        self
             .model
             .get_model()
             .workbook
@@ -825,7 +817,7 @@ impl Book {
                     self.location.sheet,
                     s
                 )
-            })?)
+            })
     }
 
     pub(crate) fn get_sheet_name_by_idx(&self, idx: usize) -> Result<&str> {
@@ -862,14 +854,14 @@ pub fn rows_to_clipboard_content(rows: &Vec<Vec<String>>) -> std::result::Result
 }
 
 fn calculate_area(sheet: u32, start: &Address, end: &Address) -> Area {
-    let area = Area {
+    
+    Area {
         sheet,
         row: start.row as i32,
         column: start.col as i32,
         height: (end.row - start.row + 1) as i32,
         width: (end.col - start.col + 1) as i32,
-    };
-    area
+    }
 }
 
 impl Default for Book {
