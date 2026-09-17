@@ -33,9 +33,12 @@
 //! style_decl    ::= 'style' WS cellref WS style_prop (WS style_prop)*
 //! style_prop    ::= style_key WS style_val
 //! style_key     ::= 'font.b' | 'font.i' | 'font.strike' | 'font.color' | 'font.u'
-//!                 | 'fill.bg_color' | 'fill.fg_color'
+//!                 | 'fill.color' | deprecated_key
 //!                 | 'num_fmt'
 //!                 | 'alignment.wrap_text' | 'alignment.horizontal' | 'alignment.vertical'
+//! deprecated_key ::= 'fill.bg_color' | 'fill.fg_color'
+//!                                                  (* read, never written;
+//!                                                     aliases of 'fill.color' *)
 //! style_val     ::= bool_val | quoted_string | hex_color | align_h_val | align_v_val
 //! bool_val      ::= 'true' | 'false'               (* lowercase only *)
 //! hex_color     ::= '#' [0-9A-Fa-f]{6}
@@ -79,6 +82,17 @@
 //! [/sheet]
 //! ```
 //!
+//! ## Deprecated Style Keys
+//!
+//! A fill has one color. The keys `fill.bg_color` and `fill.fg_color` are read
+//! as aliases of `fill.color`, so that files written in the older syntax load
+//! unchanged. They are never written.
+//!
+//! When a line carries more than one of the three keys, only one is applied and
+//! the rest are recorded as parse warnings. `fill.color` outranks
+//! `fill.bg_color`, which outranks `fill.fg_color` — the background is what the
+//! cell shows.
+//!
 //! ## Lenient Parsing (REQ-003, REQ-009)
 //!
 //! Lines that cannot be parsed are skipped and recorded as `ParseWarning`
@@ -87,7 +101,7 @@
 
 use crate::ui::Address;
 use ironcalc::base::expressions::types::Area;
-use ironcalc::base::types::{HorizontalAlignment, Style, VerticalAlignment};
+use ironcalc::base::types::{Color, HorizontalAlignment, Style, Theme, VerticalAlignment};
 use super::{LAST_COLUMN, LAST_ROW};
 use ironcalc::base::UserModel;
 
@@ -197,6 +211,7 @@ pub fn parse_sui(text: &str) -> (Book, Vec<ParseWarning>) {
 pub fn serialize_sui(book: &Book) -> String {
     let mut out = String::new();
     let worksheets = &book.model.get_model().workbook.worksheets;
+    let theme = &book.model.get_model().workbook.theme;
 
     for (idx, ws) in worksheets.iter().enumerate() {
         let sheet_idx = idx as u32;
@@ -234,7 +249,7 @@ pub fn serialize_sui(book: &Book) -> String {
         styled_rows.sort_unstable();
         for row in styled_rows {
             if let Ok(Some(style)) = book.model.get_model().get_row_style(sheet_idx, row) {
-                let props = serialize_style_props(&style);
+                let props = serialize_style_props(&style, theme);
                 if !props.is_empty() {
                     out.push_str(&format!("row_style {} {}\n", row, props.join(" ")));
                 }
@@ -250,7 +265,7 @@ pub fn serialize_sui(book: &Book) -> String {
         styled_col_nums.dedup();
         for col in styled_col_nums {
             if let Ok(Some(style)) = book.model.get_model().get_column_style(sheet_idx, col) {
-                let props = serialize_style_props(&style);
+                let props = serialize_style_props(&style, theme);
                 if !props.is_empty() {
                     out.push_str(&format!("col_style {} {}\n", col, props.join(" ")));
                 }
@@ -271,8 +286,8 @@ pub fn serialize_sui(book: &Book) -> String {
                 col: *col as usize,
             };
             if let Some(style) = book.get_cell_style(&addr) {
-                if !is_default_style(&style) {
-                    let props = serialize_style_props(&style);
+                if !is_default_style(&style, theme) {
+                    let props = serialize_style_props(&style, theme);
                     if !props.is_empty() {
                         let cell_ref = format!("{}{row}", col_index_to_letters(*col as usize));
                         out.push_str(&format!("style {cell_ref} {}\n", props.join(" ")));
@@ -447,11 +462,24 @@ fn escape_string(s: &str) -> String {
     result
 }
 
-/// Returns true when all 11 tracked style properties are at their defaults.
-/// Default font color is `None` or `Some("#000000")`, both treated as default.
-fn is_default_style(style: &Style) -> bool {
-    let font_color_default = style.font.color.is_none()
-        || style.font.color.as_deref() == Some("#000000");
+/// Resolves a style color to a `#RRGGBB` string, or `None` when no color is set.
+///
+/// A theme color resolves through `theme` to the hex it currently shows. The
+/// `.sui` format holds hex only, so the link to the theme slot is not kept.
+fn color_hex(color: &Color, theme: &Theme) -> Option<String> {
+    match color {
+        Color::None => None,
+        other => Some(other.to_rgb(theme)),
+    }
+}
+
+/// Returns true when all 10 tracked style properties are at their defaults.
+/// A font color that is unset or resolves to `#000000` counts as default.
+fn is_default_style(style: &Style, theme: &Theme) -> bool {
+    let font_color_default = match color_hex(&style.font.color, theme) {
+        None => true,
+        Some(hex) => hex.eq_ignore_ascii_case("#000000"),
+    };
     let alignment_default = match &style.alignment {
         None => true,
         Some(a) => {
@@ -465,15 +493,14 @@ fn is_default_style(style: &Style) -> bool {
         && !style.font.strike
         && !style.font.u
         && font_color_default
-        && style.fill.bg_color.is_none()
-        && style.fill.fg_color.is_none()
+        && style.fill.color.is_none()
         && style.num_fmt.eq_ignore_ascii_case("general")
         && alignment_default
 }
 
 /// Serializes non-default style properties as `"key value"` strings.
 /// Returns an empty Vec when all properties are at their defaults.
-fn serialize_style_props(style: &Style) -> Vec<String> {
+fn serialize_style_props(style: &Style, theme: &Theme) -> Vec<String> {
     let mut props = Vec::new();
 
     if style.font.b {
@@ -488,16 +515,13 @@ fn serialize_style_props(style: &Style) -> Vec<String> {
     if style.font.u {
         props.push("font.u true".to_string());
     }
-    if let Some(ref color) = style.font.color {
-        if color != "#000000" {
+    if let Some(color) = color_hex(&style.font.color, theme) {
+        if !color.eq_ignore_ascii_case("#000000") {
             props.push(format!("font.color {color}"));
         }
     }
-    if let Some(ref color) = style.fill.bg_color {
-        props.push(format!("fill.bg_color {color}"));
-    }
-    if let Some(ref color) = style.fill.fg_color {
-        props.push(format!("fill.fg_color {color}"));
+    if let Some(color) = color_hex(&style.fill.color, theme) {
+        props.push(format!("fill.color {color}"));
     }
     if !style.num_fmt.eq_ignore_ascii_case("general") {
         props.push(format!("num_fmt \"{}\"", escape_string(&style.num_fmt)));
@@ -603,6 +627,12 @@ fn parse_style_decl(line: &str) -> Option<(usize, usize, Vec<(String, String)>)>
     Some((row, col, parse_style_kv_pairs(remainder)))
 }
 
+/// Read-only aliases of `fill.color`, in order of precedence. A cell has one
+/// fill color, so a line that carries more than one of these keeps only the
+/// first of them listed here. `fill.bg_color` outranks `fill.fg_color` because
+/// the background is what the cell shows.
+const FILL_ALIASES: &[&str] = &["fill.color", "fill.bg_color", "fill.fg_color"];
+
 /// Applies parsed style key-value pairs to an area in the book.
 /// Emits a `ParseWarning` for each unknown key; known keys are forwarded to
 /// `Book::set_cell_style`.
@@ -619,6 +649,7 @@ fn apply_style_props_area(
         "font.strike",
         "font.color",
         "font.u",
+        "fill.color",
         "fill.bg_color",
         "fill.fg_color",
         "num_fmt",
@@ -627,12 +658,34 @@ fn apply_style_props_area(
         "alignment.wrap_text",
     ];
 
+    // The fill key that wins on this line, if more than one is present.
+    let winning_fill = FILL_ALIASES
+        .iter()
+        .find(|alias| props.iter().any(|(key, _)| key == *alias));
+    if let Some(winner) = winning_fill {
+        for alias in FILL_ALIASES {
+            if alias != winner && props.iter().any(|(key, _)| key == *alias) {
+                warnings.push(ParseWarning {
+                    line: line_num,
+                    message: format!(
+                        "a cell has one fill color: {alias} ignored in favor of {winner}"
+                    ),
+                });
+            }
+        }
+    }
+
     for (key, val) in props {
         if !KNOWN_KEYS.contains(&key.as_str()) {
             warnings.push(ParseWarning {
                 line: line_num,
                 message: format!("unknown style key: {key}"),
             });
+            continue;
+        }
+        // Every fill alias writes the one fill color, so applying a losing
+        // alias would overwrite the winner.
+        if FILL_ALIASES.contains(&key.as_str()) && Some(&key.as_str()) != winning_fill {
             continue;
         }
         let _ = book.set_cell_style(&[(key.as_str(), val.as_str())], area);
@@ -667,7 +720,7 @@ mod tests {
     use crate::book::{Book, LAST_COLUMN, LAST_ROW};
     use crate::ui::Address;
     use ironcalc::base::expressions::types::Area;
-    use ironcalc::base::types::{HorizontalAlignment, VerticalAlignment};
+    use ironcalc::base::types::{Color, HorizontalAlignment, VerticalAlignment};
 
     fn addr(row: usize, col: usize) -> Address {
         Address { sheet: 0, row, col }
@@ -1083,50 +1136,141 @@ mod tests {
         let style = parsed.get_cell_style(&a1).expect("style must be present after round-trip");
         assert_eq!(
             style.font.color,
-            Some("#FF0000".to_string()),
+            Color::Rgb("#FF0000".to_string()),
             "font.color must be #FF0000 after round-trip"
         );
     }
 
     #[test]
-    fn test_style_roundtrip_fill_bg_color() {
+    fn test_style_roundtrip_fill_color() {
         let mut book = Book::default();
         let a1 = addr(1, 1);
-        book.set_cell_style(&[("fill.bg_color", "#AABBCC")], &a1_area())
-            .expect("failed to set fill.bg_color");
+        book.set_cell_style(&[("fill.color", "#AABBCC")], &a1_area())
+            .expect("failed to set fill.color");
         let sui_text = serialize_sui(&book);
         assert!(
-            sui_text.contains("fill.bg_color #AABBCC"),
-            "serialized output must contain 'fill.bg_color #AABBCC', got:\n{sui_text}"
+            sui_text.contains("fill.color #AABBCC"),
+            "serialized output must contain 'fill.color #AABBCC', got:\n{sui_text}"
         );
         let (parsed, warnings) = parse_sui(&sui_text);
         assert_eq!(warnings.len(), 0, "round-tripped styled .sui must have no warnings");
         let style = parsed.get_cell_style(&a1).expect("style must be present after round-trip");
         assert_eq!(
-            style.fill.bg_color,
-            Some("#AABBCC".to_string()),
-            "fill.bg_color must be #AABBCC after round-trip"
+            style.fill.color,
+            Color::Rgb("#AABBCC".to_string()),
+            "fill.color must be #AABBCC after round-trip"
+        );
+    }
+
+
+    #[test]
+    fn test_style_parse_legacy_fill_aliases() {
+        // Files written before the fill lost its separate foreground and
+        // background must still load. Both old keys set the one fill color.
+        for key in ["fill.bg_color", "fill.fg_color"] {
+            let text = format!("[sheet \"Sheet1\"]\nstyle A1 {key} #112233\n[/sheet]\n");
+            let (parsed, warnings) = parse_sui(&text);
+            assert_eq!(warnings.len(), 0, "{key} must parse without warnings");
+            let style = parsed
+                .get_cell_style(&addr(1, 1))
+                .expect("style must be present after parsing");
+            assert_eq!(
+                style.fill.color,
+                Color::Rgb("#112233".to_string()),
+                "{key} must set fill.color to #112233"
+            );
+        }
+    }
+
+    #[test]
+    fn test_style_parse_legacy_fill_precedence() {
+        // A cell has one fill color. When a line carries both old keys, the
+        // background wins, because that is what the cell showed.
+        let text = "[sheet \"Sheet1\"]\nstyle A1 fill.fg_color #222222 fill.bg_color #111111\n[/sheet]\n";
+        let (parsed, warnings) = parse_sui(text);
+        let style = parsed
+            .get_cell_style(&addr(1, 1))
+            .expect("style must be present after parsing");
+        assert_eq!(
+            style.fill.color,
+            Color::Rgb("#111111".to_string()),
+            "fill.bg_color must win over fill.fg_color"
+        );
+        assert_eq!(
+            warnings.len(),
+            1,
+            "dropping the second fill color must be recorded, got: {:?}",
+            warnings.iter().map(|w| &w.message).collect::<Vec<_>>()
         );
     }
 
     #[test]
-    fn test_style_roundtrip_fill_fg_color() {
+    fn test_parse_legacy_file_every_old_key() {
+        // A file written before the fill lost its separate foreground and
+        // background must still load whole, with no warnings.
+        let text = "[sheet \"Sheet1\"]\n\
+col 1 width 15\n\
+row_style 2 fill.bg_color #ABCDEF\n\
+col_style 3 fill.fg_color #FEDCBA\n\
+style A1 font.b true font.i true font.strike true font.u true font.color #FF0000\n\
+style B1 fill.bg_color #FFFFCC num_fmt \"0.00%\"\n\
+style C1 alignment.horizontal center alignment.vertical top alignment.wrap_text true\n\
+A1 = \"hello\"\n\
+[/sheet]\n";
+        let (parsed, warnings) = parse_sui(text);
+        assert_eq!(
+            warnings.len(),
+            0,
+            "a legacy file must load without warnings, got: {:?}",
+            warnings.iter().map(|w| &w.message).collect::<Vec<_>>()
+        );
+
+        let a1 = parsed.get_cell_style(&addr(1, 1)).expect("A1 style");
+        assert!(a1.font.b && a1.font.i && a1.font.strike && a1.font.u);
+        assert_eq!(a1.font.color, Color::Rgb("#FF0000".to_string()));
+
+        let b1 = parsed.get_cell_style(&addr(1, 2)).expect("B1 style");
+        assert_eq!(b1.fill.color, Color::Rgb("#FFFFCC".to_string()));
+        assert_eq!(b1.num_fmt, "0.00%");
+
+        let c1 = parsed.get_cell_style(&addr(1, 3)).expect("C1 style");
+        let alignment = c1.alignment.expect("C1 alignment");
+        assert_eq!(alignment.horizontal, HorizontalAlignment::Center);
+        assert_eq!(alignment.vertical, VerticalAlignment::Top);
+        assert!(alignment.wrap_text);
+
+        assert_eq!(
+            parsed.get_column_size_for_sheet(0, 1).expect("col width"),
+            15
+        );
+        // row_style 2 used the old background key.
+        let row2 = parsed.get_cell_style(&addr(2, 5)).expect("row 2 style");
+        assert_eq!(row2.fill.color, Color::Rgb("#ABCDEF".to_string()));
+        // col_style 3 used the old foreground key; it is the same one color.
+        let col3 = parsed.get_cell_style(&addr(9, 3)).expect("col 3 style");
+        assert_eq!(col3.fill.color, Color::Rgb("#FEDCBA".to_string()));
+
+        // Re-serializing writes the current syntax.
+        let sui_text = serialize_sui(&parsed);
+        assert!(
+            !sui_text.contains("fill.bg_color") && !sui_text.contains("fill.fg_color"),
+            "re-serialized output must use 'fill.color' only, got:\n{sui_text}"
+        );
+    }
+
+    #[test]
+    fn test_style_serialize_never_writes_legacy_fill_aliases() {
         let mut book = Book::default();
-        let a1 = addr(1, 1);
-        book.set_cell_style(&[("fill.fg_color", "#112233")], &a1_area())
-            .expect("failed to set fill.fg_color");
+        book.set_cell_style(&[("fill.bg_color", "#112233")], &a1_area())
+            .expect("failed to set fill color through the alias");
         let sui_text = serialize_sui(&book);
         assert!(
-            sui_text.contains("fill.fg_color #112233"),
-            "serialized output must contain 'fill.fg_color #112233', got:\n{sui_text}"
+            !sui_text.contains("fill.bg_color") && !sui_text.contains("fill.fg_color"),
+            "serialized output must use 'fill.color' only, got:\n{sui_text}"
         );
-        let (parsed, warnings) = parse_sui(&sui_text);
-        assert_eq!(warnings.len(), 0, "round-tripped styled .sui must have no warnings");
-        let style = parsed.get_cell_style(&a1).expect("style must be present after round-trip");
-        assert_eq!(
-            style.fill.fg_color,
-            Some("#112233".to_string()),
-            "fill.fg_color must be #112233 after round-trip"
+        assert!(
+            sui_text.contains("fill.color #112233"),
+            "serialized output must contain 'fill.color #112233', got:\n{sui_text}"
         );
     }
 
@@ -1223,7 +1367,7 @@ mod tests {
         let mut book = Book::default();
         let a1 = addr(1, 1);
         book.set_cell_style(
-            &[("font.b", "true"), ("fill.bg_color", "#FF0000"), ("num_fmt", "0.00")],
+            &[("font.b", "true"), ("fill.color", "#FF0000"), ("num_fmt", "0.00")],
             &a1_area(),
         )
         .expect("failed to set multi-property style");
@@ -1234,8 +1378,8 @@ mod tests {
             "output must contain 'font.b true', got:\n{sui_text}"
         );
         assert!(
-            sui_text.contains("fill.bg_color #FF0000"),
-            "output must contain 'fill.bg_color #FF0000', got:\n{sui_text}"
+            sui_text.contains("fill.color #FF0000"),
+            "output must contain 'fill.color #FF0000', got:\n{sui_text}"
         );
         assert!(
             sui_text.contains("num_fmt \"0.00\""),
@@ -1246,9 +1390,9 @@ mod tests {
         let style = parsed.get_cell_style(&a1).expect("style must be present after round-trip");
         assert!(style.font.b, "font.b must be true after multi-property round-trip");
         assert_eq!(
-            style.fill.bg_color,
-            Some("#FF0000".to_string()),
-            "fill.bg_color must be #FF0000 after multi-property round-trip"
+            style.fill.color,
+            Color::Rgb("#FF0000".to_string()),
+            "fill.color must be #FF0000 after multi-property round-trip"
         );
         assert_eq!(style.num_fmt, "0.00", "num_fmt must be '0.00' after multi-property round-trip");
     }
@@ -1261,10 +1405,10 @@ mod tests {
         book.set_cell_style(&[("font.i", "true")], &a1_area())
             .expect("failed to set font.i on sheet 0");
         book.new_sheet(Some("Sheet2")).expect("failed to add Sheet2");
-        // Set fill.bg_color on sheet 1 / B2
+        // Set fill.color on sheet 1 / B2
         let area_sheet1 = Area { sheet: 1, row: 2, column: 2, width: 1, height: 1 };
-        book.set_cell_style(&[("fill.bg_color", "#0000FF")], &area_sheet1)
-            .expect("failed to set fill.bg_color on sheet 1");
+        book.set_cell_style(&[("fill.color", "#0000FF")], &area_sheet1)
+            .expect("failed to set fill.color on sheet 1");
         let sui_text = serialize_sui(&book);
         let (parsed, warnings) = parse_sui(&sui_text);
         assert_eq!(warnings.len(), 0, "multi-sheet round-trip must have no warnings");
@@ -1273,15 +1417,15 @@ mod tests {
             .get_cell_style(&addr(1, 1))
             .expect("style on sheet 0 A1 must be present after round-trip");
         assert!(style0.font.i, "font.i must be true on sheet 0 A1 after round-trip");
-        // Sheet 1, B2 — fill.bg_color
+        // Sheet 1, B2 — fill.color
         let b2_sheet1 = Address { sheet: 1, row: 2, col: 2 };
         let style1 = parsed
             .get_cell_style(&b2_sheet1)
             .expect("style on sheet 1 B2 must be present after round-trip");
         assert_eq!(
-            style1.fill.bg_color,
-            Some("#0000FF".to_string()),
-            "fill.bg_color must be #0000FF on sheet 1 B2 after round-trip"
+            style1.fill.color,
+            Color::Rgb("#0000FF".to_string()),
+            "fill.color must be #0000FF on sheet 1 B2 after round-trip"
         );
     }
 
@@ -1416,7 +1560,7 @@ mod tests {
             width: LAST_COLUMN,
             height: 1,
         };
-        book.set_cell_style(&[("fill.bg_color", "#ABCDEF")], &row2_full)
+        book.set_cell_style(&[("fill.color", "#ABCDEF")], &row2_full)
             .expect("failed to set row style");
 
         let sui_text = serialize_sui(&book);
@@ -1425,8 +1569,8 @@ mod tests {
             "serialized output must contain a 'row_style 2 ...' line, got:\n{sui_text}"
         );
         assert!(
-            sui_text.contains("fill.bg_color #ABCDEF"),
-            "row_style line must include fill.bg_color #ABCDEF, got:\n{sui_text}"
+            sui_text.contains("fill.color #ABCDEF"),
+            "row_style line must include fill.color #ABCDEF, got:\n{sui_text}"
         );
 
         let (parsed, warnings) = parse_sui(&sui_text);
@@ -1438,9 +1582,9 @@ mod tests {
             .get_cell_style(&empty_in_row2)
             .expect("empty cell in styled row must have a style after round-trip");
         assert_eq!(
-            style.fill.bg_color,
-            Some("#ABCDEF".to_string()),
-            "fill.bg_color must be #ABCDEF on empty cell in styled row after round-trip"
+            style.fill.color,
+            Color::Rgb("#ABCDEF".to_string()),
+            "fill.color must be #ABCDEF on empty cell in styled row after round-trip"
         );
 
         // Stability: serialize → parse → serialize must be byte-identical.

@@ -513,8 +513,7 @@ impl Book {
 
     /// Set the cell style
     /// Valid style paths are:
-    /// * fill.bg_color background color
-    /// * fill.fg_color foreground color
+    /// * fill.color cell fill color
     /// * font.b bold
     /// * font.i italicize
     /// * font.strike strikethrough
@@ -556,8 +555,7 @@ impl Book {
 
     /// Set the column style.
     /// Valid style paths are:
-    /// * fill.bg_color background color
-    /// * fill.fg_color foreground color
+    /// * fill.color cell fill color
     /// * font.b bold
     /// * font.i italicize
     /// * font.strike strikethrough
@@ -581,8 +579,7 @@ impl Book {
 
     /// Set the row style
     /// Valid style paths are:
-    /// * fill.bg_color background color
-    /// * fill.fg_color foreground color
+    /// * fill.color cell fill color
     /// * font.b bold
     /// * font.i italicize
     /// * font.strike strikethrough

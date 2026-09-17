@@ -4,6 +4,7 @@ use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
 use serial_test::serial;
 
 use crate::book;
+use ironcalc::base::types::Color;
 use crate::ui::cmd::parse_color;
 use crate::ui::{Address, ClipboardContents, Modality};
 
@@ -932,13 +933,16 @@ fn test_sheet_navigation() {
 #[test]
 fn test_sheet_column_sizing() {
     let mut ws = new_workspace();
+    // Measured against the starting width, so that a change to the default
+    // column width upstream does not fail this test.
+    let start = ws.book.get_col_size(1).expect("Failed to get column size");
     script()
         .char('3')
         .ctrl('l')
         .run(&mut ws)
         .expect("Failed to run input script");
     assert_eq!(
-        28,
+        start + 3,
         ws.book.get_col_size(1).expect("Failed to get column size")
     );
     script()
@@ -947,7 +951,7 @@ fn test_sheet_column_sizing() {
         .run(&mut ws)
         .expect("Failed to run input script");
     assert_eq!(
-        27,
+        start + 2,
         ws.book.get_col_size(1).expect("Failed to get column size")
     );
 }
@@ -1329,12 +1333,11 @@ fn test_color_cells() {
                 })
                 .expect("failed to get style");
             assert_eq!(
-                "#800000",
-                style
-                    .fill
-                    .bg_color
-                    .expect(&format!("No background color set for {}:{}", ri, ci))
-                    .as_str()
+                Color::Rgb("#800000".to_string()),
+                style.fill.color,
+                "No background color set for {}:{}",
+                ri,
+                ci
             );
         }
     }
@@ -1359,12 +1362,11 @@ fn test_color_row() {
             })
             .expect("failed to get style");
         assert_eq!(
-            "#800000",
-            style
-                .fill
-                .bg_color
-                .expect(&format!("No background color set for {}:{}", 1, ci))
-                .as_str()
+            Color::Rgb("#800000".to_string()),
+            style.fill.color,
+            "No background color set for {}:{}",
+            1,
+            ci
         );
     }
 }
@@ -1388,12 +1390,11 @@ fn test_color_col() {
             })
             .expect("failed to get style");
         assert_eq!(
-            "#800000",
-            style
-                .fill
-                .bg_color
-                .expect(&format!("No background color set for {}:{}", ri, 1))
-                .as_str()
+            Color::Rgb("#800000".to_string()),
+            style.fill.color,
+            "No background color set for {}:{}",
+            ri,
+            1
         );
     }
 }

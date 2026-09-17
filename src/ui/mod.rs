@@ -493,7 +493,7 @@ impl<'ws> Workspace<'ws> {
                 let row = self.book.location.row;
                 for r in row..(row + row_count) {
                     self.book.set_row_style(
-                        &[("fill.bg_color", &color)],
+                        &[("fill.color", &color)],
                         self.book.location.sheet,
                         r,
                     )?;
@@ -505,7 +505,7 @@ impl<'ws> Workspace<'ws> {
                 let col = self.book.location.col;
                 for c in col..(col + col_count) {
                     self.book.set_col_style(
-                        &[("fill.bg_color", &color)],
+                        &[("fill.color", &color)],
                         self.book.location.sheet,
                         c,
                     )?;
@@ -533,7 +533,7 @@ impl<'ws> Workspace<'ws> {
                     }
                 };
                 self.book
-                    .set_cell_style(&[("fill.bg_color", &color)], &area)?;
+                    .set_cell_style(&[("fill.color", &color)], &area)?;
                 Ok(None)
             }
             Ok(Some(Cmd::SystemPaste)) => {
