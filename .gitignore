@@ -5,3 +5,4 @@ tarpaulin-report.*
 *.profraw
 .claude
 CLAUDE.md
+.direnv/
