@@ -1103,9 +1103,9 @@ dependencies = [
 
 [[package]]
 name = "ironcalc"
-version = "0.7.1"
+version = "0.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8e07dd44af17a9e14e7df372347ee0bfc3f0bbbf38894aba5e9abfb53f32ba95"
+checksum = "384c2a5b1e78741cedfaa4fd3209fdb115c1a52453bc10137dfe970ed92872be"
 dependencies = [
  "bitcode",
  "chrono",
@@ -1120,9 +1120,9 @@ dependencies = [
 
 [[package]]
 name = "ironcalc_base"
-version = "0.7.1"
+version = "0.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9f208abea2365061ed7ce3f6a70e7c1537181ea11780de4974aae3082bf4c6d9"
+checksum = "ce1dd83cada7da742782076daccda92e33162e9f4396a958ae3e7c5bb64e6a01"
 dependencies = [
  "bitcode",
  "chrono",
@@ -1131,9 +1131,11 @@ dependencies = [
  "js-sys",
  "rand",
  "regex",
+ "regex-lite",
  "ryu",
  "serde",
  "statrs",
+ "wasm-bindgen",
 ]
 
 [[package]]
@@ -2026,6 +2028,12 @@ dependencies = [
  "memchr",
  "regex-syntax",
 ]
+
+[[package]]
+name = "regex-lite"
+version = "0.1.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cab834c73d247e67f4fae452806d17d3c7501756d98c8808d7c9c7aa7d18f973"
 
 [[package]]
 name = "regex-syntax"

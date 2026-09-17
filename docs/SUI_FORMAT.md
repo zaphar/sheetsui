@@ -23,6 +23,8 @@ This document is the complete format reference for `.sui` files.
 6. [Annotated Example](#annotated-example)
 7. [Parser Behavior](#parser-behavior)
 8. [Backward Compatibility](#backward-compatibility)
+   - [Deprecated style keys](#deprecated-style-keys)
+   - [Older parsers and `style_decl`](#older-parsers-and-style_decl)
 9. [Hand-Editing Guidelines](#hand-editing-guidelines)
 
 ---
@@ -49,9 +51,12 @@ col_width     ::= 'col' WS uint WS 'width' WS uint
 style_decl    ::= 'style' WS cellref WS style_prop (WS style_prop)*
 style_prop    ::= style_key WS style_val
 style_key     ::= 'font.b' | 'font.i' | 'font.strike' | 'font.color' | 'font.u'
-                | 'fill.bg_color' | 'fill.fg_color'
+                | 'fill.color' | deprecated_key
                 | 'num_fmt'
                 | 'alignment.wrap_text' | 'alignment.horizontal' | 'alignment.vertical'
+deprecated_key ::= 'fill.bg_color' | 'fill.fg_color'
+                                                 (* read, never written;
+                                                    aliases of 'fill.color' *)
 style_val     ::= bool_val | quoted_string | hex_color | align_h_val | align_v_val
 bool_val      ::= 'true' | 'false'               (* lowercase only *)
 hex_color     ::= '#' [0-9A-Fa-f]{6}
@@ -146,7 +151,7 @@ Example:
 
 ```
 style A1 font.b true font.color #FF0000
-style B3 fill.bg_color #FFFFCC alignment.horizontal center
+style B3 fill.color #FFFFCC alignment.horizontal center
 ```
 
 See the [Style Keys Reference](#style-keys-reference) for the complete list of
@@ -194,7 +199,7 @@ all accepted); the serializer always writes lowercase (`true` / `false`).
 
 ## Style Keys Reference
 
-The following 11 style properties are supported. The table lists each key, its
+The following 10 style properties are supported. The table lists each key, its
 accepted value type, the default value (the value that is omitted during
 serialization), and a usage example.
 
@@ -205,12 +210,17 @@ serialization), and a usage example.
 | `font.strike`            | `bool_val`     | `false`          | `style A1 font.strike true`            |
 | `font.u`                 | `bool_val`     | `false`          | `style A1 font.u true`                 |
 | `font.color`             | `hex_color`    | `#000000` (black)| `style A1 font.color #FF0000`          |
-| `fill.bg_color`          | `hex_color`    | none             | `style A1 fill.bg_color #FFFFCC`       |
-| `fill.fg_color`          | `hex_color`    | none             | `style A1 fill.fg_color #CCCCFF`       |
+| `fill.color`             | `hex_color`    | none             | `style A1 fill.color #FFFFCC`          |
 | `num_fmt`                | `quoted_string`| `"General"`      | `style A1 num_fmt "0.00%"`             |
 | `alignment.wrap_text`    | `bool_val`     | `false`          | `style A1 alignment.wrap_text true`    |
 | `alignment.horizontal`   | `align_h_val`  | `general`        | `style A1 alignment.horizontal center` |
 | `alignment.vertical`     | `align_v_val`  | `bottom`         | `style A1 alignment.vertical top`      |
+
+`fill.bg_color` and `fill.fg_color` are deprecated. They are read, never
+written — see [Deprecated style keys](#deprecated-style-keys).
+
+A color is always a `hex_color`. A theme color read from an `.xlsx` workbook is
+written as the hex it resolves to, so the link to the theme slot is not kept.
 
 ### `alignment.horizontal` valid values
 
@@ -299,7 +309,7 @@ col 2 width 10                          # Column B is 10 characters wide
 # key-value pairs.
 
 style A1 font.b true font.color #1F4E79         # Bold, dark-blue font
-style B1 fill.bg_color #FFFFCC                  # Light-yellow background
+style B1 fill.color #FFFFCC                     # Light-yellow background
 style C1 alignment.horizontal right             # Right-align
 style A2 font.i true alignment.wrap_text true   # Italic, text wraps in cell
 style B2 num_fmt "0.00%"                        # Percentage format
@@ -349,6 +359,33 @@ applied.
 ---
 
 ## Backward Compatibility
+
+### Deprecated style keys
+
+A cell has one fill color, written as `fill.color`. The keys `fill.bg_color` and
+`fill.fg_color` are **deprecated**: the parser accepts them as aliases of
+`fill.color`, so that files written in the older syntax load unchanged. The
+serializer never writes them, so a file rewritten by sheetui uses `fill.color`.
+
+When a line carries more than one of the three keys, only one is applied and the
+rest are recorded as `ParseWarning`s. The precedence is:
+
+| Key              | Status     | Precedence |
+|------------------|------------|------------|
+| `fill.color`     | Current    | Highest    |
+| `fill.bg_color`  | Deprecated | Middle     |
+| `fill.fg_color`  | Deprecated | Lowest     |
+
+`fill.bg_color` outranks `fill.fg_color` because the background is what the cell
+shows.
+
+```
+# Both keys on one line: the cell fills with #111111, and #222222
+# is dropped with a warning.
+style A1 fill.fg_color #222222 fill.bg_color #111111
+```
+
+### Older parsers and `style_decl`
 
 The `style_decl` production was added in iteration 2 of the `.sui` format.
 

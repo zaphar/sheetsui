@@ -215,8 +215,15 @@ impl<'ws> Viewport<'ws> {
         ci: usize,
         mut cell: Cell<'widget>,
     ) -> Cell<'widget> {
-        let bg_color = map_color(style.fill.bg_color.as_ref(), Color::Rgb(35, 33, 54));
-        let fg_color = map_color(style.fill.fg_color.as_ref(), Color::White);
+        let theme = &self.book.model.get_model().workbook.theme;
+        let bg_color = map_color(
+            style_color_hex(&style.fill.color, theme).as_ref(),
+            Color::Rgb(35, 33, 54),
+        );
+        let fg_color = map_color(
+            style_color_hex(&style.font.color, theme).as_ref(),
+            Color::White,
+        );
         if let Some((start, end)) = &self.range_selection.map_or(None, |r| r.get_range()) {
             if ri >= start.row && ri <= end.row && ci >= start.col && ci <= end.col {
                 // This is a selected range
@@ -231,6 +238,18 @@ impl<'ws> Viewport<'ws> {
             _ => cell,
         };
         cell
+    }
+}
+
+/// Resolves an ironcalc style color to a `#RRGGBB` string, or `None` when the
+/// style sets no color. A theme color resolves through the workbook theme.
+fn style_color_hex(
+    color: &ironcalc::base::types::Color,
+    theme: &ironcalc::base::types::Theme,
+) -> Option<String> {
+    match color {
+        ironcalc::base::types::Color::None => None,
+        other => Some(other.to_rgb(theme)),
     }
 }
 
