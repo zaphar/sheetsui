@@ -2364,7 +2364,7 @@ dependencies = [
 [[package]]
 name = "slice-utils"
 version = "0.1.0"
-source = "git+https://tangled.org/zaphar.bsky.social/slice-cursor-rs#699df1c4c9d50e0c2ac2801723f8f2238b4f8c3b"
+source = "git+https://tangled.org/did:plc:ani2kzhl2ct3dg6ifo4pugkb#699df1c4c9d50e0c2ac2801723f8f2238b4f8c3b"
 
 [[package]]
 name = "smallvec"
