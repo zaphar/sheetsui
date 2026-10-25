@@ -1,11 +1,12 @@
 # File Formats
 
-sheetui supports two file formats. The format is always determined by the file
+sheetui supports three file formats. The format is always determined by the file
 extension when opening or saving.
 
 | Extension | Format | Notes |
 |-----------|--------|-------|
 | `.xlsx`   | Excel-compatible | Use for sharing with other applications |
+| `.csv`    | Comma-separated values | One sheet of values; formulas and styles are not saved |
 | `.sui` (or any other extension) | sheetui native | Default for new workbooks; human-readable |
 
 ## The `.sui` Format
@@ -139,16 +140,35 @@ files. When saving as `.sui`, style properties are written as `style`
 declarations. See [SUI_FORMAT.md](./SUI_FORMAT.md) for the full list of
 supported style properties.
 
+## The `.csv` Format
+
+A `.csv` file opens as a workbook with one sheet. The sheet takes its name from
+the file name: `sales.csv` opens as the sheet `sales`.
+
+When sheetui reads a `.csv` file:
+
+* The first row is data, not a header row.
+* Rows can have different numbers of fields.
+* Numbers become numbers.
+* All other fields are text. A field such as `=SUM(A1:A3)` or `-A1` stays
+  literal text; sheetui does not calculate it.
+
+When sheetui writes a `.csv` file it writes only the **first sheet**, and it
+writes each cell's displayed value. A formula is written as its result, not as
+the formula. Cell styles, column widths, and all other sheets are lost. To keep
+them, save to `.sui` or `.xlsx` with `:w <path>`.
+
 ## Format Auto-Detection
 
-sheetui determines the format from the file extension:
+sheetui determines the format from the file extension (upper or lower case):
 
 * `.xlsx` → Excel format
+* `.csv` → CSV format
 * Anything else → `.sui` format
 
-If you open a file with an unrecognised extension (such as `.csv`) sheetui will
-attempt to parse it as `.sui`. To explicitly choose a format, use the
-appropriate extension when saving with `:w <path>`.
+If you open a file with an unrecognised extension, sheetui will attempt to parse
+it as `.sui`. To explicitly choose a format, use the appropriate extension when
+saving with `:w <path>`.
 
 ## Choosing a Format
 
@@ -159,3 +179,4 @@ appropriate extension when saving with `:w <path>`.
 | Sharing with Excel / LibreOffice | `.xlsx` |
 | Preserving cell styling (within sheetui) | `.sui` |
 | Preserving cell styling (cross-application) | `.xlsx` |
+| Plain data for other tools | `.csv` |

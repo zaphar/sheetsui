@@ -189,14 +189,13 @@ fn test_book_get_exportable_rows() {
     .expect("failed to edit cell");
 
     let rows = book.get_export_rows().expect("Failed to get export rows");
-    assert_eq!(4, rows.len());
+    assert_eq!(3, rows.len());
     assert_eq!(
         rows,
         vec![
-            vec!["", "", "", "", "", "", ""],
-            vec!["", "", "", "1-3", "", "", ""],
-            vec!["", "", "", "", "", "", ""],
-            vec!["", "", "", "", "", "", "3-6"],
+            vec!["", "", "1-3", "", "", ""],
+            vec!["", "", "", "", "", ""],
+            vec!["", "", "", "", "", "3-6"],
         ]
     );
 }
@@ -253,7 +252,7 @@ fn test_sheet_to_clipboard_content() {
     assert!(html.contains("B2"));
     
     // Check CSV content
-    let expected_csv = ",,\n,A1,B1\n,A2,B2\n";
+    let expected_csv = "A1,B1\nA2,B2\n";
     assert_eq!(csv, expected_csv);
 }
 
@@ -514,4 +513,112 @@ fn test_cross_format_conversion_xlsx_to_sui() {
     );
     std::fs::remove_file(&path_xlsx).ok();
     std::fs::remove_file(&path_sui).ok();
+}
+
+// -------------------------------------------------------------------------
+// CSV load and save
+// -------------------------------------------------------------------------
+
+fn csv_book(text: &str) -> Book {
+    Book::from_csv_reader(text.as_bytes(), None).expect("parse csv")
+}
+
+fn rendered(book: &Book, row: usize, col: usize) -> String {
+    book.get_cell_addr_rendered(&phase2_addr(row, col))
+        .expect("render cell")
+}
+
+#[test]
+fn test_csv_loads_rows_and_columns_from_a1() {
+    let book = csv_book("a,b\nc,d\n");
+    assert_eq!(rendered(&book, 1, 1), "a");
+    assert_eq!(rendered(&book, 1, 2), "b");
+    assert_eq!(rendered(&book, 2, 1), "c");
+    assert_eq!(rendered(&book, 2, 2), "d");
+    assert_eq!(book.get_format(), &FileFormat::Csv);
+    assert!(!book.dirty, "a freshly loaded book is not dirty");
+}
+
+#[test]
+fn test_csv_keeps_first_row_as_data() {
+    let book = csv_book("name,qty\nfoo,1\n");
+    assert_eq!(rendered(&book, 1, 1), "name");
+    assert_eq!(rendered(&book, 2, 1), "foo");
+}
+
+#[test]
+fn test_csv_accepts_ragged_rows() {
+    let book = csv_book("a\nb,c,d\ne,f\n");
+    assert_eq!(rendered(&book, 1, 1), "a");
+    assert_eq!(rendered(&book, 2, 3), "d");
+    assert_eq!(rendered(&book, 3, 2), "f");
+}
+
+#[test]
+fn test_csv_numbers_are_numbers() {
+    let mut book = csv_book("1,-2.5,+3\n");
+    book.update_cell(&phase2_addr(2, 1), "=A1+B1+C1").expect("set formula");
+    book.evaluate();
+    assert_eq!(rendered(&book, 2, 1), "1.5");
+}
+
+#[test]
+fn test_csv_formula_text_stays_literal() {
+    let book = csv_book("=1+1,-A1,+B2,'quoted\n");
+    assert_eq!(rendered(&book, 1, 1), "=1+1");
+    assert_eq!(rendered(&book, 1, 2), "-A1");
+    assert_eq!(rendered(&book, 1, 3), "+B2");
+    assert_eq!(rendered(&book, 1, 4), "'quoted");
+}
+
+#[test]
+fn test_csv_quoted_fields() {
+    let book = csv_book("\"a,b\",\"line1\nline2\",\"say \"\"hi\"\"\"\n");
+    assert_eq!(rendered(&book, 1, 1), "a,b");
+    assert_eq!(rendered(&book, 1, 2), "line1\nline2");
+    assert_eq!(rendered(&book, 1, 3), "say \"hi\"");
+}
+
+#[test]
+fn test_csv_empty_input() {
+    let book = csv_book("");
+    assert_eq!(book.get_export_rows_for_sheet(0).expect("rows").len(), 0);
+}
+
+#[test]
+fn test_load_csv_file_by_extension_names_sheet_from_stem() {
+    let path = tmp_path("load_csv.CSV");
+    std::fs::write(&path, "x,1\n").expect("write temp .csv");
+    let book = Book::load(&path, "en", "America/New_York").expect("load .csv");
+    assert_eq!(book.get_format(), &FileFormat::Csv);
+    assert_eq!(book.get_sheet_names(), vec!["sheetui_test_load_csv".to_string()]);
+    assert_eq!(rendered(&book, 1, 1), "x");
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
+fn test_csv_save_round_trip_is_stable() {
+    let path = tmp_path("round_trip.csv");
+    let content = "a,1\n=x,\"q,r\"\n";
+    std::fs::write(&path, content).expect("write temp .csv");
+    let mut book = Book::load(&path, "en", "America/New_York").expect("load .csv");
+    book.save().expect("save .csv");
+    assert_eq!(std::fs::read_to_string(&path).expect("read back"), content);
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
+fn test_csv_save_writes_first_sheet_values() {
+    let path = tmp_path("save_values.csv");
+    let mut book = Book::default();
+    book.update_cell(&phase2_addr(1, 1), "2").expect("set A1");
+    book.update_cell(&phase2_addr(1, 2), "=A1*3").expect("set B1");
+    book.new_sheet(Some("Other")).expect("add sheet");
+    book.update_cell(&Address { sheet: 1, row: 1, col: 1 }, "ignored")
+        .expect("set Other!A1");
+    book.evaluate();
+    book.save_as(&path).expect("save_as .csv");
+    assert_eq!(book.get_format(), &FileFormat::Csv);
+    assert_eq!(std::fs::read_to_string(&path).expect("read back"), "2,6\n");
+    std::fs::remove_file(&path).ok();
 }

@@ -23,6 +23,10 @@ pub enum FileFormat {
     Sui,
     /// Microsoft Excel `.xlsx` format.
     Xlsx,
+    /// Comma-separated values. Holds one sheet of literal values: a save
+    /// writes the first sheet's rendered values and drops formulas, styles
+    /// and all other sheets.
+    Csv,
 }
 
 use crate::ui::Address;
@@ -163,15 +167,80 @@ impl Book {
             .as_deref()
         {
             Some("xlsx") => FileFormat::Xlsx,
+            Some("csv") => FileFormat::Csv,
             _ => FileFormat::Sui,
         }
+    }
+
+    /// Construct a one-sheet book from CSV data.
+    ///
+    /// Every field is literal data: numbers become numbers, and text that
+    /// would parse as a formula stays text. Rows may have different lengths.
+    /// The sheet takes `sheet_name` when ironcalc accepts it as a sheet name,
+    /// else it keeps the default name.
+    pub fn from_csv_reader<R: std::io::Read>(reader: R, sheet_name: Option<&str>) -> Result<Self> {
+        let model = UserModel::new_empty("Sheet1", "en", "America/New_York", "en")
+            .map_err(|e| anyhow!(e))?;
+        let mut book = Self::new(model);
+        if let Some(name) = sheet_name {
+            // An invalid sheet name is not a reason to refuse the file.
+            let _ = book.set_sheet_name(0, name);
+        }
+        let mut reader = csv::ReaderBuilder::new()
+            .has_headers(false)
+            .flexible(true)
+            .from_reader(reader);
+        // Evaluating after every cell makes a large file load in quadratic time.
+        book.model.pause_evaluation();
+        let result = book.fill_from_csv(&mut reader);
+        book.model.resume_evaluation();
+        result?;
+        book.evaluate();
+        book.format = FileFormat::Csv;
+        book.dirty = false;
+        Ok(book)
+    }
+
+    fn fill_from_csv<R: std::io::Read>(&mut self, reader: &mut csv::Reader<R>) -> Result<()> {
+        for (ri, record) in reader.byte_records().enumerate() {
+            let record = record?;
+            for (ci, field) in record.iter().enumerate() {
+                if field.is_empty() {
+                    continue;
+                }
+                let addr = Address {
+                    sheet: 0,
+                    row: ri + 1,
+                    col: ci + 1,
+                };
+                self.update_cell_literal(&addr, &String::from_utf8_lossy(field))?;
+            }
+        }
+        Ok(())
+    }
+
+    /// Set a cell to `value` as data, never as a formula.
+    fn update_cell_literal(&mut self, location: &Address, value: &str) -> Result<()> {
+        // ironcalc reads a leading `=` as a formula and strips a leading `'`.
+        // A `'` prefix stores the rest as text.
+        if value.starts_with(['=', '\'']) {
+            return self.update_cell(location, format!("'{value}"));
+        }
+        self.update_cell(location, value)?;
+        // ironcalc also reads `+`/`-` followed by a non-number (`-A1`) as a
+        // formula. Its number parser is not public, so check the result.
+        if value.starts_with(['+', '-']) && self.get_cell_addr_contents(location)?.starts_with('=') {
+            self.update_cell(location, format!("'{value}"))?;
+        }
+        Ok(())
     }
 
     /// Load a book from `path`, auto-detecting the format by file extension.
     ///
     /// Extension mapping (case-insensitive):
-    /// - `.sui` → [`FileFormat::Sui`]
     /// - `.xlsx` → [`FileFormat::Xlsx`]
+    /// - `.csv` → [`FileFormat::Csv`]
+    /// - anything else → [`FileFormat::Sui`]
     pub fn load(path: &Path, locale: &str, tz: &str) -> Result<Self> {
         let format = Self::format_for_path(path);
         let mut book = match format {
@@ -191,6 +260,12 @@ impl Book {
                 let (mut parsed, warnings) = sui::parse_sui(&text);
                 parsed.parse_warnings = warnings;
                 parsed
+            }
+            FileFormat::Csv => {
+                let file = std::fs::File::open(path)
+                    .map_err(|e| anyhow!("Failed to open .csv file: {}", e))?;
+                let sheet_name = path.file_stem().and_then(|s| s.to_str());
+                Self::from_csv_reader(std::io::BufReader::new(file), sheet_name)?
             }
         };
         book.format = format;
@@ -218,6 +293,11 @@ impl Book {
                 let writer = std::io::BufWriter::new(file);
                 save_xlsx_to_writer(self.model.get_model(), writer)?;
             }
+            FileFormat::Csv => {
+                let file = std::fs::File::create(&path)
+                    .map_err(|e| anyhow!("Failed to create .csv file: {}", e))?;
+                self.csv_for_sheet(0, std::io::BufWriter::new(file))?;
+            }
         }
         self.dirty = false;
         Ok(())
@@ -243,6 +323,8 @@ impl Book {
         for row in rows {
             writer.write_record(row)?;
         }
+        // Drop flushes too, but discards the error.
+        writer.flush()?;
         Ok(())
     }
 
@@ -296,10 +378,12 @@ impl Book {
                 }
             }
         }
+        // Rows and columns are 1-based, so a range from 0 adds an empty
+        // first row and column.
         let mut rows = Vec::new();
-        for ri in 0..=max_row {
+        for ri in 1..=max_row {
             let mut row = Vec::new();
-            for ci in 0..=max_col {
+            for ci in 1..=max_col {
                 let cell_content = self.get_cell_addr_rendered(&Address {
                     sheet,
                     row: ri as usize,
