@@ -115,3 +115,37 @@ fn test_color_mapping() {
         assert_eq!(super::viewport::map_color(s.as_ref(), Color::Gray), c);
     }
 }
+
+#[test]
+fn test_draw_shows_the_command_cursor() {
+    use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
+    use ratatui::{backend::TestBackend, Terminal};
+
+    let mut ws = crate::ui::Workspace::new_empty("en", "America/New_York").expect("workspace");
+    for code in [
+        KeyCode::Char(':'),
+        KeyCode::Char('a'),
+        KeyCode::Char('b'),
+        KeyCode::Left,
+    ] {
+        ws.handle_input(Event::Key(KeyEvent::new(code, KeyModifiers::empty())))
+            .expect("handle key");
+    }
+    let mut term = Terminal::new(TestBackend::new(60, 14)).expect("terminal");
+    term.draw(|f| super::draw(f, &mut ws)).expect("draw");
+    // Find the prompt text "ab" on screen; the cursor must be on the "b".
+    let buf = term.backend().buffer().clone();
+    let (x, y) = (0..buf.area.height)
+        .find_map(|y| {
+            (0..buf.area.width - 1)
+                .find(|&x| buf[(x, y)].symbol() == "a" && buf[(x + 1, y)].symbol() == "b")
+                .map(|x| (x, y))
+        })
+        .expect("prompt text on screen");
+    let mut backend = term.backend().clone();
+    use ratatui::backend::Backend;
+    assert_eq!(
+        backend.get_cursor_position().expect("cursor"),
+        ratatui::layout::Position::new(x + 1, y)
+    );
+}

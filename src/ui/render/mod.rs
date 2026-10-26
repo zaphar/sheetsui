@@ -149,5 +149,10 @@ impl<'widget, 'ws: 'widget> Widget for &'widget mut Workspace<'ws> {
 }
 
 pub fn draw(frame: &mut Frame, ws: &mut Workspace) {
-    frame.render_widget(ws, frame.area());
+    frame.render_widget(&mut *ws, frame.area());
+    // The prompt is drawn into a buffer, so only the frame can show the
+    // terminal cursor. Rendering the prompt set its position.
+    if ws.state.modality() == &Modality::Command {
+        frame.set_cursor_position(ws.state.command_state.cursor());
+    }
 }
