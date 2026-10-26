@@ -1,4 +1,5 @@
 //! Command mode command parsers.
+use ironcalc::base::expressions::utils::{column_to_number, is_valid_column};
 use slice_utils::{Measured, Peekable, Seekable, Span, StrCursor};
 
 /// A parsed command entered in during command mode.
@@ -17,7 +18,16 @@ pub enum Cmd<'a> {
     Help(Option<&'a str>),
     ExportCsv(&'a str),
     SystemPaste,
+    Sort { skip: usize, keys: Vec<CmdSortKey> },
     Quit,
+}
+
+/// One key of a `sort` command.
+#[derive(Debug, PartialEq, Eq)]
+pub struct CmdSortKey {
+    /// The key column. `None` means the cursor's column.
+    pub col: Option<usize>,
+    pub ascending: bool,
 }
 
 /// Parse command text into a `Cmd`.
@@ -70,6 +80,9 @@ pub fn parse<'cmd, 'i: 'cmd>(input: &'i str) -> Result<Option<Cmd<'cmd>>, &'stat
         return Ok(Some(cmd));
     }
     if let Some(cmd) = try_consume_system_paste(cursor.clone())? {
+        return Ok(Some(cmd));
+    }
+    if let Some(cmd) = try_consume_sort(cursor.clone())? {
         return Ok(Some(cmd));
     }
     Ok(None)
@@ -384,6 +397,79 @@ fn try_consume_color_columns<'cmd, 'i: 'cmd>(
     let (idx, rest) = try_consume_usize(input.clone());
     let arg = parse_color(rest.span(0..).trim())?;
     Ok(Some(Cmd::ColorColumns(idx, arg)))
+}
+
+const SORT_USAGE: &str =
+    "Invalid command: usage is `sort [skip <N>] [asc|desc]` or `sort [skip <N>] <column> [asc|desc] ...`";
+
+fn try_consume_sort<'cmd, 'i: 'cmd>(
+    mut input: StrCursor<'i>,
+) -> Result<Option<Cmd<'cmd>>, &'static str> {
+    const LONG: &str = "sort";
+
+    if compare(input.clone(), LONG) {
+        input.seek(LONG.len());
+    } else {
+        return Ok(None);
+    }
+    if input.remaining() > 0 && !is_ws(&mut input) {
+        return Err(SORT_USAGE);
+    }
+    let mut words = input.span(0..).split_whitespace().peekable();
+    let mut skip = 0;
+    if words.next_if(|w| w.eq_ignore_ascii_case("skip")).is_some() {
+        skip = words
+            .next()
+            .and_then(|n| n.parse().ok())
+            .ok_or(SORT_USAGE)?;
+    }
+    let mut keys: Vec<CmdSortKey> = Vec::new();
+    // Whether the last key already has a direction written after it.
+    let mut has_direction = false;
+    for word in words {
+        let ascending = if word.eq_ignore_ascii_case("asc") {
+            Some(true)
+        } else if word.eq_ignore_ascii_case("desc") {
+            Some(false)
+        } else {
+            None
+        };
+        match (ascending, keys.last_mut()) {
+            // A lone direction applies to the cursor's column.
+            (Some(ascending), None) => {
+                keys.push(CmdSortKey {
+                    col: None,
+                    ascending,
+                });
+                has_direction = true;
+            }
+            // A direction applies to the column just before it.
+            (Some(ascending), Some(key)) if !has_direction => {
+                key.ascending = ascending;
+                has_direction = true;
+            }
+            (None, last) if last.as_deref().is_none_or(|k| k.col.is_some()) => {
+                let name = word.to_ascii_uppercase();
+                if !is_valid_column(&name) {
+                    return Err(SORT_USAGE);
+                }
+                let col = column_to_number(&name).map_err(|_| SORT_USAGE)?;
+                keys.push(CmdSortKey {
+                    col: Some(col as usize),
+                    ascending: false,
+                });
+                has_direction = false;
+            }
+            _ => return Err(SORT_USAGE),
+        }
+    }
+    if keys.is_empty() {
+        keys.push(CmdSortKey {
+            col: None,
+            ascending: false,
+        });
+    }
+    Ok(Some(Cmd::Sort { skip, keys }))
 }
 
 pub(crate) fn parse_color(color: &str) -> Result<String, &'static str> {

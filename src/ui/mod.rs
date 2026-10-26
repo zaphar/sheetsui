@@ -5,11 +5,11 @@ use std::{
     str::FromStr,
 };
 
-use crate::book::{self, AddressRange, Book};
+use crate::book::{self, AddressRange, Book, SortKey};
 
 use anyhow::{anyhow, Result};
 use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
-use ironcalc::base::expressions::types::Area;
+use ironcalc::base::expressions::{types::Area, utils::number_to_column};
 use ratatui::{
     buffer::Buffer,
     layout::{Constraint, Flex, Layout},
@@ -25,7 +25,7 @@ pub mod render;
 #[cfg(test)]
 mod test;
 
-use cmd::Cmd;
+use cmd::{Cmd, CmdSortKey};
 use render::{markdown::Markdown, viewport::ViewportState};
 
 /// Default file name used when creating a new empty workbook.
@@ -544,6 +544,13 @@ impl<'ws> Workspace<'ws> {
                 self.paste_range()?;
                 Ok(None)
             }
+            Ok(Some(Cmd::Sort { skip, keys })) => {
+                // A sort error is the user's to fix, so show it, do not exit.
+                if let Err(e) = self.sort_rows(skip, &keys) {
+                    self.enter_dialog_mode(Markdown::from_str(&e.to_string()));
+                }
+                Ok(None)
+            }
             Ok(None) => {
                 self.enter_dialog_mode(Markdown::from_str(&format!(
                     "Unrecognized commmand {}",
@@ -703,6 +710,45 @@ impl<'ws> Workspace<'ws> {
             }
         }
         Ok(())
+    }
+
+    /// Sort the rows of the last range selection, or of the used area when
+    /// there is no selection, keeping the first `skip` rows in place.
+    fn sort_rows(&mut self, skip: usize, keys: &[CmdSortKey]) -> Result<()> {
+        let (first_row, last_row, columns) = match self.state.range_select.get_range() {
+            Some((start, end)) => (start.row, end.row, Some(start.col..=end.col)),
+            None => (1, self.book.get_size()?.0, None),
+        };
+        let row_count = (last_row + 1).saturating_sub(first_row);
+        if row_count == 0 {
+            return Ok(());
+        }
+        if skip > 0 && skip >= row_count {
+            return Err(anyhow!(
+                "All {} rows are skipped; nothing to sort.",
+                row_count
+            ));
+        }
+        let keys = keys
+            .iter()
+            .map(|k| {
+                let col = k.col.unwrap_or(self.book.location.col);
+                if let Some(columns) = &columns {
+                    if !columns.contains(&col) {
+                        return Err(anyhow!(
+                            "Key column {} is outside the selected range.",
+                            number_to_column(col as i32).unwrap_or_default()
+                        ));
+                    }
+                }
+                Ok(SortKey {
+                    col,
+                    ascending: k.ascending,
+                })
+            })
+            .collect::<Result<Vec<_>>>()?;
+        self.book
+            .sort_rows(self.book.location.sheet, first_row + skip, last_row, &keys)
     }
 
     fn get_rows_from_system_clipboard(&mut self) -> Result<Vec<Vec<String>>, anyhow::Error> {

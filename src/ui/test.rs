@@ -8,7 +8,8 @@ use ironcalc::base::types::Color;
 use crate::ui::cmd::parse_color;
 use crate::ui::{Address, ClipboardContents, Modality};
 
-use super::cmd::{parse, Cmd};
+use super::cmd::{parse, Cmd, CmdSortKey};
+use super::render::markdown::Markdown;
 use super::{parse_csv_rows, Workspace};
 
 #[derive(Default)]
@@ -1817,4 +1818,178 @@ fn test_parse_warnings_stored_after_loading_malformed_sui() {
         "valid cell must be loaded despite malformed lines"
     );
     std::fs::remove_file(&path).ok();
+}
+
+// ---------------------------------------------------------------------------
+// Sort command
+// ---------------------------------------------------------------------------
+
+fn sort_key(col: Option<usize>, ascending: bool) -> CmdSortKey {
+    CmdSortKey { col, ascending }
+}
+
+fn parse_sort(input: &str) -> (usize, Vec<CmdSortKey>) {
+    match parse(input) {
+        Ok(Some(Cmd::Sort { skip, keys })) => (skip, keys),
+        other => panic!("{input:?} did not parse as sort: {other:?}"),
+    }
+}
+
+#[test]
+fn test_cmd_sort_defaults_to_cursor_column_descending() {
+    assert_eq!(parse_sort("sort"), (0, vec![sort_key(None, false)]));
+    assert_eq!(parse_sort("sort asc"), (0, vec![sort_key(None, true)]));
+    assert_eq!(parse_sort("sort desc"), (0, vec![sort_key(None, false)]));
+}
+
+#[test]
+fn test_cmd_sort_columns_and_directions() {
+    assert_eq!(parse_sort("sort B"), (0, vec![sort_key(Some(2), false)]));
+    assert_eq!(
+        parse_sort("sort B C"),
+        (0, vec![sort_key(Some(2), false), sort_key(Some(3), false)])
+    );
+    assert_eq!(
+        parse_sort("sort b ASC c"),
+        (0, vec![sort_key(Some(2), true), sort_key(Some(3), false)])
+    );
+    assert_eq!(
+        parse_sort("sort B C asc"),
+        (0, vec![sort_key(Some(2), false), sort_key(Some(3), true)])
+    );
+    assert_eq!(parse_sort("sort AA"), (0, vec![sort_key(Some(27), false)]));
+}
+
+#[test]
+fn test_cmd_sort_skip() {
+    assert_eq!(
+        parse_sort("sort skip 2 B asc"),
+        (2, vec![sort_key(Some(2), true)])
+    );
+    assert_eq!(parse_sort("sort SKIP 3 asc"), (3, vec![sort_key(None, true)]));
+    assert_eq!(parse_sort("sort skip 0"), (0, vec![sort_key(None, false)]));
+}
+
+#[test]
+fn test_cmd_sort_rejects_bad_input() {
+    for input in [
+        "sort skip",
+        "sort skip x",
+        "sort B skip 1",
+        "sort B desc desc",
+        "sort desc B",
+        "sort sideways",
+        "sort ABCD",
+        "sort 1",
+        "sorting",
+    ] {
+        assert!(parse(input).is_err(), "{input:?} should be an error");
+    }
+}
+
+/// A workspace whose first sheet holds `rows` from A1.
+fn sort_workspace<'a>(rows: &[&[&str]]) -> Workspace<'a> {
+    let mut ws = new_workspace();
+    for (ri, row) in rows.iter().enumerate() {
+        for (ci, value) in row.iter().enumerate() {
+            ws.book
+                .update_cell(&Address { sheet: 0, row: ri + 1, col: ci + 1 }, *value)
+                .expect("set cell");
+        }
+    }
+    ws.book.evaluate();
+    ws
+}
+
+fn sheet_column(ws: &Workspace, col: usize, rows: std::ops::RangeInclusive<usize>) -> Vec<String> {
+    rows.map(|row| {
+        ws.book
+            .get_cell_addr_rendered(&Address { sheet: 0, row, col })
+            .expect("render cell")
+    })
+    .collect()
+}
+
+fn run_command(ws: &mut Workspace, cmd: &str) {
+    script()
+        .char(':')
+        .chars(cmd)
+        .enter()
+        .run(ws)
+        .expect("run command");
+}
+
+#[test]
+fn test_sort_command_sorts_used_area_by_cursor_column() {
+    let mut ws = sort_workspace(&[&["1", "a"], &["3", "b"], &["2", "c"]]);
+    run_command(&mut ws, "sort");
+    assert_eq!(sheet_column(&ws, 1, 1..=3), vec!["3", "2", "1"]);
+    assert_eq!(sheet_column(&ws, 2, 1..=3), vec!["b", "c", "a"]);
+    assert_eq!(ws.book.location, Address { sheet: 0, row: 1, col: 1 });
+}
+
+#[test]
+fn test_sort_command_skip_and_keys() {
+    let mut ws = sort_workspace(&[
+        &["name", "group"],
+        &["c", "1"],
+        &["a", "2"],
+        &["b", "1"],
+    ]);
+    run_command(&mut ws, "sort skip 1 B asc A");
+    assert_eq!(sheet_column(&ws, 1, 1..=4), vec!["name", "c", "b", "a"]);
+}
+
+#[test]
+fn test_sort_command_uses_range_selection() {
+    let mut ws = sort_workspace(&[&["2"], &["1"], &["0"]]);
+    script()
+        .char('v')
+        .char('j')
+        .char(':')
+        .chars("sort asc")
+        .enter()
+        .run(&mut ws)
+        .expect("run script");
+    assert_eq!(sheet_column(&ws, 1, 1..=3), vec!["1", "2", "0"]);
+}
+
+#[test]
+fn test_sort_command_all_rows_skipped_is_a_dialog() {
+    let mut ws = sort_workspace(&[&["2"], &["1"]]);
+    run_command(&mut ws, "sort skip 2");
+    assert_eq!(Some(&Modality::Dialog), ws.state.modality_stack.last());
+    assert_eq!(
+        Some(Markdown::from_str("All 2 rows are skipped; nothing to sort.")),
+        ws.state.popup
+    );
+    assert_eq!(sheet_column(&ws, 1, 1..=2), vec!["2", "1"]);
+}
+
+#[test]
+fn test_sort_command_key_outside_selection_is_a_dialog() {
+    let mut ws = sort_workspace(&[&["2", "x"], &["1", "y"]]);
+    script()
+        .char('v')
+        .char('j')
+        .char(':')
+        .chars("sort B")
+        .enter()
+        .run(&mut ws)
+        .expect("run script");
+    assert_eq!(
+        Some(Markdown::from_str("Key column B is outside the selected range.")),
+        ws.state.popup
+    );
+    assert_eq!(sheet_column(&ws, 1, 1..=2), vec!["2", "1"]);
+}
+
+#[test]
+fn test_sort_command_book_error_is_a_dialog() {
+    let mut ws = sort_workspace(&[&["2", "x"], &["1", "y"]]);
+    run_command(&mut ws, "sort B A B");
+    assert_eq!(
+        Some(Markdown::from_str("Column B is given more than one time.")),
+        ws.state.popup
+    );
 }

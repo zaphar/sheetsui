@@ -1,6 +1,7 @@
 pub mod sui;
 pub use sui::ParseWarning;
 mod sort;
+pub use sort::SortKey;
 
 use std::cmp::max;
 use std::path::{Path, PathBuf};
