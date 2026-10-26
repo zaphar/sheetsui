@@ -1,4 +1,4 @@
-use ironcalc::base::worksheet::WorksheetDimension;
+use ironcalc::base::{expressions::types::Area, worksheet::WorksheetDimension, Model};
 
 use crate::ui::Address;
 
@@ -621,4 +621,174 @@ fn test_csv_save_writes_first_sheet_values() {
     assert_eq!(book.get_format(), &FileFormat::Csv);
     assert_eq!(std::fs::read_to_string(&path).expect("read back"), "2,6\n");
     std::fs::remove_file(&path).ok();
+}
+
+// -------------------------------------------------------------------------
+// Sort rows
+// -------------------------------------------------------------------------
+
+fn key(col: usize, ascending: bool) -> super::sort::SortKey {
+    super::sort::SortKey { col, ascending }
+}
+
+fn column(book: &Book, col: usize, rows: std::ops::RangeInclusive<usize>) -> Vec<String> {
+    rows.map(|r| rendered(book, r, col)).collect()
+}
+
+#[test]
+fn test_sort_rows_ascending_moves_whole_rows() {
+    let mut book = csv_book("3,c\n1,a\n2,b\n");
+    book.sort_rows(0, 1, 3, &[key(1, true)]).expect("sort");
+    assert_eq!(column(&book, 1, 1..=3), vec!["1", "2", "3"]);
+    assert_eq!(column(&book, 2, 1..=3), vec!["a", "b", "c"]);
+    assert!(book.dirty);
+}
+
+#[test]
+fn test_sort_rows_descending() {
+    let mut book = csv_book("1\n3\n2\n");
+    book.sort_rows(0, 1, 3, &[key(1, false)]).expect("sort");
+    assert_eq!(column(&book, 1, 1..=3), vec!["3", "2", "1"]);
+}
+
+#[test]
+fn test_sort_rows_only_touches_given_rows() {
+    let mut book = csv_book("h\n3\n1\n2\nf\n");
+    book.sort_rows(0, 2, 4, &[key(1, true)]).expect("sort");
+    assert_eq!(column(&book, 1, 1..=5), vec!["h", "1", "2", "3", "f"]);
+}
+
+#[test]
+fn test_sort_rows_multiple_keys() {
+    let mut book = csv_book("1,a\n2,a\n1,b\n");
+    book.sort_rows(0, 1, 3, &[key(1, true), key(2, false)])
+        .expect("sort");
+    assert_eq!(column(&book, 1, 1..=3), vec!["1", "1", "2"]);
+    assert_eq!(column(&book, 2, 1..=3), vec!["b", "a", "a"]);
+}
+
+#[test]
+fn test_sort_rows_is_stable() {
+    let mut book = csv_book("1,x\n0,y\n1,z\n");
+    book.sort_rows(0, 1, 3, &[key(1, true)]).expect("sort");
+    assert_eq!(column(&book, 2, 1..=3), vec!["y", "x", "z"]);
+}
+
+#[test]
+fn test_sort_rows_blanks_last_in_both_directions() {
+    let mut book = csv_book("2,a\n,b\n1,c\n");
+    book.sort_rows(0, 1, 3, &[key(1, true)]).expect("sort asc");
+    assert_eq!(column(&book, 2, 1..=3), vec!["c", "a", "b"]);
+    book.sort_rows(0, 1, 3, &[key(1, false)]).expect("sort desc");
+    assert_eq!(column(&book, 2, 1..=3), vec!["a", "c", "b"]);
+}
+
+#[test]
+fn test_sort_rows_mixed_types_use_excel_order() {
+    let mut book = Book::default();
+    for (row, value) in ["=1/0", "TRUE", "text", "5"].iter().enumerate() {
+        book.update_cell(&phase2_addr(row + 1, 1), *value).expect("set");
+    }
+    book.evaluate();
+    book.sort_rows(0, 1, 4, &[key(1, true)]).expect("sort asc");
+    assert_eq!(column(&book, 1, 1..=4), vec!["5", "text", "TRUE", "#DIV/0!"]);
+    book.sort_rows(0, 1, 4, &[key(1, false)]).expect("sort desc");
+    assert_eq!(column(&book, 1, 1..=4), vec!["#DIV/0!", "TRUE", "text", "5"]);
+}
+
+#[test]
+fn test_sort_rows_text_ignores_case() {
+    let mut book = csv_book("b\nA\nc\n");
+    book.sort_rows(0, 1, 3, &[key(1, true)]).expect("sort");
+    assert_eq!(column(&book, 1, 1..=3), vec!["A", "b", "c"]);
+}
+
+#[test]
+fn test_sort_rows_formulas_sort_by_value_and_translate() {
+    let mut book = csv_book("3\n1\n2\n");
+    for row in 1..=3 {
+        book.update_cell(&phase2_addr(row, 2), format!("=A{row}*-1"))
+            .expect("set formula");
+    }
+    book.evaluate();
+    // Column B is -A, so ascending B is descending A.
+    book.sort_rows(0, 1, 3, &[key(2, true)]).expect("sort");
+    assert_eq!(column(&book, 1, 1..=3), vec!["3", "2", "1"]);
+    assert_eq!(column(&book, 2, 1..=3), vec!["-3", "-2", "-1"]);
+    for row in 1..=3 {
+        assert_eq!(
+            book.get_cell_addr_contents(&phase2_addr(row, 2)).expect("contents"),
+            format!("=A{row}*-1")
+        );
+    }
+}
+
+#[test]
+fn test_sort_rows_keeps_literal_text_as_text() {
+    let mut book = csv_book("2,=1+1\n1,-A1\n");
+    book.sort_rows(0, 1, 2, &[key(1, true)]).expect("sort");
+    assert_eq!(column(&book, 2, 1..=2), vec!["-A1", "=1+1"]);
+}
+
+#[test]
+fn test_sort_rows_moves_cell_styles() {
+    let mut book = csv_book("2\n1\n");
+    let area = Area { sheet: 0, row: 1, column: 1, width: 1, height: 1 };
+    book.set_cell_style(&[("font.b", "true")], &area).expect("bold");
+    book.sort_rows(0, 1, 2, &[key(1, true)]).expect("sort");
+    let bold = |row| book.get_cell_style(&phase2_addr(row, 1)).map(|s| s.font.b);
+    assert_eq!(bold(1), Some(false));
+    assert_eq!(bold(2), Some(true));
+}
+
+#[test]
+fn test_sort_rows_does_not_move_row_height() {
+    let mut book = csv_book("2\n1\n");
+    book.model.set_rows_height(0, 1, 1, 40.0).expect("set height");
+    let default_height = book.model.get_row_height(0, 2).expect("height");
+    book.sort_rows(0, 1, 2, &[key(1, true)]).expect("sort");
+    assert_eq!(book.model.get_row_height(0, 1).expect("height"), 40.0);
+    assert_eq!(book.model.get_row_height(0, 2).expect("height"), default_height);
+}
+
+#[test]
+fn test_sort_rows_already_sorted_is_not_a_change() {
+    let mut book = csv_book("1\n2\n");
+    book.sort_rows(0, 1, 2, &[key(1, true)]).expect("sort");
+    assert!(!book.dirty);
+}
+
+#[test]
+fn test_sort_rows_duplicate_key_is_an_error() {
+    let mut book = csv_book("2,a\n1,b\n");
+    let err = book
+        .sort_rows(0, 1, 2, &[key(2, true), key(1, true), key(2, false)])
+        .expect_err("duplicate key");
+    assert_eq!(err.to_string(), "Column B is given more than one time.");
+    assert_eq!(column(&book, 1, 1..=2), vec!["2", "1"]);
+}
+
+#[test]
+fn test_sort_rows_merged_cells_are_an_error() {
+    let mut model =
+        Model::new_empty("test", "en", "America/New_York", "en").expect("model");
+    model.workbook.worksheets[0].merge_cells.push("A2:B3".to_string());
+    let mut book = Book::from_model(model);
+    for (row, value) in ["3", "1", "2"].iter().enumerate() {
+        book.update_cell(&phase2_addr(row + 1, 1), *value).expect("set");
+    }
+    book.evaluate();
+    let err = book.sort_rows(0, 1, 3, &[key(1, true)]).expect_err("merged");
+    assert_eq!(err.to_string(), "Cannot sort a range that contains merged cells.");
+    assert_eq!(column(&book, 1, 1..=3), vec!["3", "1", "2"]);
+}
+
+#[test]
+fn test_sort_rows_array_formulas_are_an_error() {
+    let mut book = csv_book("3,\n1,\n2,\n");
+    book.update_cell(&phase2_addr(1, 2), "=SORT(A1:A3)").expect("set");
+    book.evaluate();
+    let err = book.sort_rows(0, 1, 3, &[key(1, true)]).expect_err("array");
+    assert_eq!(err.to_string(), "Cannot sort a range that contains array formulas.");
+    assert_eq!(column(&book, 1, 1..=3), vec!["3", "1", "2"]);
 }
