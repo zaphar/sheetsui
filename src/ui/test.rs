@@ -1993,3 +1993,61 @@ fn test_sort_command_book_error_is_a_dialog() {
         ws.state.popup
     );
 }
+
+#[test]
+fn test_range_select_s_sorts_descending_by_cursor_column() {
+    let mut ws = sort_workspace(&[&["1", "x"], &["2", "y"], &["0", "z"]]);
+    script()
+        .char('v')
+        .char('j')
+        .char('s')
+        .run(&mut ws)
+        .expect("run script");
+    assert_eq!(sheet_column(&ws, 1, 1..=3), vec!["2", "1", "0"]);
+    assert_eq!(sheet_column(&ws, 2, 1..=3), vec!["y", "x", "z"]);
+    assert_eq!(Some(&Modality::Navigate), ws.state.modality_stack.last());
+    assert_eq!(ws.book.location, Address { sheet: 0, row: 1, col: 1 });
+}
+
+#[test]
+fn test_range_select_shift_s_sorts_ascending_by_cursor_column() {
+    let mut ws = sort_workspace(&[&["1", "b"], &["2", "a"], &["0", "c"]]);
+    script()
+        .char('v')
+        .char('j')
+        .char('l')
+        .char('S')
+        .run(&mut ws)
+        .expect("run script");
+    assert_eq!(sheet_column(&ws, 2, 1..=3), vec!["a", "b", "c"]);
+    assert_eq!(sheet_column(&ws, 1, 1..=3), vec!["2", "1", "0"]);
+    assert_eq!(Some(&Modality::Navigate), ws.state.modality_stack.last());
+}
+
+#[test]
+fn test_range_select_s_without_range_start_does_nothing() {
+    let mut ws = sort_workspace(&[&["1"], &["2"]]);
+    script()
+        .ctrl('r')
+        .char('j')
+        .char('s')
+        .run(&mut ws)
+        .expect("run script");
+    assert_eq!(sheet_column(&ws, 1, 1..=2), vec!["1", "2"]);
+    assert_eq!(Some(&Modality::RangeSelect), ws.state.modality_stack.last());
+}
+
+#[test]
+fn test_range_select_s_from_cell_edit_does_nothing() {
+    let mut ws = sort_workspace(&[&["1"], &["2"]]);
+    script()
+        .char('i')
+        .ctrl('r')
+        .char(' ')
+        .char('j')
+        .char('s')
+        .run(&mut ws)
+        .expect("run script");
+    assert_eq!(sheet_column(&ws, 1, 1..=2), vec!["1", "2"]);
+    assert_eq!(Some(&Modality::RangeSelect), ws.state.modality_stack.last());
+}

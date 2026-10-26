@@ -598,6 +598,12 @@ impl<'ws> Workspace<'ws> {
                         self.book.clear_cell_range(start, end)?;
                     }
                 }
+                KeyCode::Char('s') => {
+                    self.sort_range_selection(false)?;
+                }
+                KeyCode::Char('S') => {
+                    self.sort_range_selection(true)?;
+                }
                 KeyCode::Char('h') => {
                     self.run_with_prefix(|ws: &mut Workspace<'_>| -> Result<()> {
                         ws.move_left()?;
@@ -749,6 +755,38 @@ impl<'ws> Workspace<'ws> {
             .collect::<Result<Vec<_>>>()?;
         self.book
             .sort_rows(self.book.location.sheet, first_row + skip, last_row, &keys)
+    }
+
+    /// Sort the rows from the range start to the cursor by the cursor's
+    /// column, then leave Range Select mode.
+    ///
+    /// Does nothing if no range start is set, or if Range Select was not
+    /// started from Navigate mode: leaving it from CellEdit pastes the range
+    /// into the cell being edited.
+    fn sort_range_selection(&mut self, ascending: bool) -> Result<()> {
+        let Some(start) = self.state.range_select.start.clone() else {
+            return Ok(());
+        };
+        let stack = &self.state.modality_stack;
+        if stack.len() < 2 || stack[stack.len() - 2] != Modality::Navigate {
+            return Ok(());
+        }
+        let cursor = self.book.location.clone();
+        let result = self.book.sort_rows(
+            cursor.sheet,
+            std::cmp::min(start.row, cursor.row),
+            std::cmp::max(start.row, cursor.row),
+            &[SortKey {
+                col: cursor.col,
+                ascending,
+            }],
+        );
+        self.exit_range_select_mode()?;
+        // A sort error is the user's to fix, so show it, do not exit.
+        if let Err(e) = result {
+            self.enter_dialog_mode(Markdown::from_str(&e.to_string()));
+        }
+        Ok(())
     }
 
     fn get_rows_from_system_clipboard(&mut self) -> Result<Vec<Vec<String>>, anyhow::Error> {
