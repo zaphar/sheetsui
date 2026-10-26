@@ -3,6 +3,26 @@
 You enter command mode by typing `:` while in navigation mode. You can then
 type a command and hit `Enter` to execute it or `Esc` to cancel.
 
+## Editing and history
+
+* `Left`, `Right` (or `Ctrl-b`, `Ctrl-f`) move the cursor one character.
+* `Home`, `End` (or `Ctrl-a`, `Ctrl-e`) move the cursor to the start or end.
+* `Backspace` deletes the character before the cursor. `Delete` deletes the
+  character at the cursor.
+* `Ctrl-k` deletes to the end of the line. `Ctrl-u` deletes to the start.
+* `Up` shows the previous command. `Down` shows the next one. If you type
+  some text first, `Up` and `Down` show only the commands that start with
+  that text. `Down` past the newest command gives back the text you typed.
+
+Every command that you run with `Enter` goes into the history, also a command
+that fails, so you can fix a typo with `Up`. A command that you cancel with
+`Esc` does not. The history keeps the last 100 commands in
+`$XDG_STATE_HOME/sheetui/history` (by default
+`~/.local/state/sheetui/history`), so it is still there when you start
+sheetui again.
+
+## Commands
+
 The currently supported commands are:
 
 * `write [path]` save the current spreadsheet. If the path is provided it will save it to that path and update the current file path for subsequent saves. If omitted it will save to the path you are currently editing (or `Untitled.sui` for a new empty workbook). The format is auto-detected from the file extension: `.xlsx` uses Excel format, `.csv` writes the first sheet's displayed values, everything else uses the native `.sui` format. `w` is a shorthand alias for this command.
