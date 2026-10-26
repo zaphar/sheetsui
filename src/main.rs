@@ -31,6 +31,9 @@ fn run(terminal: &mut ratatui::DefaultTerminal, args: Args) -> anyhow::Result<Ex
     } else {
         Workspace::new_empty(&args.locale_name, &args.timezone_name)?
     };
+    if let Some(path) = ui::CommandHistory::default_path() {
+        ws.state.command_history.use_file(&path);
+    }
     let mut read_func: ReadFn = if let Some(log_path) = args.log_input {
         {
             let log_file = std::fs::File::create(log_path)?;

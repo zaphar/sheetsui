@@ -2064,3 +2064,71 @@ fn test_command_mode_esc_does_not_run_the_command() {
     assert_eq!(Some(&Modality::Navigate), ws.state.modality_stack.last());
     assert_eq!(ws.book.get_sheet_names().len(), 1);
 }
+
+impl InputScript {
+    fn up(self) -> Self {
+        self.event(construct_key_event(KeyCode::Up))
+    }
+
+    fn down(self) -> Self {
+        self.event(construct_key_event(KeyCode::Down))
+    }
+}
+
+fn command_text(ws: &Workspace) -> String {
+    use tui_prompts::State;
+    ws.state.command_state.value().to_owned()
+}
+
+#[test]
+fn test_command_history_up_and_down() {
+    let mut ws = new_workspace();
+    run_command(&mut ws, "new-sheet a");
+    run_command(&mut ws, "new-sheet b");
+    script().char(':').chars("x").up().run(&mut ws).expect("run");
+    // "x" is the prefix, and no command starts with it.
+    assert_eq!(command_text(&ws), "x");
+    script().esc().char(':').up().run(&mut ws).expect("run");
+    assert_eq!(command_text(&ws), "new-sheet b");
+    script().up().run(&mut ws).expect("run");
+    assert_eq!(command_text(&ws), "new-sheet a");
+    script().up().run(&mut ws).expect("run");
+    assert_eq!(command_text(&ws), "new-sheet a");
+    script().down().run(&mut ws).expect("run");
+    assert_eq!(command_text(&ws), "new-sheet b");
+    script().down().run(&mut ws).expect("run");
+    assert_eq!(command_text(&ws), "");
+}
+
+#[test]
+fn test_command_history_prefix_match() {
+    let mut ws = new_workspace();
+    run_command(&mut ws, "new-sheet a");
+    run_command(&mut ws, "select-sheet a");
+    script().char(':').chars("new").up().run(&mut ws).expect("run");
+    assert_eq!(command_text(&ws), "new-sheet a");
+    script().down().run(&mut ws).expect("run");
+    assert_eq!(command_text(&ws), "new");
+}
+
+#[test]
+fn test_command_history_runs_a_recalled_command() {
+    let mut ws = new_workspace();
+    run_command(&mut ws, "new-sheet");
+    script().char(':').up().enter().run(&mut ws).expect("run");
+    assert_eq!(ws.book.get_sheet_names().len(), 3);
+}
+
+#[test]
+fn test_command_history_does_not_record_a_cancelled_command() {
+    let mut ws = new_workspace();
+    script()
+        .char(':')
+        .chars("new-sheet x")
+        .esc()
+        .char(':')
+        .up()
+        .run(&mut ws)
+        .expect("run");
+    assert_eq!(command_text(&ws), "");
+}

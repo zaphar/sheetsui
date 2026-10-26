@@ -21,11 +21,13 @@ use ratatui_textarea::{CursorMove, TextArea};
 
 mod cmd;
 mod help;
+mod history;
 pub mod render;
 #[cfg(test)]
 mod test;
 
 use cmd::{Cmd, CmdSortKey};
+pub use history::CommandHistory;
 use render::{markdown::Markdown, viewport::ViewportState};
 
 /// Default file name used when creating a new empty workbook.
@@ -85,6 +87,7 @@ pub struct AppState<'ws> {
     pub modality_stack: Vec<Modality>,
     pub viewport_state: ViewportState,
     pub command_state: TextState<'ws>,
+    pub command_history: CommandHistory,
     pub numeric_prefix: Vec<char>,
     pub char_queue: Vec<char>,
     pub range_select: RangeSelection,
@@ -100,6 +103,7 @@ impl<'ws> Default for AppState<'ws> {
             modality_stack: vec![Modality::default()],
             viewport_state: Default::default(),
             command_state: Default::default(),
+            command_history: Default::default(),
             numeric_prefix: Default::default(),
             char_queue: Default::default(),
             range_select: Default::default(),
@@ -349,8 +353,23 @@ impl<'ws> Workspace<'ws> {
                     self.enter_dialog_mode(self.render_help_text());
                     return Ok(None);
                 }
+                KeyCode::Up => {
+                    let shown = self.state.command_state.value().to_owned();
+                    if let Some(text) = self.state.command_history.older(&shown) {
+                        self.set_command_text(text);
+                    }
+                    return Ok(None);
+                }
+                KeyCode::Down => {
+                    let shown = self.state.command_state.value().to_owned();
+                    if let Some(text) = self.state.command_history.newer(&shown) {
+                        self.set_command_text(text);
+                    }
+                    return Ok(None);
+                }
                 _ => {
-                    // NOOP
+                    // An edit makes the text shown the prefix for the next Up.
+                    self.state.command_history.reset();
                 }
             }
         }
@@ -1121,6 +1140,7 @@ impl<'ws> Workspace<'ws> {
     fn enter_command_mode(&mut self) {
         self.state.modality_stack.push(Modality::Command);
         self.state.command_state.truncate();
+        self.state.command_history.reset();
         *self.state.command_state.status_mut() = Status::Pending;
         self.state.command_state.focus();
     }
@@ -1156,8 +1176,15 @@ impl<'ws> Workspace<'ws> {
         Ok(None)
     }
 
+    fn set_command_text(&mut self, text: String) {
+        *self.state.command_state.value_mut() = text;
+        self.state.command_state.move_end();
+    }
+
     fn exit_command_mode(&mut self) -> Result<Option<ExitCode>> {
         let cmd = self.state.command_state.value().to_owned();
+        // Record a command that fails too, so a typo can be fixed with Up.
+        self.state.command_history.add(&cmd);
         self.state.command_state.blur();
         *self.state.command_state.status_mut() = Status::Done;
         self.state.pop_modality();
