@@ -196,4 +196,6 @@ their rows (D2).
 
 - `docs/command.md` — the `:sort` command.
 - `docs/visual.md` — the `s` and `S` keys.
-- The help files in `src/ui/help/` that copy these pages.
+
+The help screens load these files with `include_str!`, so there is no other
+copy to update.

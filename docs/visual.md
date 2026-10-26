@@ -10,6 +10,10 @@ select mode from CellEdit mode with `CTRL-r`.
 * The spacebar will select the start and end of the range respectively.
 * `d` will delete the contents of the range leaving any style untouched
 * `D` will delete the contents of the range including any style
+* `s` sorts the rows from the range start to the cursor by the cursor's
+  column, descending. `S` sorts them ascending. All of each row moves. This
+  works only when you entered range select mode from navigation mode. See the
+  `sort` command for more options.
 
 When you have selected the end of the range you will exit range select mode and
 the range reference will be placed into the cell contents you are editing.
