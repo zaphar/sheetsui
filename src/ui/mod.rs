@@ -343,7 +343,8 @@ impl<'ws> Workspace<'ws> {
     fn handle_command_input(&mut self, key: event::KeyEvent) -> Result<Option<ExitCode>> {
         if key.kind == KeyEventKind::Press {
             match key.code {
-                KeyCode::Esc | KeyCode::Enter => return self.exit_command_mode(),
+                KeyCode::Enter => return self.exit_command_mode(),
+                KeyCode::Esc => return self.cancel_command_mode(),
                 KeyCode::Char('h') if key.modifiers == KeyModifiers::ALT => {
                     self.enter_dialog_mode(self.render_help_text());
                     return Ok(None);
@@ -1161,6 +1162,14 @@ impl<'ws> Workspace<'ws> {
         *self.state.command_state.status_mut() = Status::Done;
         self.state.pop_modality();
         self.handle_command(cmd)
+    }
+
+    /// Leave Command mode without running the command.
+    fn cancel_command_mode(&mut self) -> Result<Option<ExitCode>> {
+        self.state.command_state.blur();
+        *self.state.command_state.status_mut() = Status::Aborted;
+        self.state.pop_modality();
+        Ok(None)
     }
 
     fn exit_dialog_mode(&mut self) -> Result<()> {

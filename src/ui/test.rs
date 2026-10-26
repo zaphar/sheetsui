@@ -2051,3 +2051,16 @@ fn test_range_select_s_from_cell_edit_does_nothing() {
     assert_eq!(sheet_column(&ws, 1, 1..=2), vec!["1", "2"]);
     assert_eq!(Some(&Modality::RangeSelect), ws.state.modality_stack.last());
 }
+
+#[test]
+fn test_command_mode_esc_does_not_run_the_command() {
+    let mut ws = new_workspace();
+    script()
+        .char(':')
+        .chars("new-sheet cancelled")
+        .esc()
+        .run(&mut ws)
+        .expect("run script");
+    assert_eq!(Some(&Modality::Navigate), ws.state.modality_stack.last());
+    assert_eq!(ws.book.get_sheet_names().len(), 1);
+}
