@@ -2144,3 +2144,127 @@ fn test_command_history_does_not_record_a_cancelled_command() {
         .expect("run");
     assert_eq!(command_text(&ws), "");
 }
+
+// ---------------------------------------------------------------------------
+// Undo and redo
+// ---------------------------------------------------------------------------
+
+fn cell(ws: &Workspace, row: usize, col: usize) -> String {
+    ws.book
+        .get_cell_addr_contents(&Address { sheet: 0, row, col })
+        .expect("cell contents")
+}
+
+fn run(ws: &mut Workspace, keys: InputScript) {
+    keys.run(ws).expect("Failed to run input script");
+}
+
+#[test]
+fn test_u_undoes_and_r_redoes_a_cell_edit() {
+    let mut ws = new_workspace();
+    run(&mut ws, script().chars("efoo").enter().chars("jj"));
+    assert_eq!(cell(&ws, 1, 1), "foo");
+    run(&mut ws, script().char('u'));
+    assert_eq!(cell(&ws, 1, 1), "");
+    assert_eq!(ws.book.location, Address { sheet: 0, row: 1, col: 1 });
+    assert_eq!(ws.book.get_current_cell_contents().unwrap(), "");
+    run(&mut ws, script().chars("jr"));
+    assert_eq!(cell(&ws, 1, 1), "foo");
+    assert_eq!(ws.book.location, Address { sheet: 0, row: 1, col: 1 });
+}
+
+#[test]
+fn test_a_range_paste_undoes_in_one_step() {
+    let mut ws = new_workspace();
+    run(&mut ws, script().chars("ex").enter());
+    ws.state.clipboard = Some(ClipboardContents::Range(vec![
+        vec!["a".to_string(), "b".to_string()],
+        vec!["c".to_string(), "d".to_string()],
+    ]));
+    run(&mut ws, script().char('p'));
+    assert_eq!(cell(&ws, 2, 2), "d");
+    run(&mut ws, script().char('u'));
+    assert_eq!(
+        [cell(&ws, 1, 1), cell(&ws, 1, 2), cell(&ws, 2, 1), cell(&ws, 2, 2)],
+        ["x", "", "", ""]
+    );
+}
+
+#[test]
+fn test_a_count_undoes_in_one_step() {
+    let mut ws = new_workspace();
+    let width = ws.book.get_col_size(1).unwrap();
+    run(&mut ws, script().char('5').ctrl('l'));
+    assert_eq!(ws.book.get_col_size(1).unwrap(), width + 5);
+    run(&mut ws, script().char('u'));
+    assert_eq!(ws.book.get_col_size(1).unwrap(), width);
+    assert!(!ws.book.undo().unwrap(), "5 Ctrl-l was one action");
+}
+
+#[test]
+fn test_u_with_a_count_undoes_that_many_actions() {
+    let mut ws = new_workspace();
+    run(
+        &mut ws,
+        script()
+            .chars("ea")
+            .enter()
+            .chars("jeb")
+            .enter()
+            .chars("jec")
+            .enter(),
+    );
+    run(&mut ws, script().chars("2u"));
+    assert_eq!([cell(&ws, 1, 1), cell(&ws, 2, 1), cell(&ws, 3, 1)], ["a", "", ""]);
+    run(&mut ws, script().chars("5r"));
+    assert_eq!([cell(&ws, 1, 1), cell(&ws, 2, 1), cell(&ws, 3, 1)], ["a", "b", "c"]);
+}
+
+#[test]
+fn test_o_and_the_edit_after_it_are_two_actions() {
+    let mut ws = new_workspace();
+    run(&mut ws, script().chars("ea").enter().chars("jex").enter().char('k'));
+    run(&mut ws, script().chars("ob").enter());
+    let column = |ws: &Workspace| [cell(ws, 1, 1), cell(ws, 2, 1), cell(ws, 3, 1)];
+    assert_eq!(column(&ws), ["a", "b", "x"]);
+    run(&mut ws, script().char('u'));
+    assert_eq!(column(&ws), ["a", "", "x"], "the new row is still there");
+    run(&mut ws, script().char('u'));
+    assert_eq!(column(&ws), ["a", "x", ""]);
+}
+
+#[test]
+fn test_undo_and_redo_commands() {
+    let mut ws = new_workspace();
+    run(&mut ws, script().chars("efoo").enter());
+    run(&mut ws, script().chars(":undo").enter());
+    assert_eq!(cell(&ws, 1, 1), "");
+    run(&mut ws, script().chars(":redo").enter());
+    assert_eq!(cell(&ws, 1, 1), "foo");
+}
+
+#[test]
+fn test_parse_undo_and_redo() {
+    assert_eq!(parse("undo"), Ok(Some(Cmd::Undo)));
+    assert_eq!(parse("redo"), Ok(Some(Cmd::Redo)));
+    assert!(parse("undo 2").is_err());
+    assert!(parse("redo 2").is_err());
+}
+
+#[test]
+fn test_u_and_r_in_cell_edit_are_text() {
+    let mut ws = new_workspace();
+    run(&mut ws, script().chars("eur").enter());
+    assert_eq!(cell(&ws, 1, 1), "ur");
+}
+
+#[test]
+fn test_undo_back_to_the_start_quits_with_no_prompt() {
+    let mut ws = new_workspace();
+    run(&mut ws, script().chars("efoo").enter());
+    assert!(ws.book.dirty);
+    run(&mut ws, script().char('u'));
+    assert!(!ws.book.dirty);
+    let result = script().char('q').run(&mut ws).expect("Failed to run");
+    assert!(result.is_some(), "q quits with no prompt");
+}

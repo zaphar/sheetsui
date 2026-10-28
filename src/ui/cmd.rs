@@ -19,6 +19,8 @@ pub enum Cmd<'a> {
     ExportCsv(&'a str),
     SystemPaste,
     Sort { skip: usize, keys: Vec<CmdSortKey> },
+    Undo,
+    Redo,
     Quit,
 }
 
@@ -83,6 +85,12 @@ pub fn parse<'cmd, 'i: 'cmd>(input: &'i str) -> Result<Option<Cmd<'cmd>>, &'stat
         return Ok(Some(cmd));
     }
     if let Some(cmd) = try_consume_sort(cursor.clone())? {
+        return Ok(Some(cmd));
+    }
+    if let Some(cmd) = try_consume_undo(cursor.clone())? {
+        return Ok(Some(cmd));
+    }
+    if let Some(cmd) = try_consume_redo(cursor.clone())? {
         return Ok(Some(cmd));
     }
     Ok(None)
@@ -343,6 +351,38 @@ fn try_consume_system_paste<'cmd, 'i: 'cmd>(
         return Err("Invalid command: system-paste does not take an argument");
     }
     Ok(Some(Cmd::SystemPaste))
+}
+
+fn try_consume_undo<'cmd, 'i: 'cmd>(
+    mut input: StrCursor<'i>,
+) -> Result<Option<Cmd<'cmd>>, &'static str> {
+    const LONG: &str = "undo";
+
+    if compare(input.clone(), LONG) {
+        input.seek(LONG.len());
+    } else {
+        return Ok(None);
+    }
+    if input.remaining() > 0 {
+        return Err("Invalid command: undo does not take an argument");
+    }
+    Ok(Some(Cmd::Undo))
+}
+
+fn try_consume_redo<'cmd, 'i: 'cmd>(
+    mut input: StrCursor<'i>,
+) -> Result<Option<Cmd<'cmd>>, &'static str> {
+    const LONG: &str = "redo";
+
+    if compare(input.clone(), LONG) {
+        input.seek(LONG.len());
+    } else {
+        return Ok(None);
+    }
+    if input.remaining() > 0 {
+        return Err("Invalid command: redo does not take an argument");
+    }
+    Ok(Some(Cmd::Redo))
 }
 
 fn try_consume_rename_sheet<'cmd, 'i: 'cmd>(

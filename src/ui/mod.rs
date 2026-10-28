@@ -316,17 +316,34 @@ impl<'ws> Workspace<'ws> {
     /// Handle input in our ui loop.
     pub fn handle_input(&mut self, evt: Event) -> Result<Option<ExitCode>> {
         if let Event::Key(key) = evt {
+            // Everything one key changes undoes as one action.
+            self.book.begin_action();
             let result = match self.state.modality() {
-                Modality::Navigate => self.handle_navigation_input(key)?,
-                Modality::CellEdit => self.handle_edit_input(key)?,
-                Modality::Command => self.handle_command_input(key)?,
-                Modality::Dialog => self.handle_dialog_input(key)?,
-                Modality::RangeSelect => self.handle_range_select_input(key)?,
-                Modality::Quit => self.handle_quit_dialog(key)?,
+                Modality::Navigate => self.handle_navigation_input(key),
+                Modality::CellEdit => self.handle_edit_input(key),
+                Modality::Command => self.handle_command_input(key),
+                Modality::Dialog => self.handle_dialog_input(key),
+                Modality::RangeSelect => self.handle_range_select_input(key),
+                Modality::Quit => self.handle_quit_dialog(key),
             };
-            return Ok(result);
+            self.book.end_action();
+            return result;
         }
         Ok(None)
+    }
+
+    fn undo(&mut self) -> Result<()> {
+        if self.book.undo()? {
+            self.handle_movement_change();
+        }
+        Ok(())
+    }
+
+    fn redo(&mut self) -> Result<()> {
+        if self.book.redo()? {
+            self.handle_movement_change();
+        }
+        Ok(())
     }
 
     fn render_help_text(&self) -> Markdown {
@@ -508,6 +525,14 @@ impl<'ws> Workspace<'ws> {
                 Ok(None)
             }
             Ok(Some(Cmd::Quit)) => self.quit_app(),
+            Ok(Some(Cmd::Undo)) => {
+                self.undo()?;
+                Ok(None)
+            }
+            Ok(Some(Cmd::Redo)) => {
+                self.redo()?;
+                Ok(None)
+            }
             Ok(Some(Cmd::ColorRows(count, color))) => {
                 let row_count = count.unwrap_or(1);
                 let row = self.book.location.row;
@@ -1035,6 +1060,12 @@ impl<'ws> Workspace<'ws> {
                     self.handle_movement_change();
                     self.enter_edit_mode();
                 },
+                KeyCode::Char('u') => {
+                    self.run_with_prefix(|ws: &mut Workspace<'_>| -> Result<()> { ws.undo() })?;
+                }
+                KeyCode::Char('r') if key.modifiers != KeyModifiers::CONTROL => {
+                    self.run_with_prefix(|ws: &mut Workspace<'_>| -> Result<()> { ws.redo() })?;
+                }
                 _ => {
                     // noop
                     self.state.char_queue.clear();
