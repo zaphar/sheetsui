@@ -1520,6 +1520,18 @@ fn test_quit_dialog() {
     //assert!(!ws.book.dirty);
 }
 
+#[test]
+fn test_moving_the_cursor_does_not_change_the_book() {
+    let mut ws = new_workspace();
+    let result = script()
+        .chars("jjl")
+        .char('q')
+        .run(&mut ws)
+        .expect("Failed to run input script");
+    assert!(!ws.book.dirty);
+    assert!(result.is_some(), "q quits with no prompt");
+}
+
 // parse_csv_rows unit tests
 
 #[test]

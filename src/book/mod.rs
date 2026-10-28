@@ -480,7 +480,6 @@ impl Book {
         // FIXME(zaphar): Check that this is safe first.
         self.location.row = *row;
         self.location.col = *col;
-        self.dirty = true;
         Ok(())
     }
 
