@@ -10,6 +10,13 @@
 //! ironcalc call that can change the book goes through [`Book::change`],
 //! which empties the queue after the call and counts a step if the queue held
 //! one. Every ironcalc call that sheetui uses records at most one step.
+//!
+//! The one exception is `set_user_input`, which is called once per cell (a
+//! sort of 10,000 rows calls it 120,000 times). Emptying the queue encodes
+//! it, which costs about 15 µs a call, so [`Book::set_cell_input`] counts its
+//! step without checking. It records exactly one step when it succeeds. The
+//! queue is then emptied once, before the next checked call or at the end of
+//! the action.
 use anyhow::{anyhow, Result};
 use ironcalc::base::UserModel;
 
@@ -38,6 +45,8 @@ pub(crate) struct UndoHistory {
     depth: usize,
     /// What `flush_send_queue` returns when the queue is empty.
     empty_queue: Vec<u8>,
+    /// The send queue holds steps that are already counted.
+    counted_in_queue: bool,
 }
 
 impl UndoHistory {
@@ -51,6 +60,7 @@ impl UndoHistory {
             open: None,
             depth: 0,
             empty_queue: model.flush_send_queue(),
+            counted_in_queue: false,
         }
     }
 
@@ -74,15 +84,37 @@ impl Book {
         &mut self,
         call: impl FnOnce(&mut UserModel<'static>) -> Result<T, String>,
     ) -> Result<T, String> {
+        self.empty_queue();
         let result = call(&mut self.model);
-        self.count_step();
+        if self.model.flush_send_queue() != self.undo.empty_queue {
+            self.add_step();
+        }
         result
     }
 
-    fn count_step(&mut self) {
-        if self.model.flush_send_queue() == self.undo.empty_queue {
-            return;
+    /// Set a cell with `set_user_input`, and count its undo step.
+    pub(super) fn set_cell_input(
+        &mut self,
+        sheet: u32,
+        row: i32,
+        column: i32,
+        value: &str,
+    ) -> Result<(), String> {
+        self.model.set_user_input(sheet, row, column, value)?;
+        self.undo.counted_in_queue = true;
+        self.add_step();
+        Ok(())
+    }
+
+    /// Empty the send queue of steps that are already counted.
+    fn empty_queue(&mut self) {
+        if self.undo.counted_in_queue {
+            self.model.flush_send_queue();
+            self.undo.counted_in_queue = false;
         }
+    }
+
+    fn add_step(&mut self) {
         match &mut self.undo.open {
             Some(action) => action.steps += 1,
             None => {
@@ -114,6 +146,7 @@ impl Book {
         if self.undo.depth > 0 {
             return;
         }
+        self.empty_queue();
         if let Some(action) = self.undo.open.take() {
             if action.steps > 0 {
                 self.undo.push(action);
@@ -176,6 +209,7 @@ impl Book {
         self.model.resume_evaluation();
         // Undo and redo put their own entries in the send queue.
         self.model.flush_send_queue();
+        self.undo.counted_in_queue = false;
         result.map_err(|e| anyhow!(e))?;
         self.evaluate();
         Ok(())

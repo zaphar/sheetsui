@@ -514,7 +514,7 @@ impl Book {
                         cell.col as i32,
                     )
                     .map_err(|e| anyhow!(e))?;
-                book.change(|m| m.set_user_input(sheet, cell.row as i32, cell.col as i32, &contents))
+                book.set_cell_input(sheet, cell.row as i32, cell.col as i32, &contents)
                     .map_err(|e| anyhow!(e))?;
             }
             book.evaluate();
@@ -721,15 +721,13 @@ impl Book {
     /// Update an entry in the current sheet for a book.
     /// This update won't be reflected until you call `Book::evaluate`.
     pub fn update_cell<S: AsRef<str>>(&mut self, location: &Address, value: S) -> Result<()> {
-        self.change(|m| {
-            m.set_user_input(
-                location.sheet,
-                location.row as i32,
-                location.col as i32,
-                // TODO(jwall): This could probably be made more efficient
-                value.as_ref(),
-            )
-        })
+        self.set_cell_input(
+            location.sheet,
+            location.row as i32,
+            location.col as i32,
+            // TODO(jwall): This could probably be made more efficient
+            value.as_ref(),
+        )
         .map_err(|e| anyhow!("Invalid cell contents: {}", e))?;
         self.dirty = true;
         Ok(())

@@ -145,6 +145,13 @@ two (`range_clear_formatting`, borders, clipboard, autofill) are not used.
 A test for each action checks that `u` restores the book exactly. If a
 future ironcalc version records steps differently, these tests fail.
 
+One exception: `set_user_input`. It is called once per cell, 120,000 times
+for a 10,000 × 12 sort, and emptying the queue encodes it (about 15 µs a
+call). Checking the queue after each call made that sort take 2.2 s in place
+of 0.34 s. `set_user_input` records exactly one step when it succeeds, so
+sheetui counts it without checking. The queue is emptied once, before the next
+checked call or at the end of the action.
+
 Emptying the queue also fixes a leak. sheetui never emptied it, so it held a
 copy of every change since the file was opened.
 
