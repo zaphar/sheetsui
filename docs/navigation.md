@@ -35,6 +35,22 @@ will clear the numeric prefix if you want to cancel it.
 * `o` will insert a row below the selected cell, move one cell down, and enter edit mode
 * `O` will insert a row above the selected cell, move one cell up, and enter edit mode
 
+## Undo and Redo
+
+* `u` undoes the last change. The cursor goes to the cell where the change was made.
+* `r` redoes the last change that you undid.
+
+A numeric prefix undoes or redoes that many changes: `3u` undoes three.
+
+Everything that one key or one command changes undoes in one step: a cell
+edit, a paste, a sort, `:insert-rows 5`, or `5 Ctrl-l`. `o` and `O` are two
+steps: the new row, then the edit you type in it. Moving the cursor, selecting,
+switching sheets, and saving are not changes.
+
+When you undo back to the point where you last saved, the sheet counts as not
+changed, so `q` quits with no prompt. The history starts empty each time you
+open a file, and it is not saved when you quit.
+
 ## Other Keybindings
 
 * `Ctrl-r` will enter range selection mode.

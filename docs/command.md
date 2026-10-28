@@ -40,6 +40,8 @@ The currently supported commands are:
 * `quit` Quits the application. `q` is a shorthand alias for this command.
 * `system-paste` Paste from the system clipboard
 * `sort [skip <N>] [<column> [asc|desc] ...]` Sort rows. See Sorting below.
+* `undo` Undo the last change, the same as `u` in navigation mode.
+* `redo` Redo the last change that you undid, the same as `r` in navigation mode.
 
 ## Sorting
 
@@ -74,8 +76,7 @@ Formulas follow the same rules as in Excel:
 
 You cannot sort rows that contain merged cells or array formulas.
 
-<aside>There is no undo yet. If a sort is wrong, reload the file without
-saving.</aside>
+A sort undoes in one step: `u` in navigation mode, or `:undo`.
 
 <aside>Note that in the case of `quit` and `edit` that we do not currently
 prompt you if the current spreadsheet has not been saved yet. So your changes

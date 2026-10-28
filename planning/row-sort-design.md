@@ -176,7 +176,8 @@ their rows (D2).
 - **D4 — Undo: later.** Sort ships without undo. To recover from a wrong sort,
   reload the file. The help text must warn about this. When undo comes, a sort
   must undo as one step. (ironcalc records each cell write as its own undo
-  step, so this will need work then.)
+  step, so this will need work then.) Done 2026-10-28: a sort is one action
+  in the undo history (`planning/undo-design.md`).
 - **D5 — Multiple key columns: now.** `:sort` takes one or more key columns,
   each with its own direction written as a word after it (`:sort B asc C`).
   We do this now so the command form does not change after people use it.
