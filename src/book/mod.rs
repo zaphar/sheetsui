@@ -2,6 +2,8 @@ pub mod sui;
 pub use sui::ParseWarning;
 mod sort;
 pub use sort::SortKey;
+mod undo;
+use undo::UndoHistory;
 
 use std::cmp::max;
 use std::path::{Path, PathBuf};
@@ -117,11 +119,13 @@ pub struct Book {
     /// Parse warnings produced when loading a `.sui` file with invalid lines.
     /// Empty for xlsx files and for freshly created books.
     pub parse_warnings: Vec<ParseWarning>,
+    undo: UndoHistory,
 }
 
 impl Book {
     /// Construct a new book from a Model. Defaults to [`FileFormat::Sui`] with no file path.
-    pub fn new(model: UserModel<'static>) -> Self {
+    pub fn new(mut model: UserModel<'static>) -> Self {
+        let undo = UndoHistory::new(&mut model);
         Self {
             model,
             location: Address::default(),
@@ -129,6 +133,7 @@ impl Book {
             format: FileFormat::Sui,
             file_path: None,
             parse_warnings: Vec::new(),
+            undo,
         }
     }
 
@@ -200,6 +205,7 @@ impl Book {
         book.evaluate();
         book.format = FileFormat::Csv;
         book.dirty = false;
+        book.clear_history();
         Ok(book)
     }
 
@@ -272,6 +278,7 @@ impl Book {
         };
         book.format = format;
         book.file_path = Some(path.to_path_buf());
+        book.clear_history();
         Ok(book)
     }
 
@@ -301,7 +308,7 @@ impl Book {
                 self.csv_for_sheet(0, std::io::BufWriter::new(file))?;
             }
         }
-        self.dirty = false;
+        self.mark_saved();
         Ok(())
     }
 
@@ -430,7 +437,7 @@ impl Book {
         let file = std::fs::File::create(file_path)?;
         let writer = std::io::BufWriter::new(file);
         save_xlsx_to_writer(self.model.get_model(), writer)?;
-        self.dirty = false;
+        self.mark_saved();
         Ok(())
     }
 
@@ -450,24 +457,25 @@ impl Book {
     }
 
     pub fn set_sheet_name(&mut self, idx: u32, sheet_name: &str) -> Result<()> {
-        self.model
-            .rename_sheet(idx, sheet_name)
+        self.change(|m| m.rename_sheet(idx, sheet_name))
             .map_err(|e| anyhow!(e))?;
         self.dirty = true;
         Ok(())
     }
 
     pub fn new_sheet(&mut self, sheet_name: Option<&str>) -> Result<()> {
-        self.model.new_sheet().map_err(|e| anyhow!(e))?;
-        let idx = self.model.get_selected_sheet();
-        if let Some(name) = sheet_name {
-            self.set_sheet_name(idx, name)?;
-        }
-        self.model
-            .set_selected_sheet(self.location.sheet)
-            .map_err(|e| anyhow!(e))?;
-        self.dirty = true;
-        Ok(())
+        self.as_action(|book| {
+            book.change(|m| m.new_sheet()).map_err(|e| anyhow!(e))?;
+            let idx = book.model.get_selected_sheet();
+            if let Some(name) = sheet_name {
+                book.set_sheet_name(idx, name)?;
+            }
+            book.model
+                .set_selected_sheet(book.location.sheet)
+                .map_err(|e| anyhow!(e))?;
+            book.dirty = true;
+            Ok(())
+        })
     }
 
     /// Get the sheet data for the current worksheet.
@@ -485,37 +493,34 @@ impl Book {
 
     /// Extend a cell to the rest of the range.
     pub fn extend_to(&mut self, from: &Address, to: &Address) -> Result<()> {
-        for cell in (AddressRange {
-            start: from,
-            end: to,
+        self.as_action(|book| {
+            let sheet = book.location.sheet;
+            for cell in (AddressRange {
+                start: from,
+                end: to,
+            })
+            .as_series()
+            .iter()
+            .skip(1)
+            {
+                let contents = book
+                    .model
+                    .get_model()
+                    .extend_to(
+                        sheet,
+                        from.row as i32,
+                        from.col as i32,
+                        cell.row as i32,
+                        cell.col as i32,
+                    )
+                    .map_err(|e| anyhow!(e))?;
+                book.change(|m| m.set_user_input(sheet, cell.row as i32, cell.col as i32, &contents))
+                    .map_err(|e| anyhow!(e))?;
+            }
+            book.evaluate();
+            book.dirty = true;
+            Ok(())
         })
-        .as_series()
-        .iter()
-        .skip(1)
-        {
-            let contents = self
-                .model
-                .get_model()
-                .extend_to(
-                    self.location.sheet,
-                    from.row as i32,
-                    from.col as i32,
-                    cell.row as i32,
-                    cell.col as i32,
-                )
-                .map_err(|e| anyhow!(e))?;
-            self.model
-                .set_user_input(
-                    self.location.sheet,
-                    cell.row as i32,
-                    cell.col as i32,
-                    &contents,
-                )
-                .map_err(|e| anyhow!(e))?;
-        }
-        self.evaluate();
-        self.dirty = true;
-        Ok(())
     }
 
     pub fn clear_current_cell(&mut self) -> Result<()> {
@@ -530,22 +535,21 @@ impl Book {
 
     pub fn clear_cell_contents(&mut self, Address { sheet, row, col }: Address) -> Result<()> {
         self.dirty = true;
-        self
-            .model
-            .range_clear_contents(&Area {
+        self.change(|m| {
+            m.range_clear_contents(&Area {
                 sheet,
                 row: row as i32,
                 column: col as i32,
                 width: 1,
                 height: 1,
             })
-            .map_err(|s| anyhow!("Unable to clear cell contents {}", s))
+        })
+        .map_err(|s| anyhow!("Unable to clear cell contents {}", s))
     }
 
     pub fn clear_cell_range(&mut self, start: Address, end: Address) -> Result<()> {
         let area = calculate_area(start.sheet, &start, &end);
-        self.model
-            .range_clear_contents(&area)
+        self.change(|m| m.range_clear_contents(&area))
             .map_err(|s| anyhow!("Unable to clear cell contents {}", s))?;
         self.dirty = true;
         Ok(())
@@ -553,22 +557,21 @@ impl Book {
 
     pub fn clear_cell_all(&mut self, Address { sheet, row, col }: Address) -> Result<()> {
         self.dirty = true;
-        self
-            .model
-            .range_clear_all(&Area {
+        self.change(|m| {
+            m.range_clear_all(&Area {
                 sheet,
                 row: row as i32,
                 column: col as i32,
                 width: 1,
                 height: 1,
             })
-            .map_err(|s| anyhow!("Unable to clear cell contents {}", s))
+        })
+        .map_err(|s| anyhow!("Unable to clear cell contents {}", s))
     }
 
     pub fn clear_cell_range_all(&mut self, start: Address, end: Address) -> Result<()> {
         let area = calculate_area(start.sheet, &start, &end);
-        self.model
-            .range_clear_all(&area)
+        self.change(|m| m.range_clear_all(&area))
             .map_err(|s| anyhow!("Unable to clear cell contents {}", s))?;
         self.dirty = true;
         Ok(())
@@ -601,13 +604,14 @@ impl Book {
     /// * alignment.vertical make alignment vertical
     /// * alignment.wrap_text wrap cell text
     pub fn set_cell_style(&mut self, style: &[(&str, &str)], area: &Area) -> Result<()> {
-        for (path, val) in style {
-            self.model
-                .update_range_style(area, path, val)
-                .map_err(|s| anyhow!("Unable to format cell {}", s))?;
-        }
-        self.dirty = true;
-        Ok(())
+        self.as_action(|book| {
+            for (path, val) in style {
+                book.change(|m| m.update_range_style(area, path, val))
+                    .map_err(|s| anyhow!("Unable to format cell {}", s))?;
+            }
+            book.dirty = true;
+            Ok(())
+        })
     }
 
     fn get_col_range(&self, sheet: u32, col_idx: usize) -> Area {
@@ -717,26 +721,30 @@ impl Book {
     /// Update an entry in the current sheet for a book.
     /// This update won't be reflected until you call `Book::evaluate`.
     pub fn update_cell<S: AsRef<str>>(&mut self, location: &Address, value: S) -> Result<()> {
-        self.model
-            .set_user_input(
+        self.change(|m| {
+            m.set_user_input(
                 location.sheet,
                 location.row as i32,
                 location.col as i32,
                 // TODO(jwall): This could probably be made more efficient
                 value.as_ref(),
             )
-            .map_err(|e| anyhow!("Invalid cell contents: {}", e))?;
+        })
+        .map_err(|e| anyhow!("Invalid cell contents: {}", e))?;
         self.dirty = true;
         Ok(())
     }
 
     /// Insert `count` rows at a `row_idx`.
     pub fn insert_rows(&mut self, row_idx: usize, count: usize) -> Result<()> {
-        for i in 0..count {
-            self.model
-                .insert_rows(self.location.sheet, (row_idx + i) as i32, 1)
-                .map_err(|e| anyhow!("Unable to insert row(s): {}", e))?;
-        }
+        let sheet = self.location.sheet;
+        self.as_action(|book| {
+            for i in 0..count {
+                book.change(|m| m.insert_rows(sheet, (row_idx + i) as i32, 1))
+                    .map_err(|e| anyhow!("Unable to insert row(s): {}", e))?;
+            }
+            Ok(())
+        })?;
         if self.location.row >= row_idx {
             self.move_to(&Address {
                 sheet: self.location.sheet,
@@ -750,11 +758,14 @@ impl Book {
 
     /// Insert `count` columns at a `col_idx`.
     pub fn insert_columns(&mut self, col_idx: usize, count: usize) -> Result<()> {
-        for i in 0..count {
-            self.model
-                .insert_columns(self.location.sheet, (col_idx + i) as i32, 1)
-                .map_err(|e| anyhow!("Unable to insert column(s): {}", e))?;
-        }
+        let sheet = self.location.sheet;
+        self.as_action(|book| {
+            for i in 0..count {
+                book.change(|m| m.insert_columns(sheet, (col_idx + i) as i32, 1))
+                    .map_err(|e| anyhow!("Unable to insert column(s): {}", e))?;
+            }
+            Ok(())
+        })?;
         if self.location.col >= col_idx {
             self.move_to(&Address {
                 sheet: self.location.sheet,
@@ -798,8 +809,8 @@ impl Book {
         col: usize,
         width: usize,
     ) -> std::result::Result<(), anyhow::Error> {
-        self.model
-            .set_columns_width(sheet, col as i32, col as i32, width as f64 * COL_PIXELS)
+        let pixels = width as f64 * COL_PIXELS;
+        self.change(|m| m.set_columns_width(sheet, col as i32, col as i32, pixels))
             .map_err(|e| anyhow!("Error setting column width: {:?}", e))?;
         self.dirty = true;
         Ok(())
@@ -962,6 +973,7 @@ impl Default for Book {
             "",
         )
         .unwrap();
+        book.clear_history();
         book
     }
 }

@@ -222,10 +222,8 @@ impl<'ws> Workspace<'ws> {
     }
 
     pub fn new_empty(_locale: &str, _tz: &str) -> Result<Self> {
-        let book = Book {
-            dirty: false,
-            ..Default::default()
-        };
+        let mut book = Book::default();
+        book.dirty = false;
         Ok(Self::new(book, PathBuf::from_str(DEFAULT_WORKBOOK_NAME).unwrap()))
     }
 

@@ -792,3 +792,205 @@ fn test_sort_rows_array_formulas_are_an_error() {
     assert_eq!(err.to_string(), "Cannot sort a range that contains array formulas.");
     assert_eq!(column(&book, 1, 1..=3), vec!["3", "1", "2"]);
 }
+
+// -------------------------------------------------------------------------
+// Undo and redo
+// -------------------------------------------------------------------------
+
+/// Everything a change can touch in the first `rows` × `cols` cells: sheet
+/// names, column widths, and each cell's contents and style.
+fn snapshot(book: &Book, rows: usize, cols: usize) -> String {
+    let mut out = format!("{:?}\n", book.get_sheet_names());
+    for sheet in 0..book.get_sheet_names().len() as u32 {
+        for col in 1..=cols {
+            let width = book.get_column_size_for_sheet(sheet, col).expect("width");
+            out.push_str(&format!("{sheet} width {col}: {width}\n"));
+        }
+        for row in 1..=rows {
+            for col in 1..=cols {
+                let addr = Address { sheet, row, col };
+                let contents = book.get_cell_addr_contents(&addr).expect("contents");
+                let style = book.get_cell_style(&addr);
+                out.push_str(&format!("{sheet} {row},{col}: {contents:?} {style:?}\n"));
+            }
+        }
+    }
+    out
+}
+
+type Change = fn(&mut Book) -> anyhow::Result<()>;
+
+#[test]
+fn test_undo_and_redo_each_change() {
+    let changes: Vec<(&str, Change)> = vec![
+        ("update_cell", |b| b.update_cell(&phase2_addr(1, 1), "x")),
+        ("formula", |b| b.update_cell(&phase2_addr(1, 3), "=A2*2")),
+        ("clear_cell_contents", |b| b.clear_cell_contents(phase2_addr(1, 1))),
+        ("clear_cell_all", |b| b.clear_cell_all(phase2_addr(2, 2))),
+        ("clear_cell_range", |b| {
+            b.clear_cell_range(phase2_addr(1, 1), phase2_addr(2, 2))
+        }),
+        ("clear_cell_range_all", |b| {
+            b.clear_cell_range_all(phase2_addr(1, 1), phase2_addr(2, 2))
+        }),
+        ("set_cell_style", |b| {
+            let area = Area { sheet: 0, row: 1, column: 1, width: 2, height: 1 };
+            b.set_cell_style(&[("font.b", "true"), ("fill.color", "#ff0000")], &area)
+        }),
+        ("extend_to", |b| b.extend_to(&phase2_addr(1, 1), &phase2_addr(3, 1))),
+        ("insert_rows", |b| b.insert_rows(1, 2)),
+        ("insert_columns", |b| b.insert_columns(1, 2)),
+        ("sort_rows", |b| b.sort_rows(0, 1, 3, &[key(1, false)])),
+        ("set_col_size", |b| b.set_col_size(1, 30)),
+        ("set_sheet_name", |b| b.set_sheet_name(0, "Renamed")),
+        ("new_sheet", |b| b.new_sheet(Some("Other"))),
+    ];
+    for (name, change) in changes {
+        let mut book = csv_book("1,2\n3,4\n5,6\n");
+        book.set_cell_style(
+            &[("font.i", "true")],
+            &Area { sheet: 0, row: 2, column: 2, width: 1, height: 1 },
+        )
+        .expect("style");
+        book.evaluate();
+        let before = snapshot(&book, 5, 4);
+        change(&mut book).expect(name);
+        book.evaluate();
+        let after = snapshot(&book, 5, 4);
+        assert_ne!(before, after, "{name} changes the book");
+
+        assert!(book.undo().expect("undo"), "{name} can be undone");
+        assert_eq!(snapshot(&book, 5, 4), before, "undo of {name}");
+        assert!(book.redo().expect("redo"), "{name} can be redone");
+        assert_eq!(snapshot(&book, 5, 4), after, "redo of {name}");
+        assert!(book.undo().expect("undo"));
+        assert!(book.undo().expect("undo"), "the style is the action before {name}");
+        assert!(!book.undo().expect("undo"), "{name} is one action");
+    }
+}
+
+#[test]
+fn test_undo_of_a_sort_restores_formulas_and_styles() {
+    let mut book = csv_book("3,c\n1,a\n2,b\n");
+    book.update_cell(&phase2_addr(1, 3), "=A1*2").expect("formula");
+    book.set_cell_style(
+        &[("font.b", "true")],
+        &Area { sheet: 0, row: 1, column: 2, width: 1, height: 1 },
+    )
+    .expect("style");
+    book.evaluate();
+    let before = snapshot(&book, 3, 3);
+    book.sort_rows(0, 1, 3, &[key(1, true)]).expect("sort");
+    assert_eq!(column(&book, 1, 1..=3), vec!["1", "2", "3"]);
+    assert!(book.undo().expect("undo"));
+    assert_eq!(snapshot(&book, 3, 3), before);
+    assert_eq!(column(&book, 3, 1..=3), vec!["6", "", ""]);
+}
+
+#[test]
+fn test_a_loaded_book_has_nothing_to_undo() {
+    let mut book = csv_book("1,2\n3,4\n");
+    assert!(!book.undo().expect("undo"));
+    assert!(!book.redo().expect("redo"));
+    let mut book = Book::default();
+    assert!(!book.undo().expect("undo"));
+}
+
+#[test]
+fn test_a_sort_that_changes_nothing_is_not_an_action() {
+    let mut book = csv_book("1\n2\n3\n");
+    book.sort_rows(0, 1, 3, &[key(1, true)]).expect("sort");
+    assert!(!book.undo().expect("undo"));
+}
+
+#[test]
+fn test_changes_inside_an_action_undo_together() {
+    let mut book = csv_book("1,2\n");
+    book.begin_action();
+    book.update_cell(&phase2_addr(1, 1), "a").expect("set");
+    book.begin_action();
+    book.update_cell(&phase2_addr(1, 2), "b").expect("set");
+    book.end_action();
+    book.update_cell(&phase2_addr(2, 1), "c").expect("set");
+    book.end_action();
+    book.evaluate();
+    assert!(book.undo().expect("undo"));
+    assert_eq!(column(&book, 1, 1..=2), vec!["1", ""]);
+    assert_eq!(rendered(&book, 1, 2), "2");
+    assert!(!book.undo().expect("undo"));
+}
+
+#[test]
+fn test_an_action_with_no_change_is_not_kept() {
+    let mut book = csv_book("1\n");
+    book.update_cell(&phase2_addr(1, 1), "2").expect("set");
+    book.begin_action();
+    book.end_action();
+    assert!(book.undo().expect("undo"));
+    assert_eq!(rendered(&book, 1, 1), "1");
+}
+
+#[test]
+fn test_undo_and_redo_go_to_the_change() {
+    let mut book = csv_book("1,2\n");
+    book.new_sheet(Some("Other")).expect("new sheet");
+    assert!(book.select_sheet_by_name("Other"));
+    book.move_to(&Address { sheet: 1, row: 4, col: 3 }).expect("move");
+    book.edit_current_cell("x").expect("edit");
+    assert!(book.select_sheet_by_name("Sheet1"));
+    book.move_to(&Address { sheet: 0, row: 1, col: 1 }).expect("move");
+
+    assert!(book.undo().expect("undo"));
+    assert_eq!(book.location, Address { sheet: 1, row: 4, col: 3 });
+    assert_eq!(book.model.get_selected_view().sheet, 1);
+    book.move_to(&Address { sheet: 1, row: 1, col: 1 }).expect("move");
+    assert!(book.redo().expect("redo"));
+    assert_eq!(book.location, Address { sheet: 1, row: 4, col: 3 });
+}
+
+#[test]
+fn test_undo_of_new_sheet_removes_it() {
+    let mut book = csv_book("1\n");
+    book.new_sheet(Some("Other")).expect("new sheet");
+    assert_eq!(book.get_sheet_names().len(), 2);
+    assert!(book.undo().expect("undo"));
+    assert_eq!(book.get_sheet_names().len(), 1);
+    assert_eq!(book.location.sheet, 0);
+}
+
+#[test]
+fn test_a_new_change_clears_redo() {
+    let mut book = csv_book("1,2\n");
+    book.update_cell(&phase2_addr(1, 1), "a").expect("set");
+    assert!(book.undo().expect("undo"));
+    book.update_cell(&phase2_addr(1, 2), "b").expect("set");
+    assert!(!book.redo().expect("redo"));
+}
+
+#[test]
+fn test_undo_back_to_the_save_point_is_not_a_change() {
+    let path = tmp_path("undo_save_point.sui");
+    let mut book = csv_book("1,2\n");
+    book.update_cell(&phase2_addr(1, 1), "a").expect("set");
+    assert!(book.undo().expect("undo"));
+    assert!(!book.dirty, "back at the loaded state");
+
+    book.update_cell(&phase2_addr(1, 1), "a").expect("set");
+    book.save_as(&path).expect("save");
+    assert!(!book.dirty);
+    book.update_cell(&phase2_addr(1, 2), "b").expect("set");
+    assert!(book.dirty);
+    assert!(book.undo().expect("undo"));
+    assert!(!book.dirty, "back at the saved state");
+    assert!(book.redo().expect("redo"));
+    assert!(book.dirty);
+
+    // A new change below the save point: the save point is gone.
+    assert!(book.undo().expect("undo"));
+    assert!(book.undo().expect("undo"));
+    assert!(book.dirty);
+    book.update_cell(&phase2_addr(2, 1), "c").expect("set");
+    assert!(book.undo().expect("undo"));
+    assert!(book.dirty, "the saved state can no longer be reached");
+    std::fs::remove_file(&path).expect("clean up");
+}

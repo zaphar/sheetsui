@@ -139,7 +139,7 @@ impl Book {
 
         let copies = self.read_rows(sheet, first, &order, width)?;
         self.model.pause_evaluation();
-        let result = self.write_rows(sheet, first, width, copies);
+        let result = self.as_action(|book| book.write_rows(sheet, first, width, copies));
         self.model.resume_evaluation();
         result?;
         self.evaluate();
@@ -258,15 +258,16 @@ impl Book {
         self.model
             .set_selected_range(first, 1, first + height - 1, width)
             .map_err(|e| anyhow!(e))?;
-        self.model
-            .range_clear_contents(&Area {
+        self.change(|m| {
+            m.range_clear_contents(&Area {
                 sheet,
                 row: first,
                 column: 1,
                 width,
                 height,
             })
-            .map_err(|e| anyhow!(e))?;
+        })
+        .map_err(|e| anyhow!(e))?;
         let mut styles = Vec::with_capacity(copies.len());
         for (i, row) in copies.into_iter().enumerate() {
             let mut row_styles = Vec::with_capacity(row.len());
@@ -287,8 +288,7 @@ impl Book {
             }
             styles.push(row_styles);
         }
-        self.model
-            .on_paste_styles(&styles)
+        self.change(|m| m.on_paste_styles(&styles))
             .map_err(|e| anyhow!(e))?;
         self.model
             .set_selected_sheet(self.location.sheet)
