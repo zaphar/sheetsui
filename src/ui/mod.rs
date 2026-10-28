@@ -452,8 +452,15 @@ impl<'ws> Workspace<'ws> {
                     self.state.dirty = true;
                     return Ok(None);
                 }
-                KeyCode::Enter => self.exit_edit_mode(true)?,
-                KeyCode::Esc => self.exit_edit_mode(false)?,
+                // Return so the key does not go into the next edit's text.
+                KeyCode::Enter => {
+                    self.exit_edit_mode(true)?;
+                    return Ok(None);
+                }
+                KeyCode::Esc => {
+                    self.exit_edit_mode(false)?;
+                    return Ok(None);
+                }
                 _ => {
                     // NOOP
                 }

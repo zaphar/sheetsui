@@ -2268,3 +2268,14 @@ fn test_undo_back_to_the_start_quits_with_no_prompt() {
     let result = script().char('q').run(&mut ws).expect("Failed to run");
     assert!(result.is_some(), "q quits with no prompt");
 }
+
+#[test]
+fn test_enter_that_ends_an_edit_is_not_typed_into_the_next_edit() {
+    let mut ws = new_workspace();
+    run(&mut ws, script().chars("ea").enter());
+    assert!(!ws.state.dirty, "the edit box has no change after Enter");
+    run(&mut ws, script().chars("eb").enter());
+    assert_eq!(cell(&ws, 1, 1), "ab");
+    run(&mut ws, script().chars("ec").esc().chars("ed").enter());
+    assert_eq!(cell(&ws, 1, 1), "abd");
+}
